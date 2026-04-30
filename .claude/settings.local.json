@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx expo *)",
+      "Bash(npm install *)",
+      "Bash(del \"c:\\\\Users\\\\AKT\\\\Desktop\\\\Tax Nitro\\\\taxnitro\\\\database.sql\")",
+      "Bash(eas --version)"
+    ]
+  }
+}
