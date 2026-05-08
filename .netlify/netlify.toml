@@ -1,0 +1,51 @@
+headersOrigin = "config"
+redirectsOrigin = "config"
+plugins = []
+
+[functions]
+
+[functions."*"]
+
+[build]
+publish = "C:\\Users\\AKT\\Desktop\\Tax Nitro\\taxnitro\\dist"
+publishOrigin = "config"
+commandOrigin = "config"
+command = "npm run build:web"
+
+[build.environment]
+
+[build.processing]
+
+[build.processing.css]
+
+[build.processing.html]
+
+[build.processing.images]
+
+[build.processing.js]
+
+[build.services]
+
+[[headers]]
+for = "/sw.js"
+
+[headers.values]
+Cache-Control = "no-cache"
+
+[[headers]]
+for = "/manifest.json"
+
+[headers.values]
+Cache-Control = "no-cache"
+
+[[redirects]]
+from = "/*"
+to = "/index.html"
+status = 200.0
+force = false
+
+[redirects.query]
+
+[redirects.conditions]
+
+[redirects.headers]

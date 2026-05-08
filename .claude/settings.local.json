@@ -4,7 +4,11 @@
       "Bash(npx expo *)",
       "Bash(npm install *)",
       "Bash(del \"c:\\\\Users\\\\AKT\\\\Desktop\\\\Tax Nitro\\\\taxnitro\\\\database.sql\")",
-      "Bash(eas --version)"
+      "Bash(eas --version)",
+      "Bash(cd \"/c/Users/AKT/Desktop/Tax Nitro/taxnitro\" && sed -i 's/useNativeDriver: true/useNativeDriver: nativeDriver/g' src/components/Button.tsx src/components/FileItem.tsx src/components/FolderItem.tsx src/components/SkeletonLoader.tsx src/screens/auth/LoginScreen.tsx src/screens/auth/RegisterScreen.tsx src/screens/main/DashboardScreen.tsx src/screens/main/UploadScreen.tsx)"
+    ],
+    "additionalDirectories": [
+      "c:\\c\\Users\\AKT\\Desktop\\Tax Nitro\\taxnitro\\src\\components"
     ]
   }
 }
