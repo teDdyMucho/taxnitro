@@ -1,3 +1,4 @@
+import { nativeDriver } from '../../constants/platform';
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
@@ -39,8 +40,8 @@ export function RegisterScreen({ onRegisterSuccess, onNavigateLogin }: Props) {
 
   useEffect(() => {
     Animated.parallel([
-      Animated.timing(opacity, { toValue: 1, duration: 600, useNativeDriver: true }),
-      Animated.spring(translateY, { toValue: 0, damping: 18, stiffness: 120, useNativeDriver: true }),
+      Animated.timing(opacity, { toValue: 1, duration: 600, useNativeDriver: nativeDriver }),
+      Animated.spring(translateY, { toValue: 0, damping: 18, stiffness: 120, useNativeDriver: nativeDriver }),
     ]).start();
   }, []);
 

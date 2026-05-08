@@ -12,6 +12,7 @@ import {
   RefreshControl,
   ActivityIndicator,
   Alert,
+  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -186,7 +187,7 @@ export function DocumentsScreen() {
   if (!openFolder) {
     return (
       <View style={styles.root}>
-        <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
+        <View style={[styles.header, { paddingTop: Platform.OS === 'web' ? 16 : insets.top + 12 }]}>
           <Text style={styles.headerTitle}>Documents</Text>
           <Text style={styles.headerSubtitle}>
             {loading ? '—' : `${totalDocs} document${totalDocs !== 1 ? 's' : ''}${totalUnread > 0 ? ` · ${totalUnread} unread` : ''}`}
@@ -197,7 +198,7 @@ export function DocumentsScreen() {
           <View style={styles.centered}><ActivityIndicator size="large" color={Colors.primary} /></View>
         ) : (
           <ScrollView
-            contentContainerStyle={[styles.folderList, { paddingBottom: insets.bottom + 90 }]}
+            contentContainerStyle={[styles.folderList, { paddingBottom: Platform.OS === 'web' ? 24 : insets.bottom + 90 }]}
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.primary} />}
             showsVerticalScrollIndicator={false}
           >
@@ -249,7 +250,7 @@ export function DocumentsScreen() {
   return (
     <View style={styles.root}>
       {/* Folder header */}
-      <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
+      <View style={[styles.header, { paddingTop: Platform.OS === 'web' ? 16 : insets.top + 12 }]}>
         <View style={styles.folderHeaderTop}>
           <TouchableOpacity style={styles.backBtn} onPress={() => setOpenFolder(null)}>
             <Ionicons name="chevron-back" size={20} color={Colors.textPrimary} />
@@ -301,7 +302,7 @@ export function DocumentsScreen() {
       <FlatList
         data={folderDocs}
         keyExtractor={item => item.id}
-        contentContainerStyle={[styles.list, { paddingBottom: insets.bottom + 90 }]}
+        contentContainerStyle={[styles.list, { paddingBottom: Platform.OS === 'web' ? 24 : insets.bottom + 90 }]}
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.primary} />}
         renderItem={({ item }) => (

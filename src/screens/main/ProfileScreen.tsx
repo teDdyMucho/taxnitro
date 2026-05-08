@@ -293,6 +293,7 @@ export function ProfileScreen({ onLogout }: Props) {
   useEffect(() => { load(); }, [load]);
 
   useEffect(() => {
+    if (Platform.OS === 'web') return;
     (async () => {
       const compatible = await LocalAuthentication.hasHardwareAsync();
       const enrolled = await LocalAuthentication.isEnrolledAsync();
@@ -303,6 +304,10 @@ export function ProfileScreen({ onLogout }: Props) {
   }, []);
 
   const handleBiometricToggle = async (value: boolean) => {
+    if (Platform.OS === 'web') {
+      Alert.alert('Not available', 'Biometric login is not supported on web.');
+      return;
+    }
     if (value) {
       const compatible = await LocalAuthentication.hasHardwareAsync();
       const enrolled = await LocalAuthentication.isEnrolledAsync();
@@ -310,15 +315,12 @@ export function ProfileScreen({ onLogout }: Props) {
         Alert.alert('Not available', 'Biometric authentication is not set up on this device. Please configure it in your device settings.');
         return;
       }
-      // Prompt to confirm identity before enabling
       const result = await LocalAuthentication.authenticateAsync({
         promptMessage: 'Confirm your identity to enable biometric login',
         fallbackLabel: 'Use password',
         cancelLabel: 'Cancel',
       });
       if (!result.success) return;
-
-      // Ask for password to save securely (cross-platform modal)
       setBiometricPassword('');
       setShowBiometricPasswordModal(true);
     } else {
@@ -341,6 +343,37 @@ export function ProfileScreen({ onLogout }: Props) {
   };
 
   const pickAvatar = async () => {
+    if (Platform.OS === 'web') {
+      // On web use a native file input
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = 'image/*';
+      input.onchange = async (e: any) => {
+        const file: File = e.target.files[0];
+        if (!file) return;
+        setAvatarUploading(true);
+        try {
+          const ext = file.name.split('.').pop() ?? 'jpg';
+          const fileName = `${user!.id}/avatar.${ext}`;
+          const arrayBuffer = await file.arrayBuffer();
+          const { error: uploadError } = await supabase.storage
+            .from('avatars')
+            .upload(fileName, arrayBuffer, { contentType: file.type, upsert: true });
+          if (uploadError) { Alert.alert('Upload failed', uploadError.message); return; }
+          const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(fileName);
+          const publicUrl = `${urlData.publicUrl}?t=${Date.now()}`;
+          await supabase.from('profiles').update({ avatar_url: publicUrl }).eq('id', user!.id);
+          setProfile(prev => prev ? { ...prev, avatar_url: publicUrl } : prev);
+        } catch (e: any) {
+          Alert.alert('Error', e.message ?? 'Failed to upload photo.');
+        } finally {
+          setAvatarUploading(false);
+        }
+      };
+      input.click();
+      return;
+    }
+
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
       Alert.alert('Permission needed', 'Allow photo access to change your profile picture.');
@@ -359,23 +392,15 @@ export function ProfileScreen({ onLogout }: Props) {
       const asset = result.assets[0];
       const ext = asset.uri.split('.').pop() ?? 'jpg';
       const fileName = `${user!.id}/avatar.${ext}`;
-
       const response = await fetch(asset.uri);
       const blob = await response.blob();
       const arrayBuffer = await new Response(blob).arrayBuffer();
-
       const { error: uploadError } = await supabase.storage
         .from('avatars')
-        .upload(fileName, arrayBuffer, {
-          contentType: `image/${ext}`,
-          upsert: true,
-        });
-
+        .upload(fileName, arrayBuffer, { contentType: `image/${ext}`, upsert: true });
       if (uploadError) { Alert.alert('Upload failed', uploadError.message); return; }
-
       const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(fileName);
       const publicUrl = `${urlData.publicUrl}?t=${Date.now()}`;
-
       await supabase.from('profiles').update({ avatar_url: publicUrl }).eq('id', user!.id);
       setProfile(prev => prev ? { ...prev, avatar_url: publicUrl } : prev);
     } catch (e: any) {
@@ -400,10 +425,10 @@ export function ProfileScreen({ onLogout }: Props) {
 
   return (
     <View style={styles.root}>
-      <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + 90 }} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={{ paddingBottom: Platform.OS === 'web' ? 24 : insets.bottom + 90 }} showsVerticalScrollIndicator={false}>
 
         {/* Banner */}
-        <LinearGradient colors={[Colors.bgDark, Colors.bgDeep]} style={[styles.banner, { paddingTop: insets.top + 20 }]}>
+        <LinearGradient colors={[Colors.bgDark, Colors.bgDeep]} style={[styles.banner, { paddingTop: Platform.OS === 'web' ? 20 : insets.top + 20 }]}>
           <View style={styles.avatarWrapper}>
             {profile?.avatar_url ? (
               <Image source={{ uri: profile.avatar_url }} style={styles.avatarImage} />

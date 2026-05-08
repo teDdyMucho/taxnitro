@@ -29,7 +29,14 @@
       "package": "com.financetherapygroup.app"
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro",
+      "output": "single",
+      "name": "Finance Therapy Group",
+      "shortName": "FTG",
+      "description": "Your secure document portal",
+      "themeColor": "#0f172a",
+      "backgroundColor": "#020617"
     },
     "plugins": [
       "expo-web-browser"

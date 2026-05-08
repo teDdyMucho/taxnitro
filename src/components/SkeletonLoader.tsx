@@ -1,3 +1,4 @@
+import { nativeDriver } from '../constants/platform';
 import React, { useEffect, useRef } from 'react';
 import { View, StyleSheet, ViewStyle, Animated } from 'react-native';
 import { Colors } from '../constants/colors';
@@ -15,8 +16,8 @@ export function SkeletonLoader({ width = '100%', height = 20, borderRadius = 8, 
   useEffect(() => {
     Animated.loop(
       Animated.sequence([
-        Animated.timing(opacity, { toValue: 0.8, duration: 800, useNativeDriver: true }),
-        Animated.timing(opacity, { toValue: 0.3, duration: 800, useNativeDriver: true }),
+        Animated.timing(opacity, { toValue: 0.8, duration: 800, useNativeDriver: nativeDriver }),
+        Animated.timing(opacity, { toValue: 0.3, duration: 800, useNativeDriver: nativeDriver }),
       ])
     ).start();
   }, []);

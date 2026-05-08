@@ -1,3 +1,4 @@
+import { nativeDriver } from '../../constants/platform';
 import React, { useState, useRef } from 'react';
 import {
   View,
@@ -76,7 +77,7 @@ export function UploadScreen() {
 
     await new Promise(r => setTimeout(r, 300));
     setState('success');
-    Animated.spring(successScale, { toValue: 1, damping: 12, stiffness: 120, useNativeDriver: true }).start();
+    Animated.spring(successScale, { toValue: 1, damping: 12, stiffness: 120, useNativeDriver: nativeDriver }).start();
   };
 
   const reset = () => {

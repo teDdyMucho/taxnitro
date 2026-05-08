@@ -1,3 +1,4 @@
+import { nativeDriver } from '../../constants/platform';
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import {
   View,
@@ -10,6 +11,7 @@ import {
   ActivityIndicator,
   RefreshControl,
   Image,
+  Platform,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -89,8 +91,8 @@ function KPICard({ title, value, icon, color, bgColor, delay, subtitle, loading 
 
   useEffect(() => {
     Animated.parallel([
-      Animated.timing(opacity, { toValue: 1, duration: 500, delay, useNativeDriver: true }),
-      Animated.spring(translateY, { toValue: 0, damping: 18, stiffness: 100, delay, useNativeDriver: true }),
+      Animated.timing(opacity, { toValue: 1, duration: 500, delay, useNativeDriver: nativeDriver }),
+      Animated.spring(translateY, { toValue: 0, damping: 18, stiffness: 100, delay, useNativeDriver: nativeDriver }),
     ]).start();
   }, []);
 
@@ -191,8 +193,8 @@ export function DashboardScreen() {
 
   useEffect(() => {
     Animated.parallel([
-      Animated.timing(headerOpacity, { toValue: 1, duration: 600, useNativeDriver: true }),
-      Animated.spring(headerY, { toValue: 0, damping: 18, stiffness: 120, useNativeDriver: true }),
+      Animated.timing(headerOpacity, { toValue: 1, duration: 600, useNativeDriver: nativeDriver }),
+      Animated.spring(headerY, { toValue: 0, damping: 18, stiffness: 120, useNativeDriver: nativeDriver }),
     ]).start();
   }, []);
 
@@ -297,7 +299,7 @@ export function DashboardScreen() {
     <View style={styles.root}>
       <ScrollView
         style={styles.scroll}
-        contentContainerStyle={{ paddingTop: insets.top, paddingBottom: insets.bottom + 80 }}
+        contentContainerStyle={{ paddingTop: Platform.OS === 'web' ? 0 : insets.top, paddingBottom: Platform.OS === 'web' ? 24 : insets.bottom + 80 }}
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.primary} />}
       >

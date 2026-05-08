@@ -1,3 +1,4 @@
+import { nativeDriver } from '../constants/platform';
 import React, { useRef } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Animated } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -34,9 +35,9 @@ export function FolderItem({ item, onPress, viewMode }: Props) {
   const scale = useRef(new Animated.Value(1)).current;
 
   const pressIn = (toValue: number) =>
-    Animated.spring(scale, { toValue, useNativeDriver: true, damping: 15 }).start();
+    Animated.spring(scale, { toValue, useNativeDriver: nativeDriver, damping: 15 }).start();
   const pressOut = () =>
-    Animated.spring(scale, { toValue: 1, useNativeDriver: true, damping: 15 }).start();
+    Animated.spring(scale, { toValue: 1, useNativeDriver: nativeDriver, damping: 15 }).start();
 
   if (viewMode === 'grid') {
     return (

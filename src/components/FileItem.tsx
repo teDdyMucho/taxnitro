@@ -1,3 +1,4 @@
+import { nativeDriver } from '../constants/platform';
 import React, { useRef } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Animated } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -45,8 +46,8 @@ export function FileItem({ item, onPress }: Props) {
       <TouchableOpacity
         style={styles.container}
         onPress={onPress}
-        onPressIn={() => Animated.spring(scale, { toValue: 0.98, useNativeDriver: true, damping: 15 }).start()}
-        onPressOut={() => Animated.spring(scale, { toValue: 1, useNativeDriver: true, damping: 15 }).start()}
+        onPressIn={() => Animated.spring(scale, { toValue: 0.98, useNativeDriver: nativeDriver, damping: 15 }).start()}
+        onPressOut={() => Animated.spring(scale, { toValue: 1, useNativeDriver: nativeDriver, damping: 15 }).start()}
         activeOpacity={1}
       >
         <View style={[styles.iconBg, { backgroundColor: `${fileConfig.color}15` }]}>

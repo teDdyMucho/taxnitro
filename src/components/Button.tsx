@@ -1,3 +1,4 @@
+import { nativeDriver } from '../constants/platform';
 import React, { useRef } from 'react';
 import {
   TouchableOpacity,
@@ -36,11 +37,11 @@ export function Button({
   const scale = useRef(new Animated.Value(1)).current;
 
   const handlePressIn = () => {
-    Animated.spring(scale, { toValue: 0.96, useNativeDriver: true, damping: 15, stiffness: 400 }).start();
+    Animated.spring(scale, { toValue: 0.96, useNativeDriver: nativeDriver, damping: 15, stiffness: 400 }).start();
   };
 
   const handlePressOut = () => {
-    Animated.spring(scale, { toValue: 1, useNativeDriver: true, damping: 15, stiffness: 400 }).start();
+    Animated.spring(scale, { toValue: 1, useNativeDriver: nativeDriver, damping: 15, stiffness: 400 }).start();
   };
 
   const variantStyles: Record<string, ViewStyle> = {

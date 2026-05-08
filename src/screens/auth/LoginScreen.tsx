@@ -1,3 +1,4 @@
+import { nativeDriver } from '../../constants/platform';
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
@@ -55,13 +56,14 @@ export function LoginScreen({ onLoginSuccess, onNavigateRegister }: Props) {
 
   useEffect(() => {
     Animated.parallel([
-      Animated.timing(opacity, { toValue: 1, duration: 700, useNativeDriver: true }),
-      Animated.spring(translateY, { toValue: 0, damping: 18, stiffness: 120, useNativeDriver: true }),
-      Animated.spring(logoScale, { toValue: 1, damping: 14, stiffness: 100, useNativeDriver: true }),
+      Animated.timing(opacity, { toValue: 1, duration: 700, useNativeDriver: nativeDriver }),
+      Animated.spring(translateY, { toValue: 0, damping: 18, stiffness: 120, useNativeDriver: nativeDriver }),
+      Animated.spring(logoScale, { toValue: 1, damping: 14, stiffness: 100, useNativeDriver: nativeDriver }),
     ]).start();
   }, []);
 
   useEffect(() => {
+    if (Platform.OS === 'web') return;
     (async () => {
       const enabled = await SecureStore.getItemAsync(BIOMETRIC_KEY);
       if (enabled !== 'true') return;
@@ -75,6 +77,7 @@ export function LoginScreen({ onLoginSuccess, onNavigateRegister }: Props) {
   }, []);
 
   const handleBiometricLogin = async () => {
+    if (Platform.OS === 'web') return;
     const result = await LocalAuthentication.authenticateAsync({
       promptMessage: 'Sign in to Finance Therapy Group',
       fallbackLabel: 'Use password',
@@ -318,6 +321,7 @@ const styles = StyleSheet.create({
   scroll: {
     flexGrow: 1,
     paddingHorizontal: 24,
+    backgroundColor: Colors.bgDeep,
   },
   orb: {
     position: 'absolute',
