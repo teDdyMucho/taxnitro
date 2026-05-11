@@ -67,7 +67,7 @@ export function Button({
   const fontSizes: Record<string, number> = { sm: 13, md: 15, lg: 17 };
 
   return (
-    <Animated.View style={{ transform: [{ scale }] }}>
+    <Animated.View style={{ transform: [{ scale }] }} pointerEvents="box-none">
       <TouchableOpacity
         style={[
           styles.base,

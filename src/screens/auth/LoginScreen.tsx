@@ -363,15 +363,18 @@ export function LoginScreen({ onLoginSuccess, onNavigateRegister }: Props) {
     );
   }
 
-  // ── Mobile layout (unchanged) ─────────────────────────────────────────────
+  // ── Mobile layout ─────────────────────────────────────────────────────────
   return (
     <View style={styles.root}>
-      <LinearGradient
-        colors={[Colors.bgDeep, Colors.bgDark, Colors.bgDeep]}
-        style={StyleSheet.absoluteFillObject}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-      />
+      {/* Full background — covers everything including scroll overscroll area */}
+      <View style={StyleSheet.absoluteFillObject}>
+        <LinearGradient
+          colors={[Colors.bgDeep, Colors.bgDark, Colors.bgDeep]}
+          style={{ flex: 1 }}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+        />
+      </View>
 
       <View style={[styles.orb, styles.orb1]} />
       <View style={[styles.orb, styles.orb2]} />
@@ -381,9 +384,17 @@ export function LoginScreen({ onLoginSuccess, onNavigateRegister }: Props) {
         style={styles.keyboardView}
       >
         <ScrollView
-          contentContainerStyle={[styles.scroll, { paddingTop: insets.top + 40, paddingBottom: insets.bottom + 30 }]}
+          contentContainerStyle={[
+            styles.scroll,
+            {
+              paddingTop: insets.top + 40,
+              paddingBottom: insets.bottom + 30,
+              minHeight: '100%' as any,
+            },
+          ]}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
+          bounces={false}
         >
           <Animated.View style={[styles.logoSection, { transform: [{ scale: logoScale }] }]}>
             <View style={styles.logoContainer}>
@@ -403,7 +414,6 @@ export function LoginScreen({ onLoginSuccess, onNavigateRegister }: Props) {
           <Animated.View style={[styles.card, { opacity, transform: [{ translateY }] }]}>
             <Text style={styles.cardTitle}>Welcome back</Text>
             <Text style={styles.cardSubtitle}>Sign in to access your documents</Text>
-
             <View style={styles.form}>
               {loginForm}
             </View>
@@ -426,12 +436,13 @@ const styles = StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: Colors.bgDeep,
+    // prevent white flash on overscroll
+    ...(Platform.OS === 'web' ? {} : {}),
   },
-  keyboardView: { flex: 1 },
+  keyboardView: { flex: 1, backgroundColor: Colors.bgDeep },
   scroll: {
     flexGrow: 1,
     paddingHorizontal: 24,
-    backgroundColor: Colors.bgDeep,
   },
   orb: { position: 'absolute', borderRadius: 999 },
   orb1: { width: 300, height: 300, backgroundColor: 'rgba(37,99,235,0.08)', top: -100, right: -80 },
