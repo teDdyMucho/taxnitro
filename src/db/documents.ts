@@ -33,7 +33,8 @@ export type FolderTable = typeof FOLDER_TABLES[number];
 // ── Fetch from all 8 tables and merge ────────────────────────────────────────
 
 export async function getDocumentsByEmail(email: string): Promise<Document[]> {
-  const results = await Promise.all(
+  // allSettled: even if some tables are slow or missing, we still get data from the rest
+  const settled = await Promise.allSettled(
     FOLDER_TABLES.map(async (table) => {
       const { data, error } = await supabase
         .from(table)
@@ -41,15 +42,32 @@ export async function getDocumentsByEmail(email: string): Promise<Document[]> {
         .eq('email', email)
         .order('created_at', { ascending: false });
 
-      if (error) { console.error(`getDocumentsByEmail [${table}]:`, error.message); return []; }
-      // Inject document_type so the rest of the app knows which table this row belongs to
+      if (error) { console.error(`getDocumentsByEmail [${table}]:`, error.message); return [] as Document[]; }
       return (data ?? []).map(d => ({ ...d, document_type: table } as Document));
     })
   );
 
-  return results
-    .flat()
-    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  // Also try the legacy documents table so old data still appears
+  const legacySettled = await Promise.allSettled([
+    supabase.from('documents').select('*').eq('email', email).order('created_at', { ascending: false }),
+  ]);
+
+  const legacyDocs: Document[] = [];
+  if (legacySettled[0].status === 'fulfilled') {
+    const { data } = legacySettled[0].value;
+    (data ?? []).forEach(d => legacyDocs.push(d as Document));
+  }
+
+  const newDocs = settled.flatMap(r => r.status === 'fulfilled' ? r.value : []);
+
+  // Merge: prefer new-table records, deduplicate by id
+  const seen = new Set<string>();
+  const merged: Document[] = [];
+  for (const d of [...newDocs, ...legacyDocs]) {
+    if (!seen.has(d.id)) { seen.add(d.id); merged.push(d); }
+  }
+
+  return merged.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 }
 
 // ── Update status in the correct table ───────────────────────────────────────

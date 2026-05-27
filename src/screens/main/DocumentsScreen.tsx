@@ -131,15 +131,12 @@ function RootView({ documents, loading, refreshing, onRefresh, onSelect, pb, pt 
         </View>
       </View>
 
-      {loading ? (
-        <View style={s.loader}><ActivityIndicator size="large" color={Colors.primary} /></View>
-      ) : (
-        <ScrollView
-          contentContainerStyle={[s.rootScroll, { paddingBottom: pb }]}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.primary} />}
-          showsVerticalScrollIndicator={false}
-        >
-          <Text style={s.sectionLabel}>Select a category</Text>
+      <ScrollView
+        contentContainerStyle={[s.rootScroll, { paddingBottom: pb }]}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.primary} />}
+        showsVerticalScrollIndicator={false}
+      >
+        <Text style={s.sectionLabel}>Select a category</Text>
 
           {FOLDERS.map(root => {
             const { total: rTotal, unread: rUnread } = stats(root);
@@ -204,8 +201,7 @@ function RootView({ documents, loading, refreshing, onRefresh, onSelect, pb, pt 
               Documents are automatically synced. Tap any category to view your files.
             </Text>
           </View>
-        </ScrollView>
-      )}
+      </ScrollView>
     </View>
   );
 }
@@ -933,20 +929,30 @@ export function DocumentsScreen() {
   const pb = Platform.OS === 'web' ? 24 : insets.bottom + 90;
 
   const [documents, setDocuments] = useState<Document[]>([]);
-  const [loading,   setLoading]   = useState(true);
+  const [loading,   setLoading]   = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [nav,        setNav]       = useState<Nav>('root');
   const [activeRoot, setActiveRoot] = useState<RootFolder | null>(null);
   const [activeSub,  setActiveSub]  = useState<SubFolder | null>(null);
   const [selectedDoc, setSelectedDoc] = useState<Document | null>(null);
 
-  const load = useCallback(async () => {
-    if (!user?.email) { setLoading(false); return; }
-    setDocuments(await getDocumentsByEmail(user.email));
-    setLoading(false);
+  const load = useCallback(async (isRefresh = false) => {
+    if (!user?.email) return;
+    if (!isRefresh) setLoading(true);
+    try {
+      const docs = await getDocumentsByEmail(user.email);
+      setDocuments(docs);
+    } catch (e) {
+      console.error('load documents:', e);
+    } finally {
+      setLoading(false);
+    }
   }, [user?.email]);
 
-  useEffect(() => { setLoading(true); load(); }, [load]);
+  // Load once when user email becomes available
+  useEffect(() => {
+    if (user?.email) load();
+  }, [user?.email]);
 
   useEffect(() => {
     if (!user?.email) return;
@@ -971,7 +977,7 @@ export function DocumentsScreen() {
     return () => { channels.forEach(ch => supabase.removeChannel(ch)); };
   }, [user?.email]);
 
-  const onRefresh = useCallback(async () => { setRefreshing(true); await load(); setRefreshing(false); }, [load]);
+  const onRefresh = useCallback(async () => { setRefreshing(true); await load(true); setRefreshing(false); }, [load]);
   const markViewed = useCallback(async (doc: Document) => {
     if (doc.status === 'viewed') return;
     const table = doc.document_type ?? '';
