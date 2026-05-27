@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -7,7 +7,6 @@ import {
   StyleSheet,
   TextInputProps,
   ViewStyle,
-  Animated,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../constants/colors';
@@ -47,13 +46,15 @@ export function InputField({
 
   return (
     <View style={[styles.container, containerStyle]}>
-      {label && <Text style={styles.label}>{label}</Text>}
-      <View style={[
-        styles.inputWrapper,
-        focused && styles.inputWrapperFocused,
-        !!error && styles.inputWrapperError,
-      ]}>
-        {leftIcon && (
+      {!!label && <Text style={styles.label}>{label}</Text>}
+      <View
+        style={[
+          styles.inputWrapper,
+          focused && styles.inputWrapperFocused,
+          !!error && styles.inputWrapperError,
+        ]}
+      >
+        {!!leftIcon && (
           <Ionicons
             name={leftIcon}
             size={18}
@@ -62,7 +63,7 @@ export function InputField({
           />
         )}
         <TextInput
-          style={[styles.input, leftIcon && styles.inputWithLeft]}
+          style={[styles.input, leftIcon ? styles.inputWithLeft : undefined]}
           placeholderTextColor={Colors.textMuted}
           secureTextEntry={secureText}
           onFocus={handleFocus}
@@ -71,7 +72,7 @@ export function InputField({
         />
         {isPassword && (
           <TouchableOpacity
-            onPress={() => setSecureText(!secureText)}
+            onPress={() => setSecureText(prev => !prev)}
             style={styles.rightIcon}
           >
             <Ionicons
@@ -81,13 +82,13 @@ export function InputField({
             />
           </TouchableOpacity>
         )}
-        {rightIcon && !isPassword && (
+        {!!rightIcon && !isPassword && (
           <TouchableOpacity onPress={onRightIconPress} style={styles.rightIcon}>
             <Ionicons name={rightIcon} size={18} color={Colors.textMuted} />
           </TouchableOpacity>
         )}
       </View>
-      {error && <Text style={styles.error}>{error}</Text>}
+      {!!error && <Text style={styles.error}>{error}</Text>}
     </View>
   );
 }

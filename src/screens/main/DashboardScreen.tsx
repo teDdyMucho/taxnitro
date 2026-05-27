@@ -20,6 +20,7 @@ import { Colors } from '../../constants/colors';
 import { Card } from '../../components/Card';
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../lib/supabase';
+import { getDocumentsByEmail, FOLDER_TABLES } from '../../db/documents';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -211,24 +212,13 @@ export function DashboardScreen() {
     sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
     sixMonthsAgo.setDate(1);
 
-    // Fetch all data in parallel using email (new schema)
     const userEmail = user.email;
-    const [docsRes, profileRes] = await Promise.all([
-      supabase
-        .from('documents')
-        .select('id, name, file_name, document_type, status, created_at')
-        .eq('email', userEmail)
-        .order('created_at', { ascending: false }),
-      supabase
-        .from('profiles')
-        .select('avatar_url')
-        .eq('id', user.id)
-        .single(),
+    const [docs, profileRes] = await Promise.all([
+      getDocumentsByEmail(userEmail),
+      supabase.from('profiles').select('avatar_url').eq('id', user.id).single(),
     ]);
 
     if (profileRes.data?.avatar_url) setAvatarUrl(profileRes.data.avatar_url);
-
-    const docs = docsRes.data ?? [];
 
     // Stats
     const weekAgoTime = oneWeekAgo.getTime();
@@ -275,20 +265,19 @@ export function DashboardScreen() {
     setRefreshing(false);
   }, [fetchData]);
 
-  // Real-time subscription — refetch whenever documents change for this user
+  // Real-time — watch all 8 folder tables and refetch on any change
   useEffect(() => {
     if (!user?.email) return;
+    const email = user.email;
 
-    const channel = supabase
-      .channel(`dashboard:${user.email}`)
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'documents', filter: `email=eq.${user.email}` },
-        () => { fetchData(); }
-      )
-      .subscribe();
+    const channels = FOLDER_TABLES.map(table =>
+      supabase.channel(`dash:${table}:${email}`)
+        .on('postgres_changes', { event: '*', schema: 'public', table, filter: `email=eq.${email}` },
+          () => fetchData())
+        .subscribe()
+    );
 
-    return () => { supabase.removeChannel(channel); };
+    return () => { channels.forEach(ch => supabase.removeChannel(ch)); };
   }, [user?.email, fetchData]);
 
   const viewedPct = stats.total > 0 ? (stats.viewed / stats.total) * 100 : 0;

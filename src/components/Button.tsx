@@ -8,6 +8,7 @@ import {
   ViewStyle,
   TextStyle,
   Animated,
+  View,
 } from 'react-native';
 import { Colors } from '../constants/colors';
 
@@ -67,7 +68,7 @@ export function Button({
   const fontSizes: Record<string, number> = { sm: 13, md: 15, lg: 17 };
 
   return (
-    <Animated.View style={{ transform: [{ scale }] }} pointerEvents="box-none">
+    <Animated.View style={[{ transform: [{ scale }] }, fullWidth && styles.fullWidth]}>
       <TouchableOpacity
         style={[
           styles.base,
