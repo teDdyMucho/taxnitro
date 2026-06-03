@@ -129,7 +129,8 @@ const styles = StyleSheet.create({
     fontSize: 15,
     paddingHorizontal: 14,
     paddingVertical: 15,
-  },
+    outlineWidth: 0,
+  } as any,
   inputWithLeft: {
     paddingLeft: 10,
   },

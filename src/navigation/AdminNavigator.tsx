@@ -61,11 +61,12 @@ export function AdminNavigator({ onLogout }: { onLogout: () => void }) {
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
 
-  const isDesktop = width >= 768;
+  const isDesktop = width >= 1024;
   const isAdmin   = user?.role === 'admin';
 
   const [activeTab, setActiveTab]           = useState<AdminTab>('Dashboard');
   const [selectedClient, setSelectedClient] = useState<Profile | null>(null);
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
 
   const visibleItems = NAV_ITEMS.filter(i => !i.adminOnly || isAdmin);
 
@@ -174,7 +175,7 @@ export function AdminNavigator({ onLogout }: { onLogout: () => void }) {
               <Text style={desk.userName} numberOfLines={1}>{user?.name ?? 'Staff'}</Text>
               <Text style={desk.userEmail} numberOfLines={1}>{user?.email ?? ''}</Text>
             </View>
-            <TouchableOpacity onPress={onLogout} style={desk.logoutBtn} activeOpacity={0.8}>
+            <TouchableOpacity onPress={() => setShowLogoutModal(true)} style={desk.logoutBtn} activeOpacity={0.8}>
               <Ionicons name="log-out-outline" size={17} color="#A89880" />
             </TouchableOpacity>
           </View>
@@ -182,10 +183,32 @@ export function AdminNavigator({ onLogout }: { onLogout: () => void }) {
 
         {/* ── Main content ── */}
         <View style={desk.content}>
-          <View key={activeTab} style={{ flex: 1 }}>
+          <View style={{ flex: 1 }}>
             {renderScreen()}
           </View>
         </View>
+
+        {/* ── Logout confirmation modal ── */}
+        {showLogoutModal && (
+          <View style={lo.overlay}>
+            <View style={lo.card}>
+              <LinearGradient colors={['rgba(232,185,35,0.15)', 'rgba(181,144,91,0.08)']} style={lo.iconWrap} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
+                <Ionicons name="log-out-outline" size={28} color="#E8B923" />
+              </LinearGradient>
+              <Text style={lo.title}>Sign Out</Text>
+              <Text style={lo.sub}>Are you sure you want to sign out of your account?</Text>
+              <View style={lo.row}>
+                <TouchableOpacity style={lo.cancelBtn} onPress={() => setShowLogoutModal(false)}>
+                  <Text style={lo.cancelText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={lo.signOutBtn} onPress={() => { setShowLogoutModal(false); onLogout(); }}>
+                  <Ionicons name="log-out-outline" size={16} color="#3A3131" />
+                  <Text style={lo.signOutText}>Sign Out</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        )}
       </View>
     );
   }
@@ -200,7 +223,7 @@ export function AdminNavigator({ onLogout }: { onLogout: () => void }) {
 
       {/* Screen content — paddingBottom so content clears the floating nav */}
       <View style={[mob.screenArea, { paddingBottom: totalNavHeight }]}>
-        <View key={activeTab} style={{ flex: 1 }}>
+        <View style={{ flex: 1 }}>
           {renderScreen()}
         </View>
       </View>
@@ -249,6 +272,19 @@ export function AdminNavigator({ onLogout }: { onLogout: () => void }) {
 }
 
 // ── Styles ────────────────────────────────────────────────────────────────────
+
+const lo = StyleSheet.create({
+  overlay: { position: 'absolute' as any, top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(28,23,19,0.55)', alignItems: 'center', justifyContent: 'center', zIndex: 999 },
+  card: { backgroundColor: '#FFFFFF', borderRadius: 24, padding: 28, width: 320, alignItems: 'center', gap: 12, borderWidth: 1, borderColor: '#E8E0D0', shadowColor: '#3A3131', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.12, shadowRadius: 24, elevation: 12 },
+  iconWrap: { width: 72, height: 72, borderRadius: 22, alignItems: 'center', justifyContent: 'center', marginBottom: 4 },
+  title: { color: '#1C1713', fontSize: 20, fontWeight: '800' },
+  sub: { color: '#A8998A', fontSize: 13, textAlign: 'center', lineHeight: 20 },
+  row: { flexDirection: 'row', gap: 10, width: '100%', marginTop: 6 },
+  cancelBtn: { flex: 1, backgroundColor: '#F5F0E8', borderRadius: 12, paddingVertical: 13, alignItems: 'center', borderWidth: 1, borderColor: '#E8E0D0' },
+  cancelText: { color: '#6B5E52', fontWeight: '600', fontSize: 14 },
+  signOutBtn: { flex: 1, backgroundColor: '#E8B923', borderRadius: 12, paddingVertical: 13, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6 },
+  signOutText: { color: '#3A3131', fontWeight: '800', fontSize: 14 },
+});
 
 // ── Desktop ──
 

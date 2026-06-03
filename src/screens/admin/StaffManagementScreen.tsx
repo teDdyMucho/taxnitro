@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -10,6 +10,7 @@ import {
   Modal,
   Pressable,
   TextInput,
+  Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -86,17 +87,38 @@ function AddStaffModal({
   onClose: () => void;
   onSuccess: () => void;
 }) {
-  const [email, setEmail]     = useState('');
-  const [role, setRole]       = useState<'admin' | 'staff'>('staff');
-  const [loading, setLoading] = useState(false);
-  const [result, setResult]   = useState<'success' | 'notfound' | null>(null);
+  const [email, setEmail]           = useState('');
+  const [role, setRole]             = useState<'admin' | 'staff'>('staff');
+  const [loading, setLoading]       = useState(false);
+  const [result, setResult]         = useState<'success' | 'notfound' | null>(null);
   const [assignedEmail, setAssignedEmail] = useState('');
+  const [suggestions, setSuggestions]     = useState<{ email: string; full_name: string }[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
 
   const reset = () => {
-    setEmail('');
-    setRole('staff');
+    setEmail(''); setRole('staff'); setResult(null);
+    setAssignedEmail(''); setSuggestions([]); setShowSuggestions(false);
+  };
+
+  const handleEmailChange = async (val: string) => {
+    setEmail(val);
     setResult(null);
-    setAssignedEmail('');
+    if (val.trim().length < 1) { setSuggestions([]); setShowSuggestions(false); return; }
+    const { data } = await supabase
+      .from('profiles')
+      .select('email, full_name')
+      .ilike('email', `%${val.trim()}%`)
+      .limit(5);
+    const results = (data ?? []) as { email: string; full_name: string }[];
+    setSuggestions(results);
+    setShowSuggestions(results.length > 0);
+  };
+
+  const selectSuggestion = (item: { email: string; full_name: string }) => {
+    setEmail(item.email);
+    setSuggestions([]);
+    setShowSuggestions(false);
+    setResult(null);
   };
 
   const handleClose = () => { reset(); onClose(); };
@@ -185,11 +207,11 @@ function AddStaffModal({
                 ]}>
                   <Ionicons name="mail-outline" size={16} color="#94A3B8" />
                   <TextInput
-                    style={im.input}
-                    placeholder="staff@example.com"
+                    style={[im.input, { outlineWidth: 0 } as any]}
+                    placeholder="Type to search users..."
                     placeholderTextColor="#94A3B8"
                     value={email}
-                    onChangeText={v => { setEmail(v); setResult(null); }}
+                    onChangeText={handleEmailChange}
                     keyboardType="email-address"
                     autoCapitalize="none"
                     autoCorrect={false}
@@ -200,12 +222,35 @@ function AddStaffModal({
                     </TouchableOpacity>
                   )}
                 </View>
+                {/* Autocomplete suggestions */}
+                {showSuggestions && suggestions.length > 0 && (
+                  <View style={im.suggestionBox}>
+                    {suggestions.map((item, i) => (
+                      <TouchableOpacity
+                        key={item.email}
+                        style={[im.suggestionItem, i < suggestions.length - 1 && im.suggestionDivider]}
+                        onPress={() => selectSuggestion(item)}
+                        activeOpacity={0.7}
+                      >
+                        <View style={im.suggestionAvatar}>
+                          <Text style={im.suggestionAvatarText}>
+                            {(item.full_name ?? item.email)[0].toUpperCase()}
+                          </Text>
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Text style={im.suggestionName}>{item.full_name || 'Unknown'}</Text>
+                          <Text style={im.suggestionEmail}>{item.email}</Text>
+                        </View>
+                        <Ionicons name="chevron-forward" size={14} color="#A8998A" />
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
+
                 {result === 'notfound' && (
                   <View style={im.errorBox}>
-                    <Ionicons name="alert-circle-outline" size={14} color="#EF4444" />
-                    <Text style={im.errorText}>
-                      No account found with that email. The user must sign up first.
-                    </Text>
+                    <Ionicons name="alert-circle-outline" size={14} color="#DC2626" />
+                    <Text style={im.errorText}>No account found with that email.</Text>
                   </View>
                 )}
               </View>
@@ -222,41 +267,35 @@ function AddStaffModal({
                         key={r}
                         style={[
                           im.roleCard,
-                          isActive && {
-                            backgroundColor: rrc.pillBg,
-                            borderColor: rrc.pillBorder,
-                          },
+                          isActive && { backgroundColor: rrc.pillBg, borderColor: rrc.pillBorder },
                         ]}
                         onPress={() => setRole(r)}
                         activeOpacity={0.75}
                       >
-                        <LinearGradient
-                          colors={isActive ? rrc.gradient : ['#E5E7EB', '#D1D5DB']}
-                          style={im.roleIconBg}
-                          start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-                        >
-                          <Ionicons
-                            name={r === 'admin' ? 'shield-checkmark-outline' : 'person-outline'}
-                            size={15}
-                            color="#FFFFFF"
-                          />
-                        </LinearGradient>
-                        <View style={{ flex: 1 }}>
-                          <Text style={[
-                            im.roleCardTitle,
-                            isActive && { color: rrc.pillText, fontWeight: '800' },
-                          ]}>
+                        <View style={im.roleCardInner}>
+                          {isActive && (
+                            <View style={[im.roleCheck, { backgroundColor: rrc.pillBorder }]}>
+                              <Ionicons name="checkmark" size={11} color={rrc.pillText} />
+                            </View>
+                          )}
+                          <LinearGradient
+                            colors={isActive ? rrc.gradient : ['#E8E0D0', '#D5CCC0']}
+                            style={im.roleIconBg}
+                            start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+                          >
+                            <Ionicons
+                              name={r === 'admin' ? 'shield-checkmark' : 'person'}
+                              size={20}
+                              color="#FFFFFF"
+                            />
+                          </LinearGradient>
+                          <Text style={[im.roleCardTitle, isActive && { color: rrc.pillText }]}>
                             {rrc.label}
                           </Text>
                           <Text style={im.roleCardDesc}>
                             {r === 'admin' ? 'Full access' : 'Standard access'}
                           </Text>
                         </View>
-                        {isActive && (
-                          <View style={[im.roleCheck, { backgroundColor: rrc.pillBorder }]}>
-                            <Ionicons name="checkmark" size={11} color={rrc.pillText} />
-                          </View>
-                        )}
                       </TouchableOpacity>
                     );
                   })}
@@ -293,23 +332,23 @@ function AddStaffModal({
 
 const im = StyleSheet.create({
   overlay: {
-    flex: 1, backgroundColor: 'rgba(58,49,49,0.6)',
+    flex: 1, backgroundColor: 'rgba(28,23,19,0.55)',
     justifyContent: 'flex-end',
   },
   sheet: {
-    backgroundColor: '#2C2320',
+    backgroundColor: '#FFFFFF',
     borderTopLeftRadius: 28, borderTopRightRadius: 28,
     padding: 24, paddingTop: 12,
-    shadowColor: '#000', shadowOffset: { width: 0, height: -8 },
-    shadowOpacity: 0.15, shadowRadius: 24, elevation: 16,
+    shadowColor: '#3A3131', shadowOffset: { width: 0, height: -6 },
+    shadowOpacity: 0.1, shadowRadius: 20, elevation: 16,
     gap: 18,
   },
   handle: {
     width: 40, height: 4, borderRadius: 2,
-    backgroundColor: '#E5E7EB',
+    backgroundColor: '#E8E0D0',
     alignSelf: 'center', marginBottom: 4,
   },
-  divider: { height: 1, backgroundColor: '#F1F5F9' },
+  divider: { height: 1, backgroundColor: '#F2EDE3' },
 
   /* Success */
   successContainer: { alignItems: 'center', gap: 14, paddingVertical: 8 },
@@ -319,40 +358,41 @@ const im = StyleSheet.create({
     shadowColor: '#E8B923', shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.35, shadowRadius: 14, elevation: 6,
   },
-  successTitle: { color: '#111827', fontSize: 22, fontWeight: '800' },
-  successSub: { color: '#64748B', fontSize: 14, textAlign: 'center', lineHeight: 20 },
+  successTitle: { color: '#1C1713', fontSize: 22, fontWeight: '800' },
+  successSub: { color: '#A8998A', fontSize: 14, textAlign: 'center', lineHeight: 20 },
 
   /* Modal header */
   modalHeader: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   modalIconBg: {
-    width: 44, height: 44, borderRadius: 13,
-    backgroundColor: '#FEF3C7',
+    width: 46, height: 46, borderRadius: 14,
+    backgroundColor: 'rgba(232,185,35,0.12)',
+    borderWidth: 1, borderColor: 'rgba(232,185,35,0.25)',
     alignItems: 'center', justifyContent: 'center',
   },
-  modalTitle: { color: '#111827', fontSize: 17, fontWeight: '800' },
-  modalSub:   { color: '#94A3B8', fontSize: 12, marginTop: 1 },
+  modalTitle: { color: '#1C1713', fontSize: 17, fontWeight: '800' },
+  modalSub:   { color: '#A8998A', fontSize: 12, marginTop: 2 },
   closeBtn: {
     width: 34, height: 34, borderRadius: 10,
-    backgroundColor: '#F1F5F9',
+    backgroundColor: '#F5F0E8',
     alignItems: 'center', justifyContent: 'center',
   },
 
   /* Field */
-  fieldGroup: { gap: 9 },
+  fieldGroup: { gap: 8 },
   fieldLabel: {
-    color: '#94A3B8', fontSize: 10, fontWeight: '800',
-    letterSpacing: 1.4, textTransform: 'uppercase',
+    color: '#A8998A', fontSize: 10, fontWeight: '700',
+    letterSpacing: 1.2, textTransform: 'uppercase',
   },
 
   /* Input */
   inputRow: {
     flexDirection: 'row', alignItems: 'center', gap: 10,
-    backgroundColor: '#F8FAFC', borderRadius: 14,
-    borderWidth: 1.5, borderColor: '#E5E7EB',
+    backgroundColor: '#FAFAF8', borderRadius: 14,
+    borderWidth: 1.5, borderColor: '#E8E0D0',
     paddingHorizontal: 14, paddingVertical: 13,
   },
-  inputRowError: { borderColor: '#EF4444', backgroundColor: '#FEF2F2' },
-  input: { flex: 1, color: '#111827', fontSize: 14, fontWeight: '500' },
+  inputRowError: { borderColor: '#DC2626', backgroundColor: '#FEF2F2' },
+  input: { flex: 1, color: '#1C1713', fontSize: 14, fontWeight: '500' },
 
   /* Error */
   errorBox: {
@@ -361,35 +401,38 @@ const im = StyleSheet.create({
     borderWidth: 1, borderColor: '#FECACA',
     paddingHorizontal: 12, paddingVertical: 10,
   },
-  errorText: { flex: 1, color: '#EF4444', fontSize: 12, lineHeight: 17 },
+  errorText: { flex: 1, color: '#DC2626', fontSize: 12, lineHeight: 17 },
 
   /* Role cards */
   roleRow: { flexDirection: 'row', gap: 10 },
   roleCard: {
-    flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10,
-    paddingVertical: 12, paddingHorizontal: 12,
-    borderRadius: 14, borderWidth: 1.5, borderColor: '#E5E7EB',
-    backgroundColor: '#F8FAFC',
+    flex: 1, borderRadius: 16, borderWidth: 1.5, borderColor: '#E8E0D0',
+    backgroundColor: '#FAFAF8', overflow: 'hidden',
+  },
+  roleCardInner: {
+    padding: 14, gap: 6, alignItems: 'center',
   },
   roleIconBg: {
-    width: 32, height: 32, borderRadius: 9,
+    width: 44, height: 44, borderRadius: 14,
     alignItems: 'center', justifyContent: 'center',
+    marginBottom: 2,
   },
-  roleCardTitle: { color: '#64748B', fontSize: 13, fontWeight: '700' },
-  roleCardDesc:  { color: '#94A3B8', fontSize: 10, marginTop: 1 },
+  roleCardTitle: { color: '#1C1713', fontSize: 14, fontWeight: '700' },
+  roleCardDesc:  { color: '#A8998A', fontSize: 11, textAlign: 'center' },
   roleCheck: {
     width: 20, height: 20, borderRadius: 6,
     alignItems: 'center', justifyContent: 'center',
+    position: 'absolute', top: 10, right: 10,
   },
 
   /* Actions */
   actionRow: { flexDirection: 'row', gap: 10 },
   cancelBtn: {
-    flex: 1, backgroundColor: '#F1F5F9', borderRadius: 14,
+    flex: 1, backgroundColor: '#F5F0E8', borderRadius: 14,
     paddingVertical: 14, alignItems: 'center',
-    borderWidth: 1, borderColor: '#E5E7EB',
+    borderWidth: 1, borderColor: '#E8E0D0',
   },
-  cancelText: { color: '#64748B', fontWeight: '700', fontSize: 14 },
+  cancelText: { color: '#6B5E52', fontWeight: '700', fontSize: 14 },
   primaryBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
     backgroundColor: '#E8B923', borderRadius: 14, paddingVertical: 14,
@@ -398,14 +441,39 @@ const im = StyleSheet.create({
   },
   primaryBtnDisabled: { opacity: 0.45 },
   primaryBtnText: { color: '#3A3131', fontWeight: '800', fontSize: 15 },
+
+  // Autocomplete
+  suggestionBox: {
+    backgroundColor: '#FFFFFF', borderRadius: 14,
+    borderWidth: 1, borderColor: '#E8E0D0',
+    shadowColor: '#3A3131', shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08, shadowRadius: 12, elevation: 6,
+    overflow: 'hidden',
+  },
+  suggestionItem: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    paddingHorizontal: 14, paddingVertical: 12,
+  },
+  suggestionDivider: { borderBottomWidth: 1, borderBottomColor: '#F2EDE3' },
+  suggestionAvatar: {
+    width: 36, height: 36, borderRadius: 10,
+    backgroundColor: 'rgba(232,185,35,0.15)',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  suggestionAvatarText: { color: '#E8B923', fontSize: 14, fontWeight: '800' },
+  suggestionName:  { color: '#1C1713', fontSize: 13, fontWeight: '600' },
+  suggestionEmail: { color: '#A8998A', fontSize: 11, marginTop: 1 },
 });
 
 // ── Main Screen ───────────────────────────────────────────────────────────────
 
 export function StaffManagementScreen() {
   const insets = useSafeAreaInsets();
+  const mountedRef = useRef(true);
+  useEffect(() => () => { mountedRef.current = false; }, []);
+
   const [staff, setStaff]           = useState<Profile[]>([]);
-  const [loading, setLoading]       = useState(true);
+  const [loading, setLoading]       = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [addOpen, setAddOpen]       = useState(false);
   const [toastMsg, setToastMsg]     = useState('');
@@ -420,14 +488,17 @@ export function StaffManagementScreen() {
   const { isLoading: authLoading } = useAuth();
 
   const load = useCallback(async (isRefresh = false) => {
-    if (isRefresh) setRefreshing(true); else setLoading(true);
+    if (isRefresh) setRefreshing(true);
+    // No setLoading(true) — show existing content immediately
     const safetyTimer = setTimeout(() => {
-      setLoading(false);
-      setRefreshing(false);
-    }, 12000);
-    try { setStaff(await getAllStaff()); }
+      if (mountedRef.current) { setLoading(false); setRefreshing(false); }
+    }, 8000);
+    try {
+      const data = await getAllStaff();
+      if (mountedRef.current) setStaff(data);
+    }
     catch (e) { console.error('StaffManagement load:', e); }
-    finally { clearTimeout(safetyTimer); setLoading(false); setRefreshing(false); }
+    finally { clearTimeout(safetyTimer); if (mountedRef.current) { setLoading(false); setRefreshing(false); } }
   }, []);
 
   useEffect(() => { if (!authLoading) load(); }, [authLoading]);
@@ -463,14 +534,13 @@ export function StaffManagementScreen() {
         {safeRole === 'admin' && <View style={s.cardAccent} />}
 
         {/* Avatar */}
-        <LinearGradient
-          colors={rc.gradient}
-          style={s.avatar}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-        >
-          <Text style={s.avatarText}>{mkInitials(item.full_name)}</Text>
-        </LinearGradient>
+        {item.avatar_url ? (
+          <Image source={{ uri: item.avatar_url }} style={[s.avatar, { borderRadius: s.avatar.borderRadius }]} />
+        ) : (
+          <LinearGradient colors={rc.gradient} style={s.avatar} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
+            <Text style={s.avatarText}>{mkInitials(item.full_name)}</Text>
+          </LinearGradient>
+        )}
 
         {/* Info */}
         <View style={s.cardBody}>

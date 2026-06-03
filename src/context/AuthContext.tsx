@@ -26,22 +26,32 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-const fetchProfile = async (userId: string, email: string): Promise<AuthUser> => {
-  const { data } = await supabase
-    .from('profiles')
-    .select('full_name, client_id, plan, role')
-    .eq('id', userId)
-    .single();
+// Builds a minimal AuthUser immediately from the session — no DB call needed
+function sessionUser(userId: string, email: string): AuthUser {
+  return { id: userId, email, name: 'User', role: 'client' };
+}
 
-  return {
-    id: userId,
-    email,
-    name: data?.full_name ?? 'User',
-    clientId: data?.client_id,
-    plan: data?.plan ?? 'Free',
-    role: (data?.role as UserRole) ?? 'client',
-  };
-};
+// Enriches AuthUser with profile data from DB (called in background)
+async function fetchProfile(userId: string, email: string): Promise<AuthUser> {
+  try {
+    const { data } = await supabase
+      .from('profiles')
+      .select('full_name, client_id, plan, role')
+      .eq('id', userId)
+      .single();
+
+    return {
+      id: userId,
+      email,
+      name: data?.full_name ?? 'User',
+      clientId: data?.client_id,
+      plan: data?.plan ?? 'Free',
+      role: (data?.role as UserRole) ?? 'client',
+    };
+  } catch {
+    return sessionUser(userId, email);
+  }
+}
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -50,39 +60,49 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
 
   useEffect(() => {
-    let initialised = false;
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+    // Step 1: Fast session check from local storage — no network needed
+    supabase.auth.getSession().then(({ data: { session } }) => {
       if (session?.user) {
-        const profile = await fetchProfile(session.user.id, session.user.email ?? '');
-        setUser(profile);
+        // Set authenticated immediately with minimal data
+        const minimal = sessionUser(session.user.id, session.user.email ?? '');
+        setUser(minimal);
         setIsAuthenticated(true);
-      } else {
-        setUser(null);
-        setIsAuthenticated(false);
+
+        // Step 2: Enrich with profile data in background (non-blocking)
+        fetchProfile(session.user.id, session.user.email ?? '').then(profile => {
+          setUser(profile);
+        });
       }
-      // Always clear loading on every auth event, not just the first
-      initialised = true;
+      // Clear loading immediately after session check — don't wait for profile
+      setIsLoading(false);
+    }).catch(() => {
       setIsLoading(false);
     });
 
-    // Safety net: if onAuthStateChange never fires (e.g. no network), stop loading after 5s
-    const timeout = setTimeout(() => {
-      if (!initialised) {
-        initialised = true;
-        setIsLoading(false);
+    // Step 3: Subscribe to future auth state changes (sign in, sign out, token refresh)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+        if (session?.user) {
+          const minimal = sessionUser(session.user.id, session.user.email ?? '');
+          setUser(minimal);
+          setIsAuthenticated(true);
+          // Load full profile in background
+          fetchProfile(session.user.id, session.user.email ?? '').then(profile => {
+            setUser(profile);
+          });
+        }
+      } else if (event === 'SIGNED_OUT') {
+        setUser(null);
+        setIsAuthenticated(false);
       }
-    }, 5000);
+      setIsLoading(false);
+    });
 
-    return () => {
-      subscription.unsubscribe();
-      clearTimeout(timeout);
-    };
+    return () => { subscription.unsubscribe(); };
   }, []);
 
   const login = useCallback(async (email: string, password: string) => {
     setError(null);
-
     const { error: authError } = await supabase.auth.signInWithPassword({ email, password });
 
     if (authError) {
@@ -93,13 +113,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return { success: false, error: message };
     }
 
-    // onAuthStateChange fires automatically and sets isAuthenticated + clears isLoading
     return { success: true };
   }, []);
 
   const register = useCallback(async (fullName: string, email: string, password: string) => {
     setError(null);
-    setIsLoading(true);
 
     const { data, error: authError } = await supabase.auth.signUp({
       email,
@@ -109,11 +127,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     if (authError) {
       setError(authError.message);
-      setIsLoading(false);
       return { success: false, needsConfirmation: false, error: authError.message };
     }
 
-    // Create profile manually (no trigger needed)
+    // Create profile manually
     if (data.user) {
       await supabase.from('profiles').upsert({
         id: data.user.id,
@@ -125,7 +142,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }, { onConflict: 'id' });
     }
 
-    setIsLoading(false);
     const needsConfirmation = !data.session;
     return { success: true, needsConfirmation };
   }, []);

@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -362,7 +362,7 @@ function DocListView({ sf, root, rootColor, documents, refreshing, onRefresh, on
         <View style={s.searchWrap}>
           <Ionicons name="search-outline" size={16} color="rgba(255,255,255,0.5)" />
           <TextInput
-            style={s.searchInput}
+            style={[s.searchInput, { outlineWidth: 0 } as any]}
             placeholder="Search files…"
             placeholderTextColor="rgba(255,255,255,0.4)"
             value={search}
@@ -937,6 +937,9 @@ export function DocumentsScreen() {
   const pt = Platform.OS === 'web' ? 16 : insets.top + 12;
   const pb = Platform.OS === 'web' ? 24 : insets.bottom + 90;
 
+  const mountedRef = useRef(true);
+  useEffect(() => () => { mountedRef.current = false; }, []);
+
   const [documents, setDocuments] = useState<Document[]>([]);
   const [loading,   setLoading]   = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -947,20 +950,19 @@ export function DocumentsScreen() {
 
   const load = useCallback(async (isRefresh = false) => {
     if (!user?.email) return;
-    if (isRefresh) setRefreshing(true); else setLoading(true);
+    if (isRefresh) setRefreshing(true);
+    // No setLoading(true) — show existing content immediately
     const safetyTimer = setTimeout(() => {
-      setLoading(false);
-      setRefreshing(false);
-    }, 12000);
+      if (mountedRef.current) { setLoading(false); setRefreshing(false); }
+    }, 8000);
     try {
       const docs = await getDocumentsByEmail(user.email);
-      setDocuments(docs);
+      if (mountedRef.current) setDocuments(docs);
     } catch (e) {
       console.error('load documents:', e);
     } finally {
       clearTimeout(safetyTimer);
-      setLoading(false);
-      setRefreshing(false);
+      if (mountedRef.current) { setLoading(false); setRefreshing(false); }
     }
   }, [user?.email]);
 

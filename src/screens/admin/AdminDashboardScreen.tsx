@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   ActivityIndicator, RefreshControl, Animated, Modal, Pressable, Platform, Linking, Image,
@@ -110,20 +110,23 @@ function getPeriodStart(period: TimePeriod): string {
 export function AdminDashboardScreen({ onViewAllDocuments }: { onViewAllDocuments?: () => void }) {
   const { user, isLoading: authLoading } = useAuth();
   const insets     = useSafeAreaInsets();
+  const mountedRef = useRef(true);
+  useEffect(() => () => { mountedRef.current = false; }, []);
+
   const [stats, setStats]           = useState<Stats>({ totalClients: 0, totalStaff: 0, totalDocs: 0, newDocs: 0, docsThisWeek: 0, folderCounts: [], recentUploads: [] });
-  const [loading, setLoading]       = useState(true);
+  const [loading, setLoading]       = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [menuDoc, setMenuDoc]       = useState<RecentDoc | null>(null);
   const [period, setPeriod]         = useState<TimePeriod>('month');
   const [periodOpen, setPeriodOpen] = useState(false);
 
-  // ── Data fetching (unchanged logic) ─────────────────────────────────────
-  const load = async (isRefresh = false) => {
-    if (isRefresh) setRefreshing(true); else setLoading(true);
+  // ── Data fetching ─────────────────────────────────────────────────────────
+  const load = useCallback(async (isRefresh = false) => {
+    if (isRefresh) setRefreshing(true);
+    // No setLoading(true) — show existing content immediately
     const safetyTimer = setTimeout(() => {
-      setLoading(false);
-      setRefreshing(false);
-    }, 12000);
+      if (mountedRef.current) { setLoading(false); setRefreshing(false); }
+    }, 8000);
     try {
       const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
       const [clientRes, staffRes, ...tableResults] = await Promise.all([
@@ -132,7 +135,7 @@ export function AdminDashboardScreen({ onViewAllDocuments }: { onViewAllDocument
         ...FOLDER_TABLES.map(t => supabase.from(t).select('id, name, email, created_at, status, document_url').order('created_at', { ascending: false })),
       ]);
       const allDocs = tableResults.flatMap((r, i) => (r.data ?? []).map(d => ({ ...d, document_type: FOLDER_TABLES[i] })));
-      setStats({
+      if (mountedRef.current) setStats({
         totalClients:  clientRes.count ?? 0,
         totalStaff:    staffRes.count ?? 0,
         totalDocs:     allDocs.length,
@@ -142,8 +145,8 @@ export function AdminDashboardScreen({ onViewAllDocuments }: { onViewAllDocument
         recentUploads: [...allDocs].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).slice(0, 8) as any,
       });
     } catch (e) { console.error(e); }
-    finally { clearTimeout(safetyTimer); setLoading(false); setRefreshing(false); }
-  };
+    finally { clearTimeout(safetyTimer); if (mountedRef.current) { setLoading(false); setRefreshing(false); } }
+  }, []);
 
   useEffect(() => { if (!authLoading && user?.id) load(); }, [authLoading, user?.id]);
 

@@ -52,7 +52,7 @@ export function LoginScreen({ onLoginSuccess, onNavigateRegister }: Props) {
   const { login, error, forgotPassword } = useAuth();
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
-  const isDesktopWeb = Platform.OS === 'web' && width >= 768;
+  const isDesktopWeb = Platform.OS === 'web' && width >= 1024;
 
   const opacity = useRef(new Animated.Value(0)).current;
   const translateY = useRef(new Animated.Value(30)).current;
@@ -373,11 +373,11 @@ export function LoginScreen({ onLoginSuccess, onNavigateRegister }: Props) {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.keyboardView}
       >
-        <View style={[styles.scroll, { paddingTop: insets.top + 24, paddingBottom: insets.bottom + 16 }]}>
+        <View style={[styles.scroll, { paddingTop: insets.top + 16, paddingBottom: insets.bottom + 12 }]}>
           <Animated.View style={[styles.logoSection, { transform: [{ scale: logoScale }] }]}>
             <Image
               source={require('../../../assets/main-logo.png')}
-              style={{ width: 140, height: 56, alignSelf: 'center', marginBottom: 8 }}
+              style={{ width: 220, height: 88, alignSelf: 'center', marginBottom: 4 }}
               resizeMode="contain"
             />
             <Text style={styles.appTagline}>Your document portal</Text>
@@ -421,7 +421,7 @@ const styles = StyleSheet.create({
   orb: { position: 'absolute', borderRadius: 999 },
   orb1: { width: 250, height: 250, backgroundColor: 'rgba(232,185,35,0.06)', top: -80, right: -60 },
   orb2: { width: 180, height: 180, backgroundColor: 'rgba(181,144,91,0.05)', bottom: 80, left: -50 },
-  logoSection: { alignItems: 'center', marginBottom: 0 },
+  logoSection: { alignItems: 'center', marginBottom: 20 },
   logoContainer: {
     marginBottom: 14,
     shadowColor: Colors.primary,

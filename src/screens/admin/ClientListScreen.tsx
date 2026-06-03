@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
   TextInput, ActivityIndicator, RefreshControl, Alert,
-  Modal, Pressable, ScrollView, Platform,
+  Modal, Pressable, ScrollView, Platform, Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -26,11 +26,11 @@ const PLAN_COLORS: Record<string, { bg: string; text: string; border: string }> 
 
 const AVATAR_GRADIENTS: [string, string][] = [
   ['#E8B923', '#B5905B'],
-  ['#10B981', '#059669'],
-  ['#3B82F6', '#1D4ED8'],
-  ['#8B5CF6', '#7C3AED'],
-  ['#EC4899', '#DB2777'],
-  ['#06B6D4', '#0891B2'],
+  ['#B5905B', '#8B6914'],
+  ['#3A3131', '#4A3E3E'],
+  ['#2C2320', '#3A3131'],
+  ['#B5905B', '#E8B923'],
+  ['#8B6914', '#B5905B'],
 ];
 
 function avatarGradient(name: string): [string, string] {
@@ -236,7 +236,7 @@ function AddClientModal({
                 <Text style={ac.label}>Full Name</Text>
                 <View style={ac.inputRow}>
                   <Ionicons name="person-outline" size={16} color={Colors.textMuted} />
-                  <TextInput style={ac.input} placeholder="e.g. Jane Smith" placeholderTextColor={Colors.textMuted} value={fullName} onChangeText={setFullName} />
+                  <TextInput style={[ac.input, { outlineWidth: 0 } as any]} placeholder="e.g. Jane Smith" placeholderTextColor={Colors.textMuted} value={fullName} onChangeText={setFullName} />
                 </View>
               </View>
 
@@ -245,7 +245,7 @@ function AddClientModal({
                 <Text style={ac.label}>Email Address</Text>
                 <View style={ac.inputRow}>
                   <Ionicons name="mail-outline" size={16} color={Colors.textMuted} />
-                  <TextInput style={ac.input} placeholder="client@example.com" placeholderTextColor={Colors.textMuted} value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" />
+                  <TextInput style={[ac.input, { outlineWidth: 0 } as any]} placeholder="client@example.com" placeholderTextColor={Colors.textMuted} value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" />
                 </View>
               </View>
 
@@ -260,7 +260,7 @@ function AddClientModal({
                 </View>
                 <View style={ac.inputRow}>
                   <Ionicons name="lock-closed-outline" size={16} color={Colors.textMuted} />
-                  <TextInput style={ac.input} placeholder="Min. 8 characters" placeholderTextColor={Colors.textMuted} value={password} onChangeText={setPassword} secureTextEntry={!showPass} autoCapitalize="none" />
+                  <TextInput style={[ac.input, { outlineWidth: 0 } as any]} placeholder="Min. 8 characters" placeholderTextColor={Colors.textMuted} value={password} onChangeText={setPassword} secureTextEntry={!showPass} autoCapitalize="none" />
                   <TouchableOpacity onPress={() => setShowPass(p => !p)}>
                     <Ionicons name={showPass ? 'eye-off-outline' : 'eye-outline'} size={16} color={Colors.textMuted} />
                   </TouchableOpacity>
@@ -479,8 +479,10 @@ function ManageModal({
   const [plan, setPlan]           = useState(client.plan ?? 'Free');
   const [active, setActive]       = useState(client.is_active ?? true);
   const [saving, setSaving]       = useState(false);
-  const [resetSent, setResetSent] = useState(false);
-  const [toastMsg, setToastMsg]   = useState('');
+  const [newPassword, setNewPassword]   = useState('');
+  const [showNewPass, setShowNewPass]   = useState(false);
+  const [pwdSaving, setPwdSaving]       = useState(false);
+  const [toastMsg, setToastMsg]         = useState('');
   const [toastVisible, setToastVisible] = useState(false);
 
   const showToast = (msg: string) => {
@@ -501,10 +503,23 @@ function ManageModal({
     }
   };
 
-  const handleReset = async () => {
-    const ok = await sendPasswordReset(client.email);
-    if (ok) { setResetSent(true); showToast('Password reset email sent'); }
-    else showToast('Failed to send reset email');
+  const handleChangePassword = async () => {
+    if (newPassword.length < 8) return;
+    setPwdSaving(true);
+    try {
+      const res = await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${client.id}`, {
+        method: 'PUT',
+        headers: {
+          'apikey': SERVICE_ROLE_KEY,
+          'Authorization': `Bearer ${SERVICE_ROLE_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ password: newPassword }),
+      });
+      if (res.ok) { showToast('Password changed successfully'); setNewPassword(''); }
+      else showToast('Failed to change password');
+    } catch { showToast('Failed to change password'); }
+    finally { setPwdSaving(false); }
   };
 
   const grad = avatarGradient(client.full_name);
@@ -545,7 +560,7 @@ function ManageModal({
               <View style={mm.inputWrap}>
                 <Ionicons name="person-outline" size={15} color={Colors.textMuted} />
                 <TextInput
-                  style={mm.input}
+                  style={[mm.input, { outlineWidth: 0 } as any]}
                   value={name}
                   onChangeText={setName}
                   placeholder="Full name..."
@@ -598,30 +613,47 @@ function ManageModal({
               </View>
             </View>
 
+            {/* Change Password */}
+            <View style={mm.field}>
+              <Text style={mm.label}>Change Password</Text>
+              <View style={mm.inputWrap}>
+                <Ionicons name="lock-closed-outline" size={15} color={Colors.textMuted} />
+                <TextInput
+                  style={[mm.input, { outlineWidth: 0 } as any]}
+                  value={newPassword}
+                  onChangeText={setNewPassword}
+                  placeholder="New password (min. 8 chars)..."
+                  placeholderTextColor={Colors.textMuted}
+                  secureTextEntry={!showNewPass}
+                  autoCapitalize="none"
+                />
+                <TouchableOpacity onPress={() => setShowNewPass(p => !p)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                  <Ionicons name={showNewPass ? 'eye-off-outline' : 'eye-outline'} size={15} color={Colors.textMuted} />
+                </TouchableOpacity>
+              </View>
+              <TouchableOpacity
+                style={[mm.pwdBtn, (newPassword.length < 8 || pwdSaving) && { opacity: 0.5 }]}
+                onPress={handleChangePassword}
+                disabled={newPassword.length < 8 || pwdSaving}
+                activeOpacity={0.8}
+              >
+                {pwdSaving
+                  ? <ActivityIndicator color="#3A3131" size="small" />
+                  : <><Ionicons name="shield-checkmark-outline" size={15} color="#3A3131" />
+                    <Text style={mm.pwdBtnText}>Update Password</Text></>
+                }
+              </TouchableOpacity>
+            </View>
+
             {/* Quick Actions */}
             <View style={mm.field}>
               <Text style={mm.label}>Quick Actions</Text>
               <View style={mm.actionGrid}>
                 <TouchableOpacity style={mm.actionCard} onPress={() => onViewDocs(client)} activeOpacity={0.75}>
-                  <View style={[mm.actionIcon, { backgroundColor: '#DBEAFE' }]}>
-                    <Ionicons name="documents-outline" size={20} color="#2563EB" />
+                  <View style={[mm.actionIcon, { backgroundColor: 'rgba(232,185,35,0.12)' }]}>
+                    <Ionicons name="documents-outline" size={20} color="#E8B923" />
                   </View>
                   <Text style={mm.actionLabel}>View Documents</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={mm.actionCard}
-                  onPress={handleReset}
-                  disabled={resetSent}
-                  activeOpacity={0.75}
-                >
-                  <View style={[mm.actionIcon, { backgroundColor: '#FEF3C7' }]}>
-                    <Ionicons
-                      name={resetSent ? 'checkmark-circle-outline' : 'key-outline'}
-                      size={20}
-                      color="#D97706"
-                    />
-                  </View>
-                  <Text style={mm.actionLabel}>{resetSent ? 'Email Sent' : 'Reset Password'}</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -816,6 +848,12 @@ const mm = StyleSheet.create({
     elevation: 5,
   },
   saveText: { color: '#3A3131', fontWeight: '700', fontSize: 14 },
+  pwdBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+    backgroundColor: '#E8B923', borderRadius: 12, paddingVertical: 12, marginTop: 8,
+    shadowColor: '#E8B923', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 4,
+  },
+  pwdBtnText: { color: '#3A3131', fontWeight: '700', fontSize: 14 },
 });
 
 // ── Main Screen ───────────────────────────────────────────────────────────────
@@ -826,9 +864,12 @@ interface Props {
 
 export function ClientListScreen({ onSelectClient }: Props) {
   const insets = useSafeAreaInsets();
+  const mountedRef = useRef(true);
+  useEffect(() => () => { mountedRef.current = false; }, []);
+
   const [clients, setClients]       = useState<Profile[]>([]);
   const [query, setQuery]           = useState('');
-  const [loading, setLoading]       = useState(true);
+  const [loading, setLoading]       = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [managing, setManaging]     = useState<Profile | null>(null);
   const [addOpen, setAddOpen]       = useState(false);
@@ -844,14 +885,17 @@ export function ClientListScreen({ onSelectClient }: Props) {
   const { isLoading: authLoading } = useAuth();
 
   const load = useCallback(async (isRefresh = false) => {
-    if (isRefresh) setRefreshing(true); else setLoading(true);
+    if (isRefresh) setRefreshing(true);
+    // No setLoading(true) — show existing content immediately
     const safetyTimer = setTimeout(() => {
-      setLoading(false);
-      setRefreshing(false);
-    }, 12000);
-    try { setClients(await getAllClients()); }
+      if (mountedRef.current) { setLoading(false); setRefreshing(false); }
+    }, 8000);
+    try {
+      const data = await getAllClients();
+      if (mountedRef.current) setClients(data);
+    }
     catch (e) { console.error(e); }
-    finally { clearTimeout(safetyTimer); setLoading(false); setRefreshing(false); }
+    finally { clearTimeout(safetyTimer); if (mountedRef.current) { setLoading(false); setRefreshing(false); } }
   }, []);
 
   useEffect(() => { if (!authLoading) load(); }, [authLoading]);
@@ -873,14 +917,13 @@ export function ClientListScreen({ onSelectClient }: Props) {
     return (
       <View style={s.card}>
         {/* Left: circular gradient avatar */}
-        <LinearGradient
-          colors={grad}
-          style={s.avatar}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-        >
-          <Text style={s.avatarText}>{mkInitials(item.full_name)}</Text>
-        </LinearGradient>
+        {item.avatar_url ? (
+          <Image source={{ uri: item.avatar_url }} style={[s.avatar, { borderRadius: 14 }]} />
+        ) : (
+          <LinearGradient colors={grad} style={s.avatar} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
+            <Text style={s.avatarText}>{mkInitials(item.full_name)}</Text>
+          </LinearGradient>
+        )}
 
         {/* Center: info */}
         <View style={s.cardBody}>
@@ -907,7 +950,7 @@ export function ClientListScreen({ onSelectClient }: Props) {
             onPress={() => onSelectClient(item)}
             activeOpacity={0.75}
           >
-            <Ionicons name="documents-outline" size={16} color="#3B82F6" />
+            <Ionicons name="documents-outline" size={16} color="#E8B923" />
           </TouchableOpacity>
           <TouchableOpacity
             style={s.settingsBtn}
@@ -960,7 +1003,7 @@ export function ClientListScreen({ onSelectClient }: Props) {
       <View style={s.searchCard}>
         <Ionicons name="search-outline" size={17} color={Colors.textMuted} />
         <TextInput
-          style={s.searchInput}
+          style={[s.searchInput, { outlineWidth: 0 } as any]}
           placeholder="Search by name or email…"
           placeholderTextColor={Colors.textMuted}
           value={query}
@@ -1205,7 +1248,9 @@ const s = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 10,
-    backgroundColor: '#EFF6FF',
+    backgroundColor: 'rgba(232,185,35,0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(232,185,35,0.3)',
     alignItems: 'center',
     justifyContent: 'center',
   },

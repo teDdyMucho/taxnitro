@@ -41,11 +41,12 @@ function WebLayout({ onLogout }: { onLogout: () => void }) {
   const { user } = useAuth();
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
-  const isDesktop = width >= 768;
+  const isDesktop = width >= 1024;
 
   const [activeTab, setActiveTab] = useState<TabName>('Dashboard');
   const [unreadCount, setUnreadCount] = useState(0);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -82,7 +83,7 @@ function WebLayout({ onLogout }: { onLogout: () => void }) {
       <View style={{ flex: 1, backgroundColor: Colors.bgDeep }}>
         {/* Screen content */}
         <View style={{ flex: 1 }}>
-          <View key={activeTab} style={{ flex: 1 }}>{renderScreen()}</View>
+          <View style={{ flex: 1 }}>{renderScreen()}</View>
         </View>
 
         {/* Floating pill tab bar */}
@@ -194,15 +195,37 @@ function WebLayout({ onLogout }: { onLogout: () => void }) {
             <Text style={web.sidebarUserName} numberOfLines={1}>{user?.name ?? 'User'}</Text>
             <Text style={web.sidebarUserEmail} numberOfLines={1}>{user?.email ?? ''}</Text>
           </View>
-          <TouchableOpacity onPress={onLogout} style={web.logoutBtn}>
+          <TouchableOpacity onPress={() => setShowLogoutModal(true)} style={web.logoutBtn}>
             <Ionicons name="log-out-outline" size={18} color='#A89880' />
           </TouchableOpacity>
         </View>
       </View>
 
       <View style={web.content}>
-        <View key={activeTab} style={{ flex: 1 }}>{renderScreen()}</View>
+        <View style={{ flex: 1 }}>{renderScreen()}</View>
       </View>
+
+      {/* Logout Confirmation Modal */}
+      {showLogoutModal && (
+        <View style={lo.overlay}>
+          <View style={lo.card}>
+            <LinearGradient colors={['rgba(232,185,35,0.15)', 'rgba(181,144,91,0.08)']} style={lo.iconWrap} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
+              <Ionicons name="log-out-outline" size={28} color="#E8B923" />
+            </LinearGradient>
+            <Text style={lo.title}>Sign Out</Text>
+            <Text style={lo.sub}>Are you sure you want to sign out of your account?</Text>
+            <View style={lo.row}>
+              <TouchableOpacity style={lo.cancelBtn} onPress={() => setShowLogoutModal(false)}>
+                <Text style={lo.cancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={lo.signOutBtn} onPress={() => { setShowLogoutModal(false); onLogout(); }}>
+                <Ionicons name="log-out-outline" size={16} color="#3A3131" />
+                <Text style={lo.signOutText}>Sign Out</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      )}
     </View>
   );
 }
@@ -319,6 +342,19 @@ export function AppNavigator() {
 // ── Styles ────────────────────────────────────────────────────────────────────
 
 const SIDEBAR_WIDTH = 240;
+
+const lo = StyleSheet.create({
+  overlay: { position: 'absolute' as any, top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(28,23,19,0.55)', alignItems: 'center', justifyContent: 'center', zIndex: 999 },
+  card: { backgroundColor: '#FFFFFF', borderRadius: 24, padding: 28, width: 320, alignItems: 'center', gap: 12, borderWidth: 1, borderColor: '#E8E0D0', shadowColor: '#3A3131', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.12, shadowRadius: 24, elevation: 12 },
+  iconWrap: { width: 72, height: 72, borderRadius: 22, alignItems: 'center', justifyContent: 'center', marginBottom: 4 },
+  title: { color: '#1C1713', fontSize: 20, fontWeight: '800' },
+  sub: { color: '#A8998A', fontSize: 13, textAlign: 'center', lineHeight: 20 },
+  row: { flexDirection: 'row', gap: 10, width: '100%', marginTop: 6 },
+  cancelBtn: { flex: 1, backgroundColor: '#F5F0E8', borderRadius: 12, paddingVertical: 13, alignItems: 'center', borderWidth: 1, borderColor: '#E8E0D0' },
+  cancelText: { color: '#6B5E52', fontWeight: '600', fontSize: 14 },
+  signOutBtn: { flex: 1, backgroundColor: '#E8B923', borderRadius: 12, paddingVertical: 13, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6 },
+  signOutText: { color: '#3A3131', fontWeight: '800', fontSize: 14 },
+});
 
 const web = StyleSheet.create({
   root: {

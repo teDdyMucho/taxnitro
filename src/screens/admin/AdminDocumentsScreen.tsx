@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -196,8 +196,11 @@ const fmtDate   = (iso: string)  => new Date(iso).toLocaleDateString('en-US', { 
 
 export function AdminDocumentsScreen() {
   const insets = useSafeAreaInsets();
+  const mountedRef = useRef(true);
+  useEffect(() => () => { mountedRef.current = false; }, []);
+
   const [documents, setDocuments]   = useState<Document[]>([]);
-  const [loading, setLoading]       = useState(true);
+  const [loading, setLoading]       = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [query, setQuery]           = useState('');
   const [filter, setFilter]         = useState('all'); // 'all' = show all, used internally
@@ -205,14 +208,17 @@ export function AdminDocumentsScreen() {
   const [deleteDoc, setDeleteDoc]   = useState<Document | null>(null);
 
   const load = useCallback(async (isRefresh = false) => {
-    if (isRefresh) setRefreshing(true); else setLoading(true);
+    if (isRefresh) setRefreshing(true);
+    // No setLoading(true) — show existing content immediately
     const safetyTimer = setTimeout(() => {
-      setLoading(false);
-      setRefreshing(false);
-    }, 12000);
-    try { setDocuments(await getAllDocuments()); }
+      if (mountedRef.current) { setLoading(false); setRefreshing(false); }
+    }, 8000);
+    try {
+      const docs = await getAllDocuments();
+      if (mountedRef.current) setDocuments(docs);
+    }
     catch (e) { console.error(e); }
-    finally { clearTimeout(safetyTimer); setLoading(false); setRefreshing(false); }
+    finally { clearTimeout(safetyTimer); if (mountedRef.current) { setLoading(false); setRefreshing(false); } }
   }, []);
 
   const { user, isLoading: authLoading } = useAuth();
@@ -341,7 +347,7 @@ export function AdminDocumentsScreen() {
         <View style={s.searchBox}>
           <Ionicons name="search-outline" size={16} color="#94A3B8" />
           <TextInput
-            style={s.searchInput}
+            style={[s.searchInput, { outlineWidth: 0 } as any]}
             placeholder="Search by name or client email..."
             placeholderTextColor="#94A3B8"
             value={query}

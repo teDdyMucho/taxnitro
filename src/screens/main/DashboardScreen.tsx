@@ -245,11 +245,14 @@ export function DashboardScreen() {
   const insets = useSafeAreaInsets();
   const { user, isLoading: authLoading } = useAuth();
 
+  const mountedRef = useRef(true);
+  useEffect(() => () => { mountedRef.current = false; }, []);
+
   const [stats, setStats] = useState<Stats>({ total: 0, viewed: 0, newThisWeek: 0 });
   const [chartData, setChartData] = useState<ChartPoint[]>(last6Months());
   const [activity, setActivity] = useState<ActivityItem[]>([]);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
   const headerOpacity = useRef(new Animated.Value(0)).current;
@@ -263,10 +266,7 @@ export function DashboardScreen() {
   }, []);
 
   const fetchData = useCallback(async () => {
-    if (!user?.id) {
-      setLoading(false);
-      return;
-    }
+    if (!user?.id) return;
 
     const oneWeekAgo = new Date();
     oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
@@ -280,6 +280,8 @@ export function DashboardScreen() {
       getDocumentsByEmail(userEmail),
       supabase.from('profiles').select('avatar_url').eq('id', user.id).single(),
     ]);
+
+    if (!mountedRef.current) return;
 
     if (profileRes.data?.avatar_url) setAvatarUrl(profileRes.data.avatar_url);
 
@@ -315,12 +317,11 @@ export function DashboardScreen() {
   // Fire only after auth is fully resolved and user is available
   useEffect(() => {
     if (!authLoading && user?.email) {
-      setLoading(true);
+      // No setLoading(true) — show existing content immediately
       const safetyTimer = setTimeout(() => {
-        setLoading(false);
-        setRefreshing(false);
-      }, 12000);
-      fetchData().finally(() => { clearTimeout(safetyTimer); setLoading(false); });
+        if (mountedRef.current) { setLoading(false); setRefreshing(false); }
+      }, 8000);
+      fetchData().finally(() => { clearTimeout(safetyTimer); if (mountedRef.current) setLoading(false); });
     }
   }, [authLoading, user?.email]);
 
