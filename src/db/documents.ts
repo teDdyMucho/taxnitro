@@ -70,6 +70,23 @@ export async function getDocumentsByEmail(email: string): Promise<Document[]> {
   return merged.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 }
 
+// ── Fetch ALL documents across all tables (admin only) ───────────────────────
+
+export async function getAllDocuments(): Promise<Document[]> {
+  const settled = await Promise.allSettled(
+    FOLDER_TABLES.map(async (table) => {
+      const { data, error } = await supabase
+        .from(table)
+        .select('*')
+        .order('created_at', { ascending: false });
+      if (error) { console.error(`getAllDocuments [${table}]:`, error.message); return [] as Document[]; }
+      return (data ?? []).map(d => ({ ...d, document_type: table } as Document));
+    })
+  );
+  const docs = settled.flatMap(r => r.status === 'fulfilled' ? r.value : []);
+  return docs.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+}
+
 // ── Update status in the correct table ───────────────────────────────────────
 
 export async function updateDocumentStatus(

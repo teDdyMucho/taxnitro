@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity, Platform, Image, Dimensions, useWindowDimensions } from 'react-native';
+import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity, Platform, Image, useWindowDimensions } from 'react-native';
 import { useAuth } from '../context/AuthContext';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -14,6 +14,7 @@ import { DashboardScreen } from '../screens/main/DashboardScreen';
 import { DocumentsScreen } from '../screens/main/DocumentsScreen';
 import { NotificationsScreen } from '../screens/main/NotificationsScreen';
 import { ProfileScreen } from '../screens/main/ProfileScreen';
+import { AdminNavigator } from './AdminNavigator';
 import { getUnreadCount } from '../db/notifications';
 
 export type MainTabParamList = {
@@ -39,6 +40,7 @@ const NAV_ITEMS: { name: TabName; label: string; active: keyof typeof Ionicons.g
 function WebLayout({ onLogout }: { onLogout: () => void }) {
   const { user } = useAuth();
   const { width } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
   const isDesktop = width >= 768;
 
   const [activeTab, setActiveTab] = useState<TabName>('Dashboard');
@@ -72,61 +74,73 @@ function WebLayout({ onLogout }: { onLogout: () => void }) {
     }
   };
 
-  // ── Mobile web: bottom tab bar (same as native app) ──────────────────────────
+  const isStaffOrAdmin = user?.role === 'staff' || user?.role === 'admin';
+
+  // ── Mobile web: floating pill bottom tab bar ──────────────────────────────────
   if (!isDesktop) {
     return (
       <View style={{ flex: 1, backgroundColor: Colors.bgDeep }}>
         {/* Screen content */}
-        <View style={{ flex: 1 }}>{renderScreen()}</View>
+        <View style={{ flex: 1 }}>
+          <View key={activeTab} style={{ flex: 1 }}>{renderScreen()}</View>
+        </View>
 
-        {/* Bottom tab bar */}
-        <View style={mob.tabBar}>
-          {NAV_ITEMS.map(item => {
-            const isActive = activeTab === item.name;
-            return (
-              <TouchableOpacity
-                key={item.name}
-                style={mob.tabItem}
-                onPress={() => setActiveTab(item.name)}
-                activeOpacity={0.7}
-              >
-                <View style={{ position: 'relative' }}>
-                  <Ionicons
-                    name={isActive ? item.active : item.inactive}
-                    size={22}
-                    color={isActive ? Colors.tabActive : Colors.tabInactive}
-                  />
-                  {item.name === 'Notifications' && unreadCount > 0 && (
-                    <View style={tabStyles.badge}>
-                      <Text style={tabStyles.badgeText}>{unreadCount > 9 ? '9+' : unreadCount}</Text>
-                    </View>
-                  )}
-                </View>
-                <Text style={[mob.tabLabel, isActive && mob.tabLabelActive]}>{item.label}</Text>
-              </TouchableOpacity>
-            );
-          })}
+        {/* Floating pill tab bar */}
+        <View style={[mob.pillOuter, { paddingBottom: insets.bottom + 8 }]}>
+          <View style={mob.pillInner}>
+            {NAV_ITEMS.map(item => {
+              const isActive = activeTab === item.name;
+              return (
+                <TouchableOpacity
+                  key={item.name}
+                  style={mob.tabItem}
+                  onPress={() => setActiveTab(item.name)}
+                  activeOpacity={0.7}
+                >
+                  <View style={{ position: 'relative' }}>
+                    <Ionicons
+                      name={isActive ? item.active : item.inactive}
+                      size={22}
+                      color={isActive ? '#E8B923' : '#A89880'}
+                    />
+                    {item.name === 'Notifications' && unreadCount > 0 && (
+                      <View style={tabStyles.badge}>
+                        <Text style={tabStyles.badgeText}>{unreadCount > 9 ? '9+' : unreadCount}</Text>
+                      </View>
+                    )}
+                  </View>
+                  <Text style={[mob.tabLabel, isActive && mob.tabLabelActive]}>{item.label}</Text>
+                  {isActive && <View style={mob.activeDot} />}
+                </TouchableOpacity>
+              );
+            })}
+          </View>
         </View>
       </View>
     );
   }
 
-  // ── Desktop web: sidebar layout ───────────────────────────────────────────────
+  // ── Desktop web: premium dark sidebar layout ──────────────────────────────────
   return (
     <View style={web.root}>
       <View style={web.sidebar}>
+        {/* Logo area */}
         <View style={web.logoWrap}>
-          <LinearGradient colors={[Colors.primary, Colors.accent]} style={web.logoIcon} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
-            <Text style={web.logoEmoji}>⚡</Text>
-          </LinearGradient>
-          <View>
-            <Text style={web.logoName}>Finance</Text>
-            <Text style={web.logoSub}>Therapy Group</Text>
-          </View>
+          <Image source={require('../../assets/main-logo.png')} style={{ width: 140, height: 56 }} resizeMode="contain" />
         </View>
+
+        {/* Portal label — only for staff/admin */}
+        {isStaffOrAdmin && (
+          <View style={web.portalLabelWrap}>
+            <Text style={web.portalLabel}>
+              {user?.role === 'admin' ? 'ADMIN PORTAL' : 'CLIENT PORTAL'}
+            </Text>
+          </View>
+        )}
 
         <View style={web.divider} />
 
+        {/* Nav items */}
         <View style={web.navList}>
           {NAV_ITEMS.map(item => {
             const isActive = activeTab === item.name;
@@ -139,9 +153,15 @@ function WebLayout({ onLogout }: { onLogout: () => void }) {
               >
                 {isActive && <View style={web.navActiveBar} />}
                 <View style={[web.navIconWrap, isActive && web.navIconWrapActive]}>
-                  <Ionicons name={isActive ? item.active : item.inactive} size={18} color={isActive ? Colors.primary : Colors.textMuted} />
+                  <Ionicons
+                    name={isActive ? item.active : item.inactive}
+                    size={18}
+                    color={isActive ? '#E8B923' : '#A89880'}
+                  />
                   {item.name === 'Notifications' && unreadCount > 0 && (
-                    <View style={web.navBadge}><Text style={web.navBadgeText}>{unreadCount > 9 ? '9+' : unreadCount}</Text></View>
+                    <View style={web.navBadge}>
+                      <Text style={web.navBadgeText}>{unreadCount > 9 ? '9+' : unreadCount}</Text>
+                    </View>
                   )}
                 </View>
                 <Text style={[web.navLabel, isActive && web.navLabelActive]}>{item.label}</Text>
@@ -156,11 +176,17 @@ function WebLayout({ onLogout }: { onLogout: () => void }) {
         <View style={{ flex: 1 }} />
         <View style={web.divider} />
 
+        {/* Bottom user section */}
         <View style={web.sidebarUser}>
           {avatarUrl ? (
             <Image source={{ uri: avatarUrl }} style={web.sidebarAvatar} />
           ) : (
-            <LinearGradient colors={[Colors.primary, Colors.accent]} style={web.sidebarAvatar} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
+            <LinearGradient
+              colors={['#E8B923', '#B5905B']}
+              style={web.sidebarAvatar}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+            >
               <Text style={web.sidebarAvatarText}>{mkInitials(user?.name ?? 'U')}</Text>
             </LinearGradient>
           )}
@@ -169,17 +195,19 @@ function WebLayout({ onLogout }: { onLogout: () => void }) {
             <Text style={web.sidebarUserEmail} numberOfLines={1}>{user?.email ?? ''}</Text>
           </View>
           <TouchableOpacity onPress={onLogout} style={web.logoutBtn}>
-            <Ionicons name="log-out-outline" size={18} color={Colors.textMuted} />
+            <Ionicons name="log-out-outline" size={18} color='#A89880' />
           </TouchableOpacity>
         </View>
       </View>
 
-      <View style={web.content}>{renderScreen()}</View>
+      <View style={web.content}>
+        <View key={activeTab} style={{ flex: 1 }}>{renderScreen()}</View>
+      </View>
     </View>
   );
 }
 
-// ── Mobile bottom tab layout ──────────────────────────────────────────────────
+// ── Mobile bottom tab layout (native React Navigation) ───────────────────────
 
 function MobileTabs({ onLogout }: { onLogout: () => void }) {
   const insets = useSafeAreaInsets();
@@ -207,20 +235,22 @@ function MobileTabs({ onLogout }: { onLogout: () => void }) {
         headerShown: false,
         tabBarShowLabel: true,
         tabBarStyle: {
-          backgroundColor: Colors.bgDark,
-          borderTopWidth: 1,
-          borderTopColor: Colors.border,
-          height: 60 + insets.bottom,
+          backgroundColor: '#FFFFFF',
+          borderTopWidth: 0,
+          shadowColor: '#000000',
+          shadowOffset: { width: 0, height: -4 },
+          shadowOpacity: 0.08,
+          shadowRadius: 16,
+          elevation: 12,
+          height: 65 + insets.bottom,
+          borderRadius: 28,
+          marginHorizontal: 16,
+          marginBottom: insets.bottom > 0 ? 8 : 0,
           paddingBottom: insets.bottom + 6,
           paddingTop: 8,
-          elevation: 20,
-          shadowColor: Colors.black,
-          shadowOffset: { width: 0, height: -4 },
-          shadowOpacity: 0.3,
-          shadowRadius: 12,
         },
-        tabBarActiveTintColor: Colors.tabActive,
-        tabBarInactiveTintColor: Colors.tabInactive,
+        tabBarActiveTintColor: '#E8B923',
+        tabBarInactiveTintColor: '#A89880',
         tabBarLabelStyle: { fontSize: 10, fontWeight: '600', marginTop: 2 },
         tabBarIcon: ({ color, focused, size }) => {
           const item = NAV_ITEMS.find(i => i.name === route.name);
@@ -251,7 +281,7 @@ function MobileTabs({ onLogout }: { onLogout: () => void }) {
 // ── App Navigator ─────────────────────────────────────────────────────────────
 
 export function AppNavigator() {
-  const { isAuthenticated, isLoading, logout } = useAuth();
+  const { isAuthenticated, isLoading, logout, user } = useAuth();
   const [authView, setAuthView] = useState<'login' | 'register'>('login');
 
   if (isLoading) {
@@ -268,6 +298,11 @@ export function AppNavigator() {
       return <LoginScreen onLoginSuccess={() => {}} onNavigateRegister={() => setAuthView('register')} />;
     }
     return <RegisterScreen onRegisterSuccess={() => setAuthView('login')} onNavigateLogin={() => setAuthView('login')} />;
+  }
+
+  // Staff and admin get the admin portal
+  if (user?.role === 'staff' || user?.role === 'admin') {
+    return <AdminNavigator onLogout={logout} />;
   }
 
   if (Platform.OS === 'web') {
@@ -293,9 +328,8 @@ const web = StyleSheet.create({
   },
   sidebar: {
     width: SIDEBAR_WIDTH,
-    backgroundColor: Colors.bgDark,
-    borderRightWidth: 1,
-    borderRightColor: Colors.border,
+    backgroundColor: '#3A3131',
+    borderRightWidth: 0,
     paddingVertical: 24,
     paddingHorizontal: 16,
     flexDirection: 'column',
@@ -304,7 +338,7 @@ const web = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    marginBottom: 24,
+    marginBottom: 8,
     paddingHorizontal: 4,
   },
   logoIcon: {
@@ -315,10 +349,29 @@ const web = StyleSheet.create({
     justifyContent: 'center',
   },
   logoEmoji: { fontSize: 20 },
-  logoName: { color: Colors.textPrimary, fontSize: 14, fontWeight: '800', lineHeight: 18 },
-  logoSub:  { color: Colors.textMuted,   fontSize: 11, fontWeight: '500' },
-  divider:  { height: 1, backgroundColor: Colors.border, marginVertical: 16 },
-  navList:  { gap: 4 },
+  logoName: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '800',
+    lineHeight: 20,
+  },
+  portalLabelWrap: {
+    paddingHorizontal: 4,
+    marginTop: 6,
+    marginBottom: 4,
+  },
+  portalLabel: {
+    color: '#E8B923',
+    fontSize: 9,
+    fontWeight: '700',
+    letterSpacing: 1.2,
+  },
+  divider: {
+    height: 1,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    marginVertical: 16,
+  },
+  navList: { gap: 2 },
   navItem: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -330,7 +383,7 @@ const web = StyleSheet.create({
     overflow: 'hidden',
   },
   navItemActive: {
-    backgroundColor: 'rgba(37,99,235,0.12)',
+    backgroundColor: 'rgba(232,185,35,0.15)',
   },
   navActiveBar: {
     position: 'absolute',
@@ -338,7 +391,7 @@ const web = StyleSheet.create({
     top: 6,
     bottom: 6,
     width: 3,
-    backgroundColor: Colors.primary,
+    backgroundColor: '#E8B923',
     borderRadius: 2,
   },
   navIconWrap: {
@@ -350,7 +403,7 @@ const web = StyleSheet.create({
     position: 'relative',
   },
   navIconWrapActive: {
-    backgroundColor: 'rgba(37,99,235,0.15)',
+    backgroundColor: 'rgba(232,185,35,0.15)',
   },
   navBadge: {
     position: 'absolute',
@@ -364,9 +417,17 @@ const web = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: 2,
   },
-  navBadgeText:  { color: Colors.white, fontSize: 8, fontWeight: '800' },
-  navLabel:      { color: Colors.textMuted,   fontSize: 14, fontWeight: '500', flex: 1 },
-  navLabelActive:{ color: Colors.textPrimary, fontWeight: '700' },
+  navBadgeText: { color: '#FFFFFF', fontSize: 8, fontWeight: '800' },
+  navLabel: {
+    color: '#A89880',
+    fontSize: 14,
+    fontWeight: '500',
+    flex: 1,
+  },
+  navLabelActive: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+  },
   navPill: {
     backgroundColor: Colors.error,
     minWidth: 20,
@@ -376,30 +437,33 @@ const web = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: 5,
   },
-  navPillText: { color: Colors.white, fontSize: 10, fontWeight: '700' },
+  navPillText: { color: '#FFFFFF', fontSize: 10, fontWeight: '700' },
   sidebarUser: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
     paddingHorizontal: 4,
+    paddingVertical: 10,
+    backgroundColor: 'rgba(0,0,0,0.2)',
+    borderRadius: 12,
   },
   sidebarAvatar: {
     width: 36,
     height: 36,
-    borderRadius: 10,
+    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  sidebarAvatarText: { color: Colors.white, fontSize: 13, fontWeight: '700' },
-  sidebarUserName:  { color: Colors.textPrimary, fontSize: 13, fontWeight: '600' },
-  sidebarUserEmail: { color: Colors.textMuted,   fontSize: 11 },
+  sidebarAvatarText: { color: '#FFFFFF', fontSize: 13, fontWeight: '700' },
+  sidebarUserName:  { color: '#FFFFFF', fontSize: 13, fontWeight: '600' },
+  sidebarUserEmail: { color: '#A89880', fontSize: 11 },
   logoutBtn: {
     width: 32,
     height: 32,
     borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: Colors.bgMid,
+    backgroundColor: 'rgba(255,255,255,0.08)',
   },
   content: {
     flex: 1,
@@ -409,28 +473,42 @@ const web = StyleSheet.create({
 });
 
 const mob = StyleSheet.create({
-  tabBar: {
+  // Floating pill container
+  pillOuter: {
+    paddingHorizontal: 16,
+    backgroundColor: 'transparent',
+  },
+  pillInner: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 28,
     flexDirection: 'row',
-    backgroundColor: Colors.bgDark,
-    borderTopWidth: 1,
-    borderTopColor: Colors.border,
-    height: 60,
-    paddingBottom: 6,
-    paddingTop: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 20,
+    elevation: 12,
   },
   tabItem: {
     flex: 1,
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 3,
+    gap: 4,
+    paddingVertical: 4,
   },
   tabLabel: {
     fontSize: 10,
     fontWeight: '600',
-    color: Colors.tabInactive,
+    color: '#A89880',
   },
   tabLabelActive: {
-    color: Colors.tabActive,
+    color: '#E8B923',
+  },
+  activeDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#E8B923',
   },
 });
 
@@ -447,7 +525,7 @@ const tabStyles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: 3,
     borderWidth: 1.5,
-    borderColor: Colors.bgDark,
+    borderColor: '#FFFFFF',
   },
-  badgeText: { color: Colors.white, fontSize: 9, fontWeight: '800' },
+  badgeText: { color: '#FFFFFF', fontSize: 9, fontWeight: '800' },
 });

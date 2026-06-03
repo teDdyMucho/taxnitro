@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Colors } from '../../constants/colors';
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../lib/supabase';
@@ -25,10 +26,10 @@ const notifTypeConfig: Record<
   string,
   { icon: keyof typeof Ionicons.glyphMap; color: string; bg: string }
 > = {
-  new: { icon: 'document-text', color: Colors.newDoc, bg: 'rgba(59,130,246,0.12)' },
-  upload: { icon: 'cloud-upload', color: Colors.primary, bg: 'rgba(37,99,235,0.12)' },
-  viewed: { icon: 'eye', color: Colors.viewed, bg: 'rgba(34,197,94,0.12)' },
-  reminder: { icon: 'notifications', color: Colors.notViewed, bg: 'rgba(245,158,11,0.12)' },
+  new:      { icon: 'document-text', color: '#E8B923', bg: 'rgba(232,185,35,0.12)' },
+  upload:   { icon: 'cloud-upload',  color: '#E8B923', bg: 'rgba(232,185,35,0.12)' },
+  viewed:   { icon: 'eye',           color: '#B5905B', bg: 'rgba(181,144,91,0.12)' },
+  reminder: { icon: 'notifications', color: '#E8B923', bg: 'rgba(232,185,35,0.12)' },
 };
 
 function formatTime(dateStr: string): string {
@@ -159,7 +160,11 @@ export function NotificationsScreen() {
 
   return (
     <View style={styles.root}>
-      <View style={[styles.header, { paddingTop: Platform.OS === 'web' ? 16 : insets.top + 12 }]}>
+      <LinearGradient
+        colors={['#3A3131', '#4A3E3E', '#3A3131']}
+        start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+        style={[styles.header, { paddingTop: Platform.OS === 'web' ? 16 : insets.top + 16 }]}
+      >
         <View style={styles.headerLeft}>
           <Text style={styles.headerTitle}>Notifications</Text>
           {unreadCount > 0 && (
@@ -168,16 +173,22 @@ export function NotificationsScreen() {
             </View>
           )}
         </View>
-        {unreadCount > 0 && (
-          <TouchableOpacity onPress={markAllRead} style={styles.markAllBtn}>
-            <Text style={styles.markAllText}>Mark all read</Text>
-          </TouchableOpacity>
-        )}
-      </View>
+        <View style={styles.headerRight}>
+          <View style={styles.bellWrap}>
+            <Ionicons name="notifications" size={20} color="#E8B923" />
+            {unreadCount > 0 && <View style={styles.bellDot} />}
+          </View>
+          {unreadCount > 0 && (
+            <TouchableOpacity onPress={markAllRead} style={styles.markAllBtn}>
+              <Text style={styles.markAllText}>Mark all read</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      </LinearGradient>
 
       {loading ? (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={Colors.primary} />
+          <ActivityIndicator size="large" color='#E8B923' />
         </View>
       ) : (
         <FlatList
@@ -186,7 +197,7 @@ export function NotificationsScreen() {
           contentContainerStyle={[styles.list, { paddingBottom: Platform.OS === 'web' ? 24 : insets.bottom + 90 }]}
           showsVerticalScrollIndicator={false}
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.primary} />
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor='#E8B923' />
           }
           ListHeaderComponent={
             unread.length > 0 ? (
@@ -216,22 +227,22 @@ export function NotificationsScreen() {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: Colors.bgDeep },
+  root: { flex: 1, backgroundColor: '#FAFAF8' },
   loadingContainer: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   header: {
-    backgroundColor: Colors.bgDark,
     paddingHorizontal: 20,
-    paddingBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
+    paddingBottom: 18,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  headerTitle: { color: Colors.textPrimary, fontSize: 22, fontWeight: '700' },
+  headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 },
+  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  headerTitle: { color: '#FFFFFF', fontSize: 22, fontWeight: '800' },
+  bellWrap: { position: 'relative', width: 38, height: 38, borderRadius: 12, backgroundColor: 'rgba(232,185,35,0.15)', alignItems: 'center', justifyContent: 'center' },
+  bellDot: { position: 'absolute', top: 6, right: 6, width: 8, height: 8, borderRadius: 4, backgroundColor: '#E8B923', borderWidth: 1.5, borderColor: '#3A3131' },
   badge: {
-    backgroundColor: Colors.error,
+    backgroundColor: '#E8B923',
     minWidth: 22,
     height: 22,
     borderRadius: 11,
@@ -239,20 +250,22 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: 5,
   },
-  badgeText: { color: Colors.white, fontSize: 11, fontWeight: '700' },
+  badgeText: { color: '#2C2320', fontSize: 11, fontWeight: '800' },
   markAllBtn: {
-    backgroundColor: 'rgba(37,99,235,0.12)',
+    backgroundColor: 'rgba(232,185,35,0.15)',
     paddingHorizontal: 12,
     paddingVertical: 7,
     borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(232,185,35,0.3)',
   },
-  markAllText: { color: Colors.primary, fontSize: 12, fontWeight: '600' },
+  markAllText: { color: '#E8B923', fontSize: 12, fontWeight: '600' },
   list: { padding: 16 },
   sectionLabel: {
-    color: Colors.textMuted,
-    fontSize: 12,
-    fontWeight: '600',
-    letterSpacing: 0.5,
+    color: '#A8998A',
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 1,
     textTransform: 'uppercase',
     marginBottom: 10,
     marginTop: 8,
@@ -260,19 +273,24 @@ const styles = StyleSheet.create({
   notifCard: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    backgroundColor: Colors.bgCard,
-    borderRadius: 14,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
     padding: 14,
     marginBottom: 8,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: '#E8E0D0',
     gap: 12,
     position: 'relative',
     overflow: 'hidden',
+    shadowColor: '#3A3131',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 2,
   },
   notifCardUnread: {
-    backgroundColor: Colors.bgElevated,
-    borderColor: 'rgba(37,99,235,0.25)',
+    backgroundColor: '#FFFDF5',
+    borderColor: 'rgba(232,185,35,0.4)',
   },
   unreadBar: {
     position: 'absolute',
@@ -280,9 +298,9 @@ const styles = StyleSheet.create({
     top: 0,
     bottom: 0,
     width: 3,
-    backgroundColor: Colors.primary,
-    borderTopLeftRadius: 14,
-    borderBottomLeftRadius: 14,
+    backgroundColor: '#E8B923',
+    borderTopLeftRadius: 16,
+    borderBottomLeftRadius: 16,
   },
   notifIcon: {
     width: 44,
@@ -299,10 +317,10 @@ const styles = StyleSheet.create({
     marginBottom: 5,
     gap: 8,
   },
-  notifTitle: { color: Colors.textPrimary, fontSize: 14, fontWeight: '700', flex: 1 },
-  notifTime: { color: Colors.textMuted, fontSize: 11, flexShrink: 0, marginTop: 1 },
-  notifMessage: { color: Colors.textSecondary, fontSize: 13, lineHeight: 18 },
+  notifTitle: { color: '#1C1713', fontSize: 14, fontWeight: '700', flex: 1 },
+  notifTime: { color: '#A8998A', fontSize: 11, flexShrink: 0, marginTop: 1 },
+  notifMessage: { color: '#6B5E52', fontSize: 13, lineHeight: 18 },
   empty: { alignItems: 'center', paddingTop: 80, gap: 12 },
-  emptyText: { color: Colors.textSecondary, fontSize: 17, fontWeight: '600' },
-  emptySubtext: { color: Colors.textMuted, fontSize: 14 },
+  emptyText: { color: '#6B5E52', fontSize: 17, fontWeight: '600' },
+  emptySubtext: { color: '#A8998A', fontSize: 14 },
 });

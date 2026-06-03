@@ -15,6 +15,7 @@ import {
   Alert,
   ActivityIndicator,
   useWindowDimensions,
+  Image,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -187,28 +188,17 @@ export function LoginScreen({ onLoginSuccess, onNavigateRegister }: Props) {
         loading={signingIn}
         fullWidth
         size="lg"
-        style={styles.loginBtn}
+        style={{ marginTop: 4, backgroundColor: '#E8B923', shadowColor: '#E8B923', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.4, shadowRadius: 12, elevation: 8 }}
+        textStyle={{ color: '#3A3131', fontWeight: '700' }}
       />
 
       {biometricAvailable && (
         <TouchableOpacity style={styles.biometricBtn} onPress={handleBiometricLogin} disabled={signingIn}>
-          <Ionicons name="finger-print-outline" size={22} color={Colors.primary} />
+          <Ionicons name="finger-print-outline" size={22} color="#E8B923" />
           <Text style={styles.biometricText}>Sign in with Biometrics</Text>
         </TouchableOpacity>
       )}
 
-      <View style={styles.divider}>
-        <View style={styles.dividerLine} />
-        <Text style={styles.dividerText}>or</Text>
-        <View style={styles.dividerLine} />
-      </View>
-
-      <TouchableOpacity style={styles.registerLink} onPress={onNavigateRegister}>
-        <Text style={styles.registerLinkText}>
-          Don't have an account?{' '}
-          <Text style={styles.registerLinkAccent}>Create Account</Text>
-        </Text>
-      </TouchableOpacity>
     </>
   );
 
@@ -273,16 +263,15 @@ export function LoginScreen({ onLoginSuccess, onNavigateRegister }: Props) {
       <View style={split.root}>
         {/* Full-screen background gradient */}
         <LinearGradient
-          colors={['#020817', '#0a1628', '#060d1f']}
+          colors={['#2C2320', '#3A3131', '#2C2320']}
           style={StyleSheet.absoluteFillObject}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
         />
 
-        {/* Glowing orbs */}
+        {/* Subtle orbs */}
         <View style={split.orbBlue} />
         <View style={split.orbPurple} />
-        <View style={split.orbCyan} />
 
         {/* Grid lines overlay (decorative) */}
         <View style={split.gridOverlay} />
@@ -291,16 +280,17 @@ export function LoginScreen({ onLoginSuccess, onNavigateRegister }: Props) {
         <View style={split.leftPane}>
           {/* Top logo */}
           <View style={split.brandRow}>
-            <LinearGradient colors={['#2563eb', '#7c3aed']} style={split.brandIcon} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
-              <Text style={split.brandEmoji}>⚡</Text>
-            </LinearGradient>
-            <Text style={split.brandName}>Finance Therapy Group</Text>
+            <Image
+              source={require('../../../assets/main-logo.png')}
+              style={{ width: 260, height: 100 }}
+              resizeMode="contain"
+            />
           </View>
 
           {/* Main headline */}
           <View style={split.headlineWrap}>
             <Text style={split.headline}>Your Financial{'\n'}Documents,{'\n'}
-              <Text style={split.headlineAccent}>Secured.</Text>
+              <Text style={[split.headlineAccent, { color: '#E8B923' }]}>Secured.</Text>
             </Text>
             <Text style={split.headlineSub}>
               The all-in-one portal to access, manage,{'\n'}and track all your important documents.
@@ -316,8 +306,8 @@ export function LoginScreen({ onLoginSuccess, onNavigateRegister }: Props) {
               { icon: 'notifications', label: 'Smart Alerts', sub: 'Never miss a thing' },
             ].map(f => (
               <View key={f.label} style={split.featureCard}>
-                <LinearGradient colors={['rgba(37,99,235,0.2)', 'rgba(124,58,237,0.1)']} style={split.featureCardGrad} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
-                  <Ionicons name={f.icon as any} size={22} color="#60a5fa" />
+                <LinearGradient colors={['rgba(232,185,35,0.15)', 'rgba(181,144,91,0.08)']} style={split.featureCardGrad} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
+                  <Ionicons name={f.icon as any} size={22} color="#E8B923" />
                   <Text style={split.featureCardLabel}>{f.label}</Text>
                   <Text style={split.featureCardSub}>{f.sub}</Text>
                 </LinearGradient>
@@ -337,7 +327,7 @@ export function LoginScreen({ onLoginSuccess, onNavigateRegister }: Props) {
           >
             <View style={split.glassCard}>
               {/* Card top accent line */}
-              <LinearGradient colors={['#2563eb', '#7c3aed']} style={split.cardTopAccent} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} />
+              <LinearGradient colors={['#E8B923', '#B5905B']} style={split.cardTopAccent} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} />
 
               {/* Card header */}
               <View style={split.cardHeader}>
@@ -369,7 +359,7 @@ export function LoginScreen({ onLoginSuccess, onNavigateRegister }: Props) {
       {/* Full background — covers everything including scroll overscroll area */}
       <View style={StyleSheet.absoluteFillObject}>
         <LinearGradient
-          colors={[Colors.bgDeep, Colors.bgDark, Colors.bgDeep]}
+          colors={['#3A3131', '#4A3E3E']}
           style={{ flex: 1 }}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
@@ -383,31 +373,13 @@ export function LoginScreen({ onLoginSuccess, onNavigateRegister }: Props) {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.keyboardView}
       >
-        <ScrollView
-          contentContainerStyle={[
-            styles.scroll,
-            {
-              paddingTop: insets.top + 40,
-              paddingBottom: insets.bottom + 30,
-              minHeight: '100%' as any,
-            },
-          ]}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-          bounces={false}
-        >
+        <View style={[styles.scroll, { paddingTop: insets.top + 24, paddingBottom: insets.bottom + 16 }]}>
           <Animated.View style={[styles.logoSection, { transform: [{ scale: logoScale }] }]}>
-            <View style={styles.logoContainer}>
-              <LinearGradient
-                colors={[Colors.primary, Colors.primaryDark]}
-                style={styles.logoGradient}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-              >
-                <Text style={styles.logoIcon}>⚡</Text>
-              </LinearGradient>
-            </View>
-            <Text style={styles.appName}>Finance Therapy Group</Text>
+            <Image
+              source={require('../../../assets/main-logo.png')}
+              style={{ width: 140, height: 56, alignSelf: 'center', marginBottom: 8 }}
+              resizeMode="contain"
+            />
             <Text style={styles.appTagline}>Your document portal</Text>
           </Animated.View>
 
@@ -422,7 +394,7 @@ export function LoginScreen({ onLoginSuccess, onNavigateRegister }: Props) {
           <Text style={styles.footerText}>
             Secured by Finance Therapy Group · 256-bit SSL encryption
           </Text>
-        </ScrollView>
+        </View>
       </KeyboardAvoidingView>
 
       {forgotModal}
@@ -435,19 +407,21 @@ export function LoginScreen({ onLoginSuccess, onNavigateRegister }: Props) {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: Colors.bgDeep,
-    // prevent white flash on overscroll
-    ...(Platform.OS === 'web' ? {} : {}),
+    backgroundColor: '#3A3131',
+    overflow: 'hidden' as any,
+    ...(Platform.OS === 'web' ? { height: '100vh' as any, maxHeight: '100vh' as any } : {}),
   },
-  keyboardView: { flex: 1, backgroundColor: Colors.bgDeep },
+  keyboardView: { flex: 1, overflow: 'hidden' as any },
   scroll: {
-    flexGrow: 1,
-    paddingHorizontal: 24,
+    flex: 1,
+    paddingHorizontal: 20,
+    justifyContent: 'center',
+    gap: 12,
   },
   orb: { position: 'absolute', borderRadius: 999 },
-  orb1: { width: 300, height: 300, backgroundColor: 'rgba(37,99,235,0.08)', top: -100, right: -80 },
-  orb2: { width: 200, height: 200, backgroundColor: 'rgba(124,58,237,0.06)', bottom: 100, left: -60 },
-  logoSection: { alignItems: 'center', marginBottom: 32 },
+  orb1: { width: 250, height: 250, backgroundColor: 'rgba(232,185,35,0.06)', top: -80, right: -60 },
+  orb2: { width: 180, height: 180, backgroundColor: 'rgba(181,144,91,0.05)', bottom: 80, left: -50 },
+  logoSection: { alignItems: 'center', marginBottom: 0 },
   logoContainer: {
     marginBottom: 14,
     shadowColor: Colors.primary,
@@ -459,27 +433,27 @@ const styles = StyleSheet.create({
   logoGradient: { width: 70, height: 70, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
   logoIcon: { fontSize: 34 },
   appName: { color: Colors.textPrimary, fontSize: 28, fontWeight: '800', letterSpacing: -0.5 },
-  appTagline: { color: Colors.textMuted, fontSize: 14, marginTop: 4 },
-  card: { backgroundColor: Colors.bgCard, borderRadius: 24, padding: 24, borderWidth: 1, borderColor: Colors.border },
-  cardTitle: { color: Colors.textPrimary, fontSize: 24, fontWeight: '700', marginBottom: 6, letterSpacing: -0.4 },
-  cardSubtitle: { color: Colors.textMuted, fontSize: 14, marginBottom: 28 },
+  appTagline: { color: 'rgba(255,255,255,0.5)', fontSize: 13, marginTop: 4 },
+  card: { backgroundColor: Colors.bgCard, borderRadius: 20, padding: 20, borderWidth: 1, borderColor: Colors.border },
+  cardTitle: { color: Colors.textPrimary, fontSize: 20, fontWeight: '700', marginBottom: 4, letterSpacing: -0.4 },
+  cardSubtitle: { color: Colors.textMuted, fontSize: 13, marginBottom: 14 },
   form: { gap: 0 },
-  rowBetween: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, marginTop: 4 },
+  rowBetween: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14, marginTop: 4 },
   rememberRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   rememberText: { color: Colors.textSecondary, fontSize: 13 },
-  forgotText: { color: Colors.primary, fontSize: 13, fontWeight: '600' },
+  forgotText: { color: '#E8B923', fontSize: 13, fontWeight: '600' },
   errorBanner: { backgroundColor: 'rgba(239,68,68,0.12)', borderRadius: 10, padding: 12, marginBottom: 16, borderWidth: 1, borderColor: 'rgba(239,68,68,0.25)' },
   errorBannerText: { color: Colors.error, fontSize: 13, textAlign: 'center' },
-  loginBtn: { marginTop: 4, shadowColor: Colors.primary, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.4, shadowRadius: 12, elevation: 8 },
-  biometricBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 14, paddingVertical: 12, borderRadius: 14, borderWidth: 1, borderColor: 'rgba(37,99,235,0.3)', backgroundColor: 'rgba(37,99,235,0.08)' },
-  biometricText: { color: Colors.primary, fontSize: 14, fontWeight: '600' },
+  loginBtn: { marginTop: 4, shadowColor: '#E8B923', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.4, shadowRadius: 12, elevation: 8 },
+  biometricBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 14, paddingVertical: 12, borderRadius: 14, borderWidth: 1, borderColor: 'rgba(232,185,35,0.3)', backgroundColor: 'rgba(232,185,35,0.08)' },
+  biometricText: { color: '#E8B923', fontSize: 14, fontWeight: '600' },
   divider: { flexDirection: 'row', alignItems: 'center', marginVertical: 24, gap: 12 },
   dividerLine: { flex: 1, height: 1, backgroundColor: Colors.border },
   dividerText: { color: Colors.textMuted, fontSize: 13 },
   registerLink: { alignItems: 'center' },
   registerLinkText: { color: Colors.textSecondary, fontSize: 14 },
-  registerLinkAccent: { color: Colors.primary, fontWeight: '700' },
-  footerText: { color: Colors.textMuted, fontSize: 11, textAlign: 'center', marginTop: 32, opacity: 0.7 },
+  registerLinkAccent: { color: '#E8B923', fontWeight: '700' },
+  footerText: { color: 'rgba(255,255,255,0.3)', fontSize: 11, textAlign: 'center', marginTop: 8 },
 });
 
 // ── Desktop web styles ────────────────────────────────────────────────────────
@@ -497,7 +471,7 @@ const split = StyleSheet.create({
     width: 600,
     height: 600,
     borderRadius: 300,
-    backgroundColor: 'rgba(37,99,235,0.12)',
+    backgroundColor: 'rgba(232,185,35,0.06)',
     top: -200,
     left: -100,
   },
@@ -506,7 +480,7 @@ const split = StyleSheet.create({
     width: 500,
     height: 500,
     borderRadius: 250,
-    backgroundColor: 'rgba(124,58,237,0.1)',
+    backgroundColor: 'rgba(181,144,91,0.05)',
     bottom: -150,
     left: 200,
   },
@@ -566,10 +540,10 @@ const split = StyleSheet.create({
     marginBottom: 20,
   },
   headlineAccent: {
-    color: '#60a5fa',
+    color: '#E8B923',
   },
   headlineSub: {
-    color: '#64748b',
+    color: 'rgba(255,255,255,0.45)',
     fontSize: 16,
     lineHeight: 26,
   },
@@ -585,24 +559,24 @@ const split = StyleSheet.create({
     borderRadius: 16,
     overflow: 'hidden' as any,
     borderWidth: 1,
-    borderColor: 'rgba(37,99,235,0.2)',
+    borderColor: 'rgba(232,185,35,0.2)',
   },
   featureCardGrad: {
     padding: 18,
     gap: 8,
   },
   featureCardLabel: {
-    color: '#e2e8f0',
+    color: 'rgba(255,255,255,0.9)',
     fontSize: 13,
     fontWeight: '700',
     marginTop: 4,
   },
   featureCardSub: {
-    color: '#475569',
+    color: 'rgba(255,255,255,0.45)',
     fontSize: 12,
   },
   leftFooter: {
-    color: '#1e3a5f',
+    color: 'rgba(232,185,35,0.4)',
     fontSize: 12,
     letterSpacing: 2,
     textTransform: 'uppercase' as any,
@@ -621,22 +595,21 @@ const split = StyleSheet.create({
     justifyContent: 'center',
   },
 
-  // The floating glass card
+  // The floating glass card — white on dark background
   glassCard: {
-    backgroundColor: 'rgba(15,23,42,0.85)',
+    backgroundColor: '#FFFFFF',
     borderRadius: 24,
     borderWidth: 1,
-    borderColor: 'rgba(99,102,241,0.25)',
+    borderColor: '#E8E0D0',
     overflow: 'hidden' as any,
-    // web box-shadow workaround via elevation
-    shadowColor: '#2563eb',
+    shadowColor: '#E8B923',
     shadowOffset: { width: 0, height: 24 },
-    shadowOpacity: 0.3,
+    shadowOpacity: 0.15,
     shadowRadius: 60,
     elevation: 30,
   },
   cardTopAccent: {
-    height: 3,
+    height: 4,
     width: '100%',
   },
   cardHeader: {
@@ -645,14 +618,14 @@ const split = StyleSheet.create({
     paddingBottom: 8,
   },
   cardTitle: {
-    color: '#f8fafc',
+    color: '#1C1713',
     fontSize: 26,
     fontWeight: '800',
     letterSpacing: -0.5,
     marginBottom: 6,
   },
   cardSubtitle: {
-    color: '#475569',
+    color: '#A8998A',
     fontSize: 14,
   },
   cardBody: {
@@ -661,7 +634,7 @@ const split = StyleSheet.create({
     paddingBottom: 8,
   },
   cardNote: {
-    color: '#334155',
+    color: '#A8998A',
     fontSize: 11,
     textAlign: 'center',
     paddingHorizontal: 32,
@@ -675,46 +648,56 @@ const split = StyleSheet.create({
 const forgotStyles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.75)',
+    backgroundColor: 'rgba(44,35,32,0.6)',
     justifyContent: 'center',
+    alignItems: 'center',
     padding: 24,
   },
   card: {
-    backgroundColor: '#0f172a',
-    borderRadius: 20,
-    padding: 24,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    padding: 28,
     borderWidth: 1,
-    borderColor: '#1e293b',
+    borderColor: '#E8E0D0',
     alignItems: 'center',
+    width: '100%',
+    maxWidth: 400,
+    shadowColor: '#3A3131',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.12,
+    shadowRadius: 24,
+    elevation: 10,
   },
   iconWrap: {
-    width: 60,
-    height: 60,
-    borderRadius: 18,
-    backgroundColor: 'rgba(37,99,235,0.15)',
+    width: 64,
+    height: 64,
+    borderRadius: 20,
+    backgroundColor: 'rgba(232,185,35,0.12)',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(232,185,35,0.25)',
   },
   iconEmoji: { fontSize: 28 },
-  title: { color: '#f1f5f9', fontSize: 20, fontWeight: '700', marginBottom: 8, textAlign: 'center' },
-  subtitle: { color: '#94a3b8', fontSize: 14, textAlign: 'center', lineHeight: 20, marginBottom: 20 },
-  emailHighlight: { color: '#f1f5f9', fontWeight: '600' },
+  title: { color: '#1C1713', fontSize: 20, fontWeight: '800', marginBottom: 8, textAlign: 'center' },
+  subtitle: { color: '#A8998A', fontSize: 14, textAlign: 'center', lineHeight: 20, marginBottom: 20 },
+  emailHighlight: { color: '#1C1713', fontWeight: '700' },
   input: {
     width: '100%',
-    backgroundColor: '#1e293b',
+    backgroundColor: '#FAFAF8',
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#334155',
-    color: '#f1f5f9',
+    borderColor: '#E8E0D0',
+    color: '#1C1713',
     fontSize: 15,
     paddingHorizontal: 14,
     paddingVertical: 13,
     marginBottom: 20,
   },
   btnRow: { flexDirection: 'row', gap: 10, width: '100%' },
-  cancelBtn: { flex: 1, paddingVertical: 13, borderRadius: 12, borderWidth: 1, borderColor: '#334155', alignItems: 'center' },
-  cancelText: { color: '#94a3b8', fontSize: 14, fontWeight: '600' },
-  primaryBtn: { flex: 1, paddingVertical: 13, borderRadius: 12, backgroundColor: Colors.primary, alignItems: 'center', justifyContent: 'center', minHeight: 46 },
-  primaryBtnText: { color: '#fff', fontSize: 14, fontWeight: '700' },
+  cancelBtn: { flex: 1, paddingVertical: 13, borderRadius: 12, borderWidth: 1, borderColor: '#E8E0D0', alignItems: 'center', backgroundColor: '#F5F0E8' },
+  cancelText: { color: '#6B5E52', fontSize: 14, fontWeight: '600' },
+  primaryBtn: { flex: 1, paddingVertical: 13, borderRadius: 12, backgroundColor: '#E8B923', alignItems: 'center', justifyContent: 'center', minHeight: 46 },
+  primaryBtnText: { color: '#2C2320', fontSize: 14, fontWeight: '800' },
 });

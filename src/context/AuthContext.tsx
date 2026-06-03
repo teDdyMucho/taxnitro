@@ -1,12 +1,15 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 
+export type UserRole = 'client' | 'staff' | 'admin';
+
 export interface AuthUser {
   id: string;
   name: string;
   email: string;
   clientId?: string;
   plan?: string;
+  role: UserRole;
 }
 
 interface AuthContextValue {
@@ -26,7 +29,7 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 const fetchProfile = async (userId: string, email: string): Promise<AuthUser> => {
   const { data } = await supabase
     .from('profiles')
-    .select('full_name, client_id, plan')
+    .select('full_name, client_id, plan, role')
     .eq('id', userId)
     .single();
 
@@ -36,6 +39,7 @@ const fetchProfile = async (userId: string, email: string): Promise<AuthUser> =>
     name: data?.full_name ?? 'User',
     clientId: data?.client_id,
     plan: data?.plan ?? 'Free',
+    role: (data?.role as UserRole) ?? 'client',
   };
 };
 
@@ -107,6 +111,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setError(authError.message);
       setIsLoading(false);
       return { success: false, needsConfirmation: false, error: authError.message };
+    }
+
+    // Create profile manually (no trigger needed)
+    if (data.user) {
+      await supabase.from('profiles').upsert({
+        id: data.user.id,
+        email,
+        full_name: fullName,
+        plan: 'Free',
+        role: 'client',
+        is_active: true,
+      }, { onConflict: 'id' });
     }
 
     setIsLoading(false);

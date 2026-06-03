@@ -1,45 +1,47 @@
 export const Colors = {
-  // Primary
-  primary: '#2563EB',
-  primaryDark: '#1D4ED8',
-  primaryDeep: '#0F172A',
+  // FTG Brand
+  primary:     '#E8B923',
+  primaryDark: '#B5905B',
+  primaryDeep: '#2C2320',
 
-  // Background
-  bgDeep: '#020617',
-  bgDark: '#111827',
-  bgMid: '#1F2937',
-  bgCard: '#1E293B',
-  bgElevated: '#263344',
+  // Backgrounds
+  bgDeep:     '#FAFAF8',
+  bgDark:     '#2C2320',
+  bgMid:      '#F5F0E8',
+  bgCard:     '#FFFFFF',
+  bgElevated: '#FFFFFF',
 
   // Text
-  textPrimary: '#E5E7EB',
-  textSecondary: '#9CA3AF',
-  textMuted: '#6B7280',
+  textPrimary:   '#1C1713',
+  textSecondary: '#6B5E52',
+  textMuted:     '#A8998A',
+
+  // Accents
+  accent:       '#B5905B',
+  accentPurple: '#7C3AED',
+  accentGold:   '#E8B923',
 
   // Status
-  viewed: '#22C55E',
-  notViewed: '#F59E0B',
-  error: '#EF4444',
-  newDoc: '#3B82F6',
-
-  // Accent
-  accent: '#7C3AED',
+  viewed:    '#16A34A',
+  notViewed: '#D97706',
+  error:     '#DC2626',
+  newDoc:    '#2563EB',
 
   // Borders
-  border: '#2D3748',
-  borderLight: '#374151',
+  border:      '#E8E0D0',
+  borderLight: '#F2EDE3',
 
-  // White / Black
+  // Absolute
   white: '#FFFFFF',
   black: '#000000',
 
-  // Transparent
+  // Overlay
   transparent: 'transparent',
-  overlay: 'rgba(0,0,0,0.5)',
+  overlay: 'rgba(28,23,19,0.5)',
 
   // Tab bar
-  tabActive: '#2563EB',
-  tabInactive: '#6B7280',
+  tabActive:   '#E8B923',
+  tabInactive: '#A8998A',
 };
 
 export type ColorKey = keyof typeof Colors;

@@ -5,12 +5,12 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "dark",
+    "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "splash": {
-      "image": "./assets/splash-icon.png",
+      "image": "./assets/main-logo.png",
       "resizeMode": "contain",
-      "backgroundColor": "#020617"
+      "backgroundColor": "#3A3131"
     },
     "ios": {
       "supportsTablet": true,
@@ -35,8 +35,8 @@
       "name": "Finance Therapy Group",
       "shortName": "FTG",
       "description": "Your secure document portal",
-      "themeColor": "#0f172a",
-      "backgroundColor": "#020617"
+      "themeColor": "#E8B923",
+      "backgroundColor": "#3A3131"
     },
     "plugins": [
       "expo-web-browser"

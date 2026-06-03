@@ -58,7 +58,7 @@ export function InputField({
           <Ionicons
             name={leftIcon}
             size={18}
-            color={focused ? Colors.primary : Colors.textMuted}
+            color={focused ? '#E8B923' : Colors.textMuted}
             style={styles.leftIcon}
           />
         )}
@@ -114,7 +114,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   inputWrapperFocused: {
-    borderColor: Colors.primary,
+    borderColor: '#E8B923',
     borderWidth: 1.5,
   },
   inputWrapperError: {

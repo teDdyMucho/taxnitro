@@ -8,6 +8,7 @@ import {
   Switch,
   Alert,
   Modal,
+  Pressable,
   TextInput,
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -21,7 +22,6 @@ import * as ImagePicker from 'expo-image-picker';
 import * as LocalAuthentication from 'expo-local-authentication';
 import * as SecureStore from 'expo-secure-store';
 import { Colors } from '../../constants/colors';
-import { Card } from '../../components/Card';
 import { Button } from '../../components/Button';
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../lib/supabase';
@@ -30,7 +30,7 @@ const BIOMETRIC_KEY = 'biometric_enabled';
 const BIOMETRIC_EMAIL_KEY = 'biometric_email';
 const BIOMETRIC_PASSWORD_KEY = 'biometric_password';
 
-// ── helpers ──────────────────────────────────────────────────────────────────
+// ── helpers ───────────────────────────────────────────────────────────────────
 
 function initials(name: string) {
   return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
@@ -41,7 +41,7 @@ function memberSince(dateStr: string) {
   return d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
 }
 
-// ── sub-components ────────────────────────────────────────────────────────────
+// ── SettingRow ────────────────────────────────────────────────────────────────
 
 interface SettingRowProps {
   icon: keyof typeof Ionicons.glyphMap;
@@ -56,21 +56,31 @@ interface SettingRowProps {
   last?: boolean;
 }
 
-function SettingRow({ icon, label, value, toggle, toggleValue, onToggle, onPress, color, danger, last }: SettingRowProps) {
+function SettingRow({
+  icon, label, value, toggle, toggleValue, onToggle, onPress, color, danger, last,
+}: SettingRowProps) {
+  const iconColor = danger ? Colors.error : color ?? Colors.primary;
   return (
     <>
-      <TouchableOpacity style={styles.settingRow} onPress={onPress} disabled={toggle || !onPress} activeOpacity={0.7}>
-        <View style={[styles.settingIcon, { backgroundColor: `${color || Colors.primary}18` }]}>
-          <Ionicons name={icon} size={18} color={danger ? Colors.error : color || Colors.primary} />
+      <TouchableOpacity
+        style={styles.settingRow}
+        onPress={onPress}
+        disabled={toggle || !onPress}
+        activeOpacity={0.7}
+      >
+        <View style={[styles.settingIconWrap, { backgroundColor: `${iconColor}18` }]}>
+          <Ionicons name={icon} size={18} color={iconColor} />
         </View>
         <Text style={[styles.settingLabel, danger && { color: Colors.error }]}>{label}</Text>
         <View style={styles.settingRight}>
           {value ? <Text style={styles.settingValue}>{value}</Text> : null}
           {toggle ? (
-            <Switch value={toggleValue} onValueChange={onToggle}
-              trackColor={{ false: Colors.bgElevated, true: Colors.primary }}
+            <Switch
+              value={toggleValue}
+              onValueChange={onToggle}
+              trackColor={{ false: Colors.bgMid, true: '#E8B923' }}
               thumbColor={Colors.white}
-              style={{ transform: [{ scaleX: 0.85 }, { scaleY: 0.85 }] }}
+              ios_backgroundColor={Colors.bgMid}
             />
           ) : (
             <Ionicons name="chevron-forward" size={16} color={Colors.textMuted} />
@@ -82,11 +92,15 @@ function SettingRow({ icon, label, value, toggle, toggleValue, onToggle, onPress
   );
 }
 
-// ── modals ────────────────────────────────────────────────────────────────────
+// ── EditProfileModal ──────────────────────────────────────────────────────────
 
-function EditProfileModal({ visible, onClose, currentName, currentEmail, onSaved }: {
-  visible: boolean; onClose: () => void;
-  currentName: string; currentEmail: string;
+function EditProfileModal({
+  visible, onClose, currentName, currentEmail, onSaved,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  currentName: string;
+  currentEmail: string;
   onSaved: (name: string) => void;
 }) {
   const [name, setName] = useState(currentName);
@@ -97,10 +111,14 @@ function EditProfileModal({ visible, onClose, currentName, currentEmail, onSaved
 
   const save = async () => {
     if (!name.trim() || name.trim().length < 2) {
-      Alert.alert('Invalid', 'Name must be at least 2 characters.'); return;
+      Alert.alert('Invalid', 'Name must be at least 2 characters.');
+      return;
     }
     setLoading(true);
-    const { error } = await supabase.from('profiles').update({ full_name: name.trim() }).eq('id', user!.id);
+    const { error } = await supabase
+      .from('profiles')
+      .update({ full_name: name.trim() })
+      .eq('id', user!.id);
     setLoading(false);
     if (error) { Alert.alert('Error', error.message); return; }
     onSaved(name.trim());
@@ -112,20 +130,32 @@ function EditProfileModal({ visible, onClose, currentName, currentEmail, onSaved
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
         <View style={modalStyles.root}>
           <View style={modalStyles.header}>
-            <TouchableOpacity onPress={onClose}><Text style={modalStyles.cancel}>Cancel</Text></TouchableOpacity>
+            <TouchableOpacity onPress={onClose}>
+              <Text style={modalStyles.cancel}>Cancel</Text>
+            </TouchableOpacity>
             <Text style={modalStyles.title}>Edit Profile</Text>
             <TouchableOpacity onPress={save} disabled={loading}>
-              {loading ? <ActivityIndicator color={Colors.primary} /> : <Text style={modalStyles.save}>Save</Text>}
+              {loading
+                ? <ActivityIndicator color={Colors.primary} />
+                : <Text style={modalStyles.save}>Save</Text>}
             </TouchableOpacity>
           </View>
           <View style={modalStyles.body}>
             <Text style={modalStyles.label}>Full Name</Text>
-            <TextInput style={modalStyles.input} value={name} onChangeText={setName}
-              placeholderTextColor={Colors.textMuted} placeholder="Enter your full name"
-              autoCapitalize="words" />
+            <TextInput
+              style={modalStyles.input}
+              value={name}
+              onChangeText={setName}
+              placeholderTextColor={Colors.textMuted}
+              placeholder="Enter your full name"
+              autoCapitalize="words"
+            />
             <Text style={modalStyles.label}>Email</Text>
-            <TextInput style={[modalStyles.input, modalStyles.inputDisabled]}
-              value={currentEmail} editable={false} />
+            <TextInput
+              style={[modalStyles.input, modalStyles.inputDisabled]}
+              value={currentEmail}
+              editable={false}
+            />
             <Text style={modalStyles.hint}>Email cannot be changed here. Contact support to update it.</Text>
           </View>
         </View>
@@ -133,6 +163,8 @@ function EditProfileModal({ visible, onClose, currentName, currentEmail, onSaved
     </Modal>
   );
 }
+
+// ── ChangePasswordModal ───────────────────────────────────────────────────────
 
 function ChangePasswordModal({ visible, onClose }: { visible: boolean; onClose: () => void }) {
   const [current, setCurrent] = useState('');
@@ -147,14 +179,14 @@ function ChangePasswordModal({ visible, onClose }: { visible: boolean; onClose: 
     if (next.length < 8) { Alert.alert('Too short', 'Password must be at least 8 characters.'); return; }
     if (next !== confirm) { Alert.alert('Mismatch', 'Passwords do not match.'); return; }
     setLoading(true);
-    // Re-authenticate first
     const { error: signInErr } = await supabase.auth.signInWithPassword({ email: user!.email, password: current });
     if (signInErr) { setLoading(false); Alert.alert('Wrong password', 'Current password is incorrect.'); return; }
     const { error } = await supabase.auth.updateUser({ password: next });
     setLoading(false);
     if (error) { Alert.alert('Error', error.message); return; }
     Alert.alert('Success', 'Password changed successfully.');
-    reset(); onClose();
+    reset();
+    onClose();
   };
 
   return (
@@ -162,22 +194,44 @@ function ChangePasswordModal({ visible, onClose }: { visible: boolean; onClose: 
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
         <View style={modalStyles.root}>
           <View style={modalStyles.header}>
-            <TouchableOpacity onPress={() => { reset(); onClose(); }}><Text style={modalStyles.cancel}>Cancel</Text></TouchableOpacity>
+            <TouchableOpacity onPress={() => { reset(); onClose(); }}>
+              <Text style={modalStyles.cancel}>Cancel</Text>
+            </TouchableOpacity>
             <Text style={modalStyles.title}>Change Password</Text>
             <TouchableOpacity onPress={save} disabled={loading}>
-              {loading ? <ActivityIndicator color={Colors.primary} /> : <Text style={modalStyles.save}>Save</Text>}
+              {loading
+                ? <ActivityIndicator color={Colors.primary} />
+                : <Text style={modalStyles.save}>Save</Text>}
             </TouchableOpacity>
           </View>
           <View style={modalStyles.body}>
             <Text style={modalStyles.label}>Current Password</Text>
-            <TextInput style={modalStyles.input} value={current} onChangeText={setCurrent}
-              secureTextEntry placeholderTextColor={Colors.textMuted} placeholder="Enter current password" />
+            <TextInput
+              style={modalStyles.input}
+              value={current}
+              onChangeText={setCurrent}
+              secureTextEntry
+              placeholderTextColor={Colors.textMuted}
+              placeholder="Enter current password"
+            />
             <Text style={modalStyles.label}>New Password</Text>
-            <TextInput style={modalStyles.input} value={next} onChangeText={setNext}
-              secureTextEntry placeholderTextColor={Colors.textMuted} placeholder="At least 8 characters" />
+            <TextInput
+              style={modalStyles.input}
+              value={next}
+              onChangeText={setNext}
+              secureTextEntry
+              placeholderTextColor={Colors.textMuted}
+              placeholder="At least 8 characters"
+            />
             <Text style={modalStyles.label}>Confirm New Password</Text>
-            <TextInput style={modalStyles.input} value={confirm} onChangeText={setConfirm}
-              secureTextEntry placeholderTextColor={Colors.textMuted} placeholder="Repeat new password" />
+            <TextInput
+              style={modalStyles.input}
+              value={confirm}
+              onChangeText={setConfirm}
+              secureTextEntry
+              placeholderTextColor={Colors.textMuted}
+              placeholder="Repeat new password"
+            />
           </View>
         </View>
       </KeyboardAvoidingView>
@@ -185,7 +239,11 @@ function ChangePasswordModal({ visible, onClose }: { visible: boolean; onClose: 
   );
 }
 
-function PolicyModal({ visible, onClose, type }: { visible: boolean; onClose: () => void; type: 'terms' | 'privacy' }) {
+// ── PolicyModal ───────────────────────────────────────────────────────────────
+
+function PolicyModal({
+  visible, onClose, type,
+}: { visible: boolean; onClose: () => void; type: 'terms' | 'privacy' }) {
   const isTerms = type === 'terms';
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
@@ -193,7 +251,9 @@ function PolicyModal({ visible, onClose, type }: { visible: boolean; onClose: ()
         <View style={modalStyles.header}>
           <View style={{ width: 60 }} />
           <Text style={modalStyles.title}>{isTerms ? 'Terms of Service' : 'Privacy Policy'}</Text>
-          <TouchableOpacity onPress={onClose}><Text style={modalStyles.save}>Done</Text></TouchableOpacity>
+          <TouchableOpacity onPress={onClose}>
+            <Text style={modalStyles.save}>Done</Text>
+          </TouchableOpacity>
         </View>
         <ScrollView style={{ flex: 1 }} contentContainerStyle={modalStyles.body}>
           {isTerms ? (
@@ -227,7 +287,7 @@ function PolicyModal({ visible, onClose, type }: { visible: boolean; onClose: ()
               <Text style={modalStyles.policyText}>All data is encrypted in transit using TLS and at rest using AES-256 encryption. We use Supabase infrastructure which complies with SOC 2 Type II standards.</Text>
               <Text style={modalStyles.policySection}>4. Data Retention</Text>
               <Text style={modalStyles.policyText}>Your data is retained for as long as your account is active. You may request deletion of your account and all associated data by contacting support.</Text>
-              <Text style={modalStyles.policySection}>5. Cookies & Tracking</Text>
+              <Text style={modalStyles.policySection}>5. Cookies &amp; Tracking</Text>
               <Text style={modalStyles.policyText}>The mobile application does not use cookies. We may collect anonymized analytics to understand usage patterns and improve the app experience.</Text>
               <Text style={modalStyles.policySection}>6. Your Rights</Text>
               <Text style={modalStyles.policyText}>You have the right to access, correct, or delete your personal data at any time. Contact us at privacy@taxnitro.com to exercise these rights.</Text>
@@ -241,10 +301,42 @@ function PolicyModal({ visible, onClose, type }: { visible: boolean; onClose: ()
   );
 }
 
+// ── SectionLabel ──────────────────────────────────────────────────────────────
+
+function SectionLabel({ label }: { label: string }) {
+  return <Text style={styles.sectionLabel}>{label}</Text>;
+}
+
+// ── InfoRow ───────────────────────────────────────────────────────────────────
+
+function InfoRow({
+  icon, label, children, last,
+}: { icon: keyof typeof Ionicons.glyphMap; label: string; children: React.ReactNode; last?: boolean }) {
+  return (
+    <>
+      <View style={styles.infoRow}>
+        <View style={styles.infoIconWrap}>
+          <Ionicons name={icon} size={15} color={Colors.textMuted} />
+        </View>
+        <Text style={styles.infoLabel}>{label}</Text>
+        <View style={styles.infoValueWrap}>{children}</View>
+      </View>
+      {!last && <View style={styles.rowDivider} />}
+    </>
+  );
+}
+
 // ── main screen ───────────────────────────────────────────────────────────────
 
 interface Stats { total: number; viewed: number; }
-interface ProfileData { full_name: string; email: string; client_id: string; plan: string; created_at: string; avatar_url: string | null; }
+interface ProfileData {
+  full_name: string;
+  email: string;
+  client_id: string;
+  plan: string;
+  created_at: string;
+  avatar_url: string | null;
+}
 
 interface Props { onLogout: () => void }
 
@@ -268,13 +360,18 @@ export function ProfileScreen({ onLogout }: Props) {
   const [showChangePassword, setShowChangePassword] = useState(false);
   const [showTerms, setShowTerms] = useState(false);
   const [showPrivacy, setShowPrivacy] = useState(false);
+  const [signOutOpen, setSignOutOpen] = useState(false);
 
   const load = useCallback(async () => {
     if (!user?.id) return;
     setLoading(true);
 
     const [profileRes, docsRes] = await Promise.all([
-      supabase.from('profiles').select('full_name, email, client_id, plan, created_at, avatar_url').eq('id', user.id).single(),
+      supabase
+        .from('profiles')
+        .select('full_name, email, client_id, plan, created_at, avatar_url')
+        .eq('id', user.id)
+        .single(),
       supabase.from('documents').select('status').eq('email', user.email),
     ]);
 
@@ -312,7 +409,10 @@ export function ProfileScreen({ onLogout }: Props) {
       const compatible = await LocalAuthentication.hasHardwareAsync();
       const enrolled = await LocalAuthentication.isEnrolledAsync();
       if (!compatible || !enrolled) {
-        Alert.alert('Not available', 'Biometric authentication is not set up on this device. Please configure it in your device settings.');
+        Alert.alert(
+          'Not available',
+          'Biometric authentication is not set up on this device. Please configure it in your device settings.',
+        );
         return;
       }
       const result = await LocalAuthentication.authenticateAsync({
@@ -344,7 +444,6 @@ export function ProfileScreen({ onLogout }: Props) {
 
   const pickAvatar = async () => {
     if (Platform.OS === 'web') {
-      // On web use a native file input
       const input = document.createElement('input');
       input.type = 'file';
       input.accept = 'image/*';
@@ -410,16 +509,7 @@ export function ProfileScreen({ onLogout }: Props) {
     }
   };
 
-  const handleLogout = () => {
-    if (Platform.OS === 'web') {
-      if (window.confirm('Are you sure you want to sign out?')) logout();
-      return;
-    }
-    Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Sign Out', style: 'destructive', onPress: logout },
-    ]);
-  };
+  const handleLogout = () => setSignOutOpen(true);
 
   const displayName = profile?.full_name ?? user?.name ?? 'User';
   const displayEmail = profile?.email ?? user?.email ?? '';
@@ -429,138 +519,284 @@ export function ProfileScreen({ onLogout }: Props) {
 
   return (
     <View style={styles.root}>
-      <ScrollView contentContainerStyle={{ paddingBottom: Platform.OS === 'web' ? 24 : insets.bottom + 90 }} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={{
+          paddingBottom: Platform.OS === 'web' ? 32 : insets.bottom + 90,
+        }}
+        showsVerticalScrollIndicator={false}
+      >
 
-        {/* Banner */}
-        <LinearGradient colors={[Colors.bgDark, Colors.bgDeep]} style={[styles.banner, { paddingTop: Platform.OS === 'web' ? 20 : insets.top + 20 }]}>
-          <View style={styles.avatarWrapper}>
+        {/* ── Profile Header ──────────────────────────────────────────────── */}
+        <LinearGradient
+          colors={['#3A3131', '#4A3E3E', '#3A3131']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={[
+            styles.header,
+            { paddingTop: Platform.OS === 'web' ? 28 : insets.top + 28 },
+          ]}
+        >
+          {/* Avatar */}
+          <TouchableOpacity
+            style={styles.avatarWrapper}
+            onPress={pickAvatar}
+            disabled={avatarUploading}
+            activeOpacity={0.85}
+          >
             {profile?.avatar_url ? (
               <Image source={{ uri: profile.avatar_url }} style={styles.avatarImage} />
             ) : (
-              <LinearGradient colors={[Colors.primary, Colors.accent]} style={styles.avatar} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
+              <LinearGradient
+                colors={['#E8B923', '#B5905B']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.avatarInitials}
+              >
                 <Text style={styles.avatarText}>{initials(displayName)}</Text>
               </LinearGradient>
             )}
-            <TouchableOpacity style={styles.editAvatarBtn} onPress={pickAvatar} disabled={avatarUploading}>
+            {/* Camera overlay */}
+            <View style={styles.cameraOverlay}>
               {avatarUploading
                 ? <ActivityIndicator size="small" color={Colors.white} />
-                : <Ionicons name="camera" size={14} color={Colors.white} />}
-            </TouchableOpacity>
+                : <Ionicons name="camera" size={15} color={Colors.white} />}
+            </View>
+          </TouchableOpacity>
+
+          {/* Name + email */}
+          <Text style={styles.headerName}>{displayName}</Text>
+          <Text style={styles.headerEmail}>{displayEmail}</Text>
+
+          {/* Plan badge */}
+          <View style={styles.planBadge}>
+            <Ionicons name="shield-checkmark" size={12} color={Colors.white} />
+            <Text style={styles.planBadgeText}>{displayPlan}</Text>
           </View>
 
-          <Text style={styles.profileName}>{displayName}</Text>
-          <Text style={styles.profileEmail}>{displayEmail}</Text>
-
-          <View style={styles.planRow}>
-            <LinearGradient colors={['rgba(37,99,235,0.3)', 'rgba(124,58,237,0.3)']} style={styles.planBadge} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
-              <Ionicons name="flash" size={12} color={Colors.primary} />
-              <Text style={styles.planText}>{displayPlan} Client</Text>
-            </LinearGradient>
-            <Text style={styles.memberSince}>Member since {displayMember}</Text>
-          </View>
+          {/* Member since */}
+          <Text style={styles.memberSince}>Member since {displayMember}</Text>
         </LinearGradient>
 
         <View style={styles.content}>
 
-          {/* Account Info */}
-          <Card style={styles.infoCard}>
-            {loading ? (
-              <ActivityIndicator color={Colors.primary} style={{ paddingVertical: 16 }} />
-            ) : (
-              <>
-                <View style={styles.infoRow}>
-                  <Ionicons name="id-card-outline" size={16} color={Colors.textMuted} />
-                  <Text style={styles.infoLabel}>Client ID</Text>
-                  <Text style={styles.infoValue}>{displayClientId}</Text>
-                </View>
-                <View style={[styles.infoRow, styles.infoBorder]}>
-                  <Ionicons name="mail-outline" size={16} color={Colors.textMuted} />
-                  <Text style={styles.infoLabel}>Email</Text>
-                  <Text style={styles.infoValue} numberOfLines={1}>{displayEmail}</Text>
-                </View>
-                <View style={styles.infoRow}>
-                  <Ionicons name="shield-checkmark-outline" size={16} color={Colors.textMuted} />
-                  <Text style={styles.infoLabel}>Plan</Text>
-                  <Text style={styles.infoValue}>{displayPlan}</Text>
-                </View>
-              </>
-            )}
-          </Card>
-
-          {/* Stats */}
-          <Text style={styles.sectionTitle}>My Stats</Text>
+          {/* ── My Stats ───────────────────────────────────────────────────── */}
+          <SectionLabel label="MY STATS" />
           {loading ? (
-            <ActivityIndicator color={Colors.primary} style={{ marginBottom: 16 }} />
+            <ActivityIndicator color={Colors.primary} style={{ marginBottom: 20 }} />
           ) : (
             <View style={styles.statsRow}>
-              {[
-                { label: 'Total Docs', value: stats.total, icon: 'documents-outline', color: Colors.primary },
-                { label: 'Viewed', value: stats.viewed, icon: 'eye-outline', color: Colors.viewed },
-              ].map(s => (
-                <View key={s.label} style={styles.statCard}>
-                  <Ionicons name={s.icon as any} size={20} color={s.color} style={{ marginBottom: 6 }} />
-                  <Text style={[styles.statValue, { color: s.color }]}>{s.value}</Text>
-                  <Text style={styles.statLabel}>{s.label}</Text>
+              {/* Total Docs */}
+              <View style={styles.statCard}>
+                <View style={[styles.statIconWrap, { backgroundColor: `${Colors.accent}15` }]}>
+                  <Ionicons name="documents-outline" size={20} color={Colors.accent} />
                 </View>
-              ))}
+                <Text style={[styles.statValue, { color: Colors.accent }]}>{stats.total}</Text>
+                <Text style={styles.statLabel}>Total Docs</Text>
+              </View>
+
+              {/* Viewed */}
+              <View style={styles.statCard}>
+                <View style={[styles.statIconWrap, { backgroundColor: `${Colors.primary}15` }]}>
+                  <Ionicons name="eye-outline" size={20} color={Colors.primary} />
+                </View>
+                <Text style={[styles.statValue, { color: Colors.primary }]}>{stats.viewed}</Text>
+                <Text style={styles.statLabel}>Viewed</Text>
+              </View>
+
+              {/* Pending */}
+              <View style={styles.statCard}>
+                <View style={[styles.statIconWrap, { backgroundColor: `${Colors.accentGold}15` }]}>
+                  <Ionicons name="time-outline" size={20} color={Colors.accentGold} />
+                </View>
+                <Text style={[styles.statValue, { color: Colors.accentGold }]}>
+                  {stats.total - stats.viewed}
+                </Text>
+                <Text style={styles.statLabel}>Pending</Text>
+              </View>
             </View>
           )}
 
-          {/* Preferences */}
-          <Text style={styles.sectionTitle}>Preferences</Text>
-          <Card noPadding>
-            <SettingRow icon="notifications-outline" label="Push Notifications" toggle toggleValue={notifEnabled} onToggle={setNotifEnabled} color={Colors.primary} />
-            <SettingRow icon="finger-print-outline" label="Biometric Login" toggle toggleValue={biometricEnabled} onToggle={handleBiometricToggle} color={Colors.accent} />
-            <SettingRow icon="sync-outline" label="Auto-Sync Documents" toggle toggleValue={autoSync} onToggle={setAutoSync} color={Colors.viewed} last />
-          </Card>
+          {/* ── Account Information ─────────────────────────────────────── */}
+          <SectionLabel label="ACCOUNT" />
+          <View style={styles.card}>
+            {loading ? (
+              <ActivityIndicator color={Colors.primary} style={{ paddingVertical: 20 }} />
+            ) : (
+              <>
+                <InfoRow icon="id-card-outline" label="Client ID">
+                  <Text style={styles.infoValue} numberOfLines={1}>{displayClientId}</Text>
+                </InfoRow>
 
-          {/* Account */}
-          <Text style={styles.sectionTitle}>Account</Text>
-          <Card noPadding>
-            <SettingRow icon="person-outline" label="Edit Profile" onPress={() => setShowEditProfile(true)} color={Colors.primary} />
-            <SettingRow icon="lock-closed-outline" label="Change Password" onPress={() => setShowChangePassword(true)} color={Colors.notViewed} last />
-          </Card>
+                <InfoRow icon="mail-outline" label="Email">
+                  <Text style={styles.infoValue} numberOfLines={1}>{displayEmail}</Text>
+                </InfoRow>
 
-          {/* About */}
-          <Text style={styles.sectionTitle}>About</Text>
-          <Card noPadding>
-            <SettingRow icon="document-text-outline" label="Terms of Service" onPress={() => setShowTerms(true)} color={Colors.textMuted} />
-            <SettingRow icon="eye-outline" label="Privacy Policy" onPress={() => setShowPrivacy(true)} color={Colors.textMuted} />
-            <SettingRow icon="information-circle-outline" label="App Version" value="1.0.0" color={Colors.textMuted} last />
-          </Card>
+                <InfoRow icon="layers-outline" label="Plan">
+                  <View style={styles.planPill}>
+                    <Text style={styles.planPillText}>{displayPlan}</Text>
+                  </View>
+                </InfoRow>
 
-          {/* Logout */}
-          <Button title="Sign Out" onPress={handleLogout} variant="danger" fullWidth size="lg" style={styles.logoutBtn} />
+                <View style={styles.rowDivider} />
+
+                <SettingRow
+                  icon="person-outline"
+                  label="Edit Profile"
+                  onPress={() => setShowEditProfile(true)}
+                  color={Colors.primary}
+                />
+
+                <SettingRow
+                  icon="lock-closed-outline"
+                  label="Change Password"
+                  onPress={() => setShowChangePassword(true)}
+                  color={Colors.accentPurple}
+                  last
+                />
+              </>
+            )}
+          </View>
+
+          {/* ── Preferences ───────────────────────────────────────────────── */}
+          <SectionLabel label="PREFERENCES" />
+          <View style={styles.card}>
+            <SettingRow
+              icon="notifications-outline"
+              label="Push Notifications"
+              toggle
+              toggleValue={notifEnabled}
+              onToggle={setNotifEnabled}
+              color={Colors.primary}
+            />
+            <SettingRow
+              icon="finger-print-outline"
+              label="Biometric Login"
+              toggle
+              toggleValue={biometricEnabled}
+              onToggle={handleBiometricToggle}
+              color={Colors.accent}
+            />
+            <SettingRow
+              icon="sync-outline"
+              label="Auto-Sync Documents"
+              toggle
+              toggleValue={autoSync}
+              onToggle={setAutoSync}
+              color={Colors.accentGold}
+              last
+            />
+          </View>
+
+          {/* ── About ─────────────────────────────────────────────────────── */}
+          <SectionLabel label="ABOUT" />
+          <View style={styles.card}>
+            <SettingRow
+              icon="document-text-outline"
+              label="Terms of Service"
+              onPress={() => setShowTerms(true)}
+              color={Colors.textSecondary}
+            />
+            <SettingRow
+              icon="shield-outline"
+              label="Privacy Policy"
+              onPress={() => setShowPrivacy(true)}
+              color={Colors.textSecondary}
+            />
+            <SettingRow
+              icon="information-circle-outline"
+              label="App Version"
+              value="1.0.0"
+              color={Colors.textSecondary}
+              last
+            />
+          </View>
+
+          {/* ── Sign Out ───────────────────────────────────────────────────── */}
+          <TouchableOpacity style={styles.signOutBtn} onPress={handleLogout} activeOpacity={0.85}>
+            <Ionicons name="log-out-outline" size={18} color={Colors.white} />
+            <Text style={styles.signOutText}>Sign Out</Text>
+          </TouchableOpacity>
+
           <Text style={styles.footer}>Finance Therapy Group · 256-bit SSL · v1.0.0</Text>
         </View>
       </ScrollView>
 
-      {/* Modals */}
+      {/* ── Sign Out Confirm Modal ─────────────────────────────────────────── */}
+      <Modal
+        visible={signOutOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setSignOutOpen(false)}
+      >
+        <Pressable style={so.overlay} onPress={() => setSignOutOpen(false)}>
+          <Pressable style={so.box} onPress={() => {}}>
+            <LinearGradient
+              colors={[Colors.error + '30', Colors.error + '10']}
+              style={so.iconWrap}
+            >
+              <Ionicons name="log-out-outline" size={32} color={Colors.error} />
+            </LinearGradient>
+            <Text style={so.title}>Sign Out</Text>
+            <Text style={so.sub}>Are you sure you want to sign out of your account?</Text>
+            <View style={so.row}>
+              <TouchableOpacity style={so.cancelBtn} onPress={() => setSignOutOpen(false)}>
+                <Text style={so.cancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={so.confirmBtn}
+                onPress={() => { setSignOutOpen(false); logout(); }}
+              >
+                <Ionicons name="log-out-outline" size={16} color={Colors.white} />
+                <Text style={so.confirmText}>Sign Out</Text>
+              </TouchableOpacity>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* ── Edit Profile Modal ─────────────────────────────────────────────── */}
       <EditProfileModal
         visible={showEditProfile}
         onClose={() => setShowEditProfile(false)}
         currentName={displayName}
         currentEmail={displayEmail}
-        onSaved={(name) => {
-          setProfile(prev => prev ? { ...prev, full_name: name } : prev);
-        }}
+        onSaved={(name) => setProfile(prev => prev ? { ...prev, full_name: name } : prev)}
       />
-      <ChangePasswordModal visible={showChangePassword} onClose={() => setShowChangePassword(false)} />
+
+      {/* ── Change Password Modal ──────────────────────────────────────────── */}
+      <ChangePasswordModal
+        visible={showChangePassword}
+        onClose={() => setShowChangePassword(false)}
+      />
+
+      {/* ── Policy Modals ──────────────────────────────────────────────────── */}
       <PolicyModal visible={showTerms} onClose={() => setShowTerms(false)} type="terms" />
       <PolicyModal visible={showPrivacy} onClose={() => setShowPrivacy(false)} type="privacy" />
 
-      {/* Biometric password capture modal */}
-      <Modal visible={showBiometricPasswordModal} animationType="fade" transparent onRequestClose={() => setShowBiometricPasswordModal(false)}>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-          <View style={bioModalStyles.overlay}>
-            <View style={bioModalStyles.card}>
-              <View style={bioModalStyles.iconRow}>
-                <Ionicons name="finger-print-outline" size={36} color={Colors.primary} />
+      {/* ── Biometric Password Capture Modal ──────────────────────────────── */}
+      <Modal
+        visible={showBiometricPasswordModal}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setShowBiometricPasswordModal(false)}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={{ flex: 1 }}
+        >
+          <View style={bioModal.overlay}>
+            <View style={bioModal.card}>
+              <View style={bioModal.iconRow}>
+                <View style={bioModal.iconBg}>
+                  <Ionicons name="finger-print-outline" size={34} color={Colors.primary} />
+                </View>
               </View>
-              <Text style={bioModalStyles.title}>Enable Biometric Login</Text>
-              <Text style={bioModalStyles.subtitle}>Enter your password to save it securely on this device.</Text>
+              <Text style={bioModal.title}>Enable Biometric Login</Text>
+              <Text style={bioModal.subtitle}>
+                Enter your password to save it securely on this device.
+              </Text>
               <TextInput
-                style={bioModalStyles.input}
+                style={bioModal.input}
                 value={biometricPassword}
                 onChangeText={setBiometricPassword}
                 secureTextEntry
@@ -568,12 +804,15 @@ export function ProfileScreen({ onLogout }: Props) {
                 placeholderTextColor={Colors.textMuted}
                 autoFocus
               />
-              <View style={bioModalStyles.btnRow}>
-                <TouchableOpacity style={bioModalStyles.cancelBtn} onPress={() => setShowBiometricPasswordModal(false)}>
-                  <Text style={bioModalStyles.cancelText}>Cancel</Text>
+              <View style={bioModal.btnRow}>
+                <TouchableOpacity
+                  style={bioModal.cancelBtn}
+                  onPress={() => setShowBiometricPasswordModal(false)}
+                >
+                  <Text style={bioModal.cancelText}>Cancel</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={bioModalStyles.confirmBtn} onPress={saveBiometricCredentials}>
-                  <Text style={bioModalStyles.confirmText}>Enable</Text>
+                <TouchableOpacity style={bioModal.confirmBtn} onPress={saveBiometricCredentials}>
+                  <Text style={bioModal.confirmText}>Enable</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -584,70 +823,535 @@ export function ProfileScreen({ onLogout }: Props) {
   );
 }
 
-// ── styles ────────────────────────────────────────────────────────────────────
+// ── StyleSheet ────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: Colors.bgDeep },
-  banner: { alignItems: 'center', paddingBottom: 28, paddingHorizontal: 20 },
-  avatarWrapper: { position: 'relative', marginBottom: 14 },
-  avatar: { width: 88, height: 88, borderRadius: 26, alignItems: 'center', justifyContent: 'center', shadowColor: Colors.primary, shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.4, shadowRadius: 16, elevation: 12 },
-  avatarImage: { width: 88, height: 88, borderRadius: 26, shadowColor: Colors.primary, shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.4, shadowRadius: 16, elevation: 12 },
-  avatarText: { color: Colors.white, fontSize: 30, fontWeight: '700' },
-  editAvatarBtn: { position: 'absolute', bottom: -4, right: -4, width: 28, height: 28, borderRadius: 10, backgroundColor: Colors.primary, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: Colors.bgDeep },
-  profileName: { color: Colors.textPrimary, fontSize: 22, fontWeight: '700', marginBottom: 4 },
-  profileEmail: { color: Colors.textMuted, fontSize: 14, marginBottom: 14 },
-  planRow: { alignItems: 'center', gap: 8 },
-  planBadge: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20, borderWidth: 1, borderColor: 'rgba(37,99,235,0.3)', marginBottom: 4 },
-  planText: { color: Colors.primary, fontSize: 12, fontWeight: '700', letterSpacing: 0.5 },
-  memberSince: { color: Colors.textMuted, fontSize: 12 },
-  content: { padding: 16 },
-  infoCard: { marginBottom: 4 },
-  infoRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 4 },
-  infoBorder: { borderTopWidth: 1, borderBottomWidth: 1, borderColor: Colors.border, paddingVertical: 12, marginVertical: 4 },
-  infoLabel: { color: Colors.textMuted, fontSize: 13, width: 65 },
-  infoValue: { color: Colors.textPrimary, fontSize: 13, fontWeight: '600', flex: 1, textAlign: 'right' },
-  sectionTitle: { color: Colors.textSecondary, fontSize: 12, fontWeight: '600', letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 10, marginTop: 20, paddingLeft: 4 },
-  statsRow: { flexDirection: 'row', gap: 10, marginBottom: 4 },
-  statCard: { flex: 1, backgroundColor: Colors.bgCard, borderRadius: 14, padding: 14, alignItems: 'center', borderWidth: 1, borderColor: Colors.border },
-  statValue: { fontSize: 22, fontWeight: '800', marginBottom: 4 },
-  statLabel: { color: Colors.textMuted, fontSize: 11, textAlign: 'center' },
-  settingRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, gap: 12 },
-  settingIcon: { width: 34, height: 34, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
-  settingLabel: { flex: 1, color: Colors.textPrimary, fontSize: 14 },
-  settingRight: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  settingValue: { color: Colors.textMuted, fontSize: 13 },
-  rowDivider: { height: 1, backgroundColor: Colors.border, marginLeft: 62 },
-  logoutBtn: { marginTop: 24 },
-  footer: { color: Colors.textMuted, fontSize: 11, textAlign: 'center', marginTop: 24, opacity: 0.6 },
+  root: {
+    flex: 1,
+    backgroundColor: Colors.bgDeep,
+  },
+
+  // Header
+  header: {
+    alignItems: 'center',
+    paddingHorizontal: 24,
+    paddingBottom: 32,
+  },
+  avatarWrapper: {
+    position: 'relative',
+    marginBottom: 16,
+  },
+  avatarImage: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    borderWidth: 3,
+    borderColor: 'rgba(255,255,255,0.25)',
+  },
+  avatarInitials: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    borderWidth: 3,
+    borderColor: 'rgba(255,255,255,0.25)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarText: {
+    color: Colors.white,
+    fontSize: 28,
+    fontWeight: '700',
+    letterSpacing: 1,
+  },
+  cameraOverlay: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: '#E8B923',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#3A3131',
+  },
+  headerName: {
+    color: Colors.white,
+    fontSize: 22,
+    fontWeight: '700',
+    marginBottom: 4,
+    letterSpacing: 0.2,
+  },
+  headerEmail: {
+    color: 'rgba(255,255,255,0.6)',
+    fontSize: 13,
+    marginBottom: 14,
+  },
+  planBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: '#E8B923',
+    paddingHorizontal: 14,
+    paddingVertical: 5,
+    borderRadius: 20,
+    marginBottom: 10,
+  },
+  planBadgeText: {
+    color: '#3A3131',
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 0.4,
+  },
+  memberSince: {
+    color: 'rgba(255,255,255,0.45)',
+    fontSize: 12,
+  },
+
+  // Content container
+  content: {
+    paddingHorizontal: 16,
+    paddingTop: 20,
+  },
+
+  // Section label
+  sectionLabel: {
+    color: Colors.textMuted,
+    fontSize: 11,
+    fontWeight: '600',
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+    marginBottom: 8,
+    paddingLeft: 4,
+    marginTop: 4,
+  },
+
+  // Shared card
+  card: {
+    backgroundColor: Colors.bgCard,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    marginBottom: 20,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+
+  // Stats row
+  statsRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 20,
+  },
+  statCard: {
+    flex: 1,
+    backgroundColor: Colors.bgCard,
+    borderRadius: 16,
+    paddingVertical: 16,
+    paddingHorizontal: 10,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: Colors.border,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  statIconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
+  statValue: {
+    fontSize: 22,
+    fontWeight: '800',
+    marginBottom: 2,
+  },
+  statLabel: {
+    color: Colors.textMuted,
+    fontSize: 11,
+    textAlign: 'center',
+    fontWeight: '500',
+  },
+
+  // Info rows (account card top section)
+  infoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    gap: 10,
+  },
+  infoIconWrap: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    backgroundColor: Colors.bgMid,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  infoLabel: {
+    color: Colors.textSecondary,
+    fontSize: 13,
+    fontWeight: '500',
+    flex: 1,
+  },
+  infoValueWrap: {
+    alignItems: 'flex-end',
+    maxWidth: '55%',
+  },
+  infoValue: {
+    color: Colors.textPrimary,
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  planPill: {
+    backgroundColor: `${Colors.primary}18`,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: `${Colors.primary}30`,
+  },
+  planPillText: {
+    color: Colors.primary,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+
+  // Setting rows
+  settingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    gap: 12,
+  },
+  settingIconWrap: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  settingLabel: {
+    flex: 1,
+    color: Colors.textPrimary,
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  settingRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  settingValue: {
+    color: Colors.textMuted,
+    fontSize: 13,
+  },
+
+  // Divider
+  rowDivider: {
+    height: 1,
+    backgroundColor: Colors.border,
+    marginLeft: 62,
+  },
+
+  // Sign Out button
+  signOutBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: Colors.error,
+    borderRadius: 14,
+    paddingVertical: 16,
+    marginTop: 8,
+    marginBottom: 4,
+    shadowColor: Colors.error,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    elevation: 4,
+  },
+  signOutText: {
+    color: Colors.white,
+    fontSize: 15,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+  },
+
+  footer: {
+    color: Colors.textMuted,
+    fontSize: 11,
+    textAlign: 'center',
+    marginTop: 20,
+    marginBottom: 8,
+    opacity: 0.6,
+  },
 });
+
+// ── Sign-out modal styles ─────────────────────────────────────────────────────
+
+const so = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.65)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  box: {
+    backgroundColor: Colors.bgCard,
+    borderRadius: 24,
+    padding: 28,
+    width: 300,
+    alignItems: 'center',
+    gap: 12,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  iconWrap: {
+    width: 72,
+    height: 72,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 4,
+  },
+  title: {
+    color: Colors.textPrimary,
+    fontSize: 20,
+    fontWeight: '800',
+  },
+  sub: {
+    color: Colors.textMuted,
+    fontSize: 13,
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  row: {
+    flexDirection: 'row',
+    gap: 10,
+    width: '100%',
+    marginTop: 6,
+  },
+  cancelBtn: {
+    flex: 1,
+    backgroundColor: Colors.bgMid,
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  cancelText: {
+    color: Colors.textSecondary,
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  confirmBtn: {
+    flex: 1,
+    backgroundColor: Colors.error,
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  confirmText: {
+    color: Colors.white,
+    fontWeight: '700',
+    fontSize: 14,
+  },
+});
+
+// ── Modal shared styles ───────────────────────────────────────────────────────
 
 const modalStyles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: Colors.bgDeep },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: Colors.border },
-  title: { color: Colors.textPrimary, fontSize: 16, fontWeight: '700' },
-  cancel: { color: Colors.textMuted, fontSize: 15 },
-  save: { color: Colors.primary, fontSize: 15, fontWeight: '700' },
-  body: { padding: 24 },
-  label: { color: Colors.textSecondary, fontSize: 13, fontWeight: '500', marginBottom: 8, marginTop: 16 },
-  input: { backgroundColor: Colors.bgMid, borderRadius: 12, borderWidth: 1, borderColor: Colors.border, color: Colors.textPrimary, fontSize: 15, paddingHorizontal: 14, paddingVertical: 13 },
-  inputDisabled: { opacity: 0.5 },
-  hint: { color: Colors.textMuted, fontSize: 12, marginTop: 6 },
-  policyTitle: { color: Colors.textPrimary, fontSize: 20, fontWeight: '700', marginBottom: 4 },
-  policyDate: { color: Colors.textMuted, fontSize: 13, marginBottom: 20 },
-  policySection: { color: Colors.textPrimary, fontSize: 15, fontWeight: '700', marginTop: 20, marginBottom: 6 },
-  policyText: { color: Colors.textSecondary, fontSize: 14, lineHeight: 22 },
+  root: {
+    flex: 1,
+    backgroundColor: Colors.bgDeep,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+  },
+  title: {
+    color: Colors.textPrimary,
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  cancel: {
+    color: Colors.textMuted,
+    fontSize: 15,
+  },
+  save: {
+    color: '#E8B923',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  body: {
+    padding: 24,
+  },
+  label: {
+    color: Colors.textSecondary,
+    fontSize: 13,
+    fontWeight: '500',
+    marginBottom: 8,
+    marginTop: 16,
+  },
+  input: {
+    backgroundColor: Colors.bgMid,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    color: Colors.textPrimary,
+    fontSize: 15,
+    paddingHorizontal: 14,
+    paddingVertical: 13,
+  },
+  inputDisabled: {
+    opacity: 0.5,
+  },
+  hint: {
+    color: Colors.textMuted,
+    fontSize: 12,
+    marginTop: 6,
+  },
+  policyTitle: {
+    color: Colors.textPrimary,
+    fontSize: 20,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  policyDate: {
+    color: Colors.textMuted,
+    fontSize: 13,
+    marginBottom: 20,
+  },
+  policySection: {
+    color: Colors.textPrimary,
+    fontSize: 15,
+    fontWeight: '700',
+    marginTop: 20,
+    marginBottom: 6,
+  },
+  policyText: {
+    color: Colors.textSecondary,
+    fontSize: 14,
+    lineHeight: 22,
+  },
 });
 
-const bioModalStyles = StyleSheet.create({
-  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', padding: 24 },
-  card: { backgroundColor: Colors.bgCard, borderRadius: 20, padding: 24, borderWidth: 1, borderColor: Colors.border },
-  iconRow: { alignItems: 'center', marginBottom: 14 },
-  title: { color: Colors.textPrimary, fontSize: 18, fontWeight: '700', textAlign: 'center', marginBottom: 8 },
-  subtitle: { color: Colors.textMuted, fontSize: 13, textAlign: 'center', marginBottom: 20, lineHeight: 18 },
-  input: { backgroundColor: Colors.bgMid, borderRadius: 12, borderWidth: 1, borderColor: Colors.border, color: Colors.textPrimary, fontSize: 15, paddingHorizontal: 14, paddingVertical: 13, marginBottom: 20 },
-  btnRow: { flexDirection: 'row', gap: 10 },
-  cancelBtn: { flex: 1, paddingVertical: 13, borderRadius: 12, borderWidth: 1, borderColor: Colors.border, alignItems: 'center' },
-  cancelText: { color: Colors.textMuted, fontSize: 14, fontWeight: '600' },
-  confirmBtn: { flex: 1, paddingVertical: 13, borderRadius: 12, backgroundColor: Colors.primary, alignItems: 'center' },
-  confirmText: { color: Colors.white, fontSize: 14, fontWeight: '700' },
+// ── Biometric modal styles ────────────────────────────────────────────────────
+
+const bioModal = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  card: {
+    backgroundColor: Colors.bgCard,
+    borderRadius: 24,
+    padding: 28,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.15,
+    shadowRadius: 20,
+    elevation: 8,
+  },
+  iconRow: {
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  iconBg: {
+    width: 68,
+    height: 68,
+    borderRadius: 20,
+    backgroundColor: `${Colors.primary}15`,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: `${Colors.primary}25`,
+  },
+  title: {
+    color: Colors.textPrimary,
+    fontSize: 18,
+    fontWeight: '700',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  subtitle: {
+    color: Colors.textMuted,
+    fontSize: 13,
+    textAlign: 'center',
+    marginBottom: 22,
+    lineHeight: 19,
+  },
+  input: {
+    backgroundColor: Colors.bgMid,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    color: Colors.textPrimary,
+    fontSize: 15,
+    paddingHorizontal: 14,
+    paddingVertical: 13,
+    marginBottom: 20,
+  },
+  btnRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  cancelBtn: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    alignItems: 'center',
+    backgroundColor: Colors.bgMid,
+  },
+  cancelText: {
+    color: Colors.textSecondary,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  confirmBtn: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    backgroundColor: '#E8B923',
+    alignItems: 'center',
+    shadowColor: '#E8B923',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  confirmText: {
+    color: '#3A3131',
+    fontSize: 14,
+    fontWeight: '700',
+  },
 });

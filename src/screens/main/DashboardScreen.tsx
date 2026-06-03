@@ -17,7 +17,6 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors } from '../../constants/colors';
-import { Card } from '../../components/Card';
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../lib/supabase';
 import { getDocumentsByEmail, FOLDER_TABLES } from '../../db/documents';
@@ -50,9 +49,9 @@ interface ActivityItem {
 
 function greeting() {
   const h = new Date().getHours();
-  if (h < 12) return 'Good morning 👋';
-  if (h < 17) return 'Good afternoon 👋';
-  return 'Good evening 👋';
+  if (h < 12) return 'Good morning,';
+  if (h < 17) return 'Good afternoon,';
+  return 'Good evening,';
 }
 
 function timeAgo(dateStr: string) {
@@ -81,82 +80,7 @@ function initials(name: string) {
   return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
 }
 
-// ── sub-components ────────────────────────────────────────────────────────────
-
-function KPICard({ title, value, icon, color, bgColor, delay, subtitle, loading }: {
-  title: string; value: number; icon: keyof typeof Ionicons.glyphMap;
-  color: string; bgColor: string; delay: number; subtitle?: string; loading: boolean;
-}) {
-  const opacity = useRef(new Animated.Value(0)).current;
-  const translateY = useRef(new Animated.Value(20)).current;
-
-  useEffect(() => {
-    Animated.parallel([
-      Animated.timing(opacity, { toValue: 1, duration: 500, delay, useNativeDriver: nativeDriver }),
-      Animated.spring(translateY, { toValue: 0, damping: 18, stiffness: 100, delay, useNativeDriver: nativeDriver }),
-    ]).start();
-  }, []);
-
-  return (
-    <Animated.View style={[styles.kpiCard, { opacity, transform: [{ translateY }] }]}>
-      <LinearGradient colors={[Colors.bgCard, Colors.bgElevated]} style={styles.kpiGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
-        <View style={[styles.kpiIcon, { backgroundColor: bgColor }]}>
-          <Ionicons name={icon} size={20} color={color} />
-        </View>
-        {loading
-          ? <ActivityIndicator color={color} style={{ marginVertical: 6 }} />
-          : <Text style={[styles.kpiValue, { color }]}>{value}</Text>
-        }
-        <Text style={styles.kpiTitle}>{title}</Text>
-        {subtitle && <Text style={styles.kpiSubtitle}>{subtitle}</Text>}
-      </LinearGradient>
-    </Animated.View>
-  );
-}
-
-function MiniChart({ data, loading }: { data: ChartPoint[]; loading: boolean }) {
-  if (loading) {
-    return <View style={styles.chartContainer}><ActivityIndicator color={Colors.primary} style={{ flex: 1 }} /></View>;
-  }
-  if (data.every(d => d.docs === 0)) {
-    return (
-      <View style={[styles.chartContainer, { alignItems: 'center', justifyContent: 'center' }]}>
-        <Text style={{ color: Colors.textMuted, fontSize: 13 }}>No uploads yet</Text>
-      </View>
-    );
-  }
-
-  const maxVal = Math.max(...data.map(d => d.docs), 1);
-
-  return (
-    <View style={styles.chartContainer}>
-      <View style={styles.chartBars}>
-        {data.map((item, index) => {
-          const heightPct = (item.docs / maxVal) * 100;
-          const isHighest = item.docs === maxVal && item.docs > 0;
-          return (
-            <View key={item.month} style={styles.barWrapper}>
-              <View style={styles.barColumn}>
-                {isHighest && (
-                  <View style={styles.barLabel}>
-                    <Text style={styles.barLabelText}>{item.docs}</Text>
-                  </View>
-                )}
-                <LinearGradient
-                  colors={isHighest ? [Colors.primary, Colors.primaryDark] : [Colors.bgElevated, Colors.bgMid]}
-                  style={[styles.bar, { height: `${Math.max(heightPct, 6)}%` as any }]}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 0, y: 1 }}
-                />
-              </View>
-              <Text style={[styles.barMonth, isHighest && { color: Colors.primary }]}>{item.month}</Text>
-            </View>
-          );
-        })}
-      </View>
-    </View>
-  );
-}
+// ── activity config ───────────────────────────────────────────────────────────
 
 const activityIcons: Record<string, keyof typeof Ionicons.glyphMap> = {
   new: 'cloud-upload',
@@ -171,16 +95,155 @@ const activityColors: Record<string, string> = {
 };
 
 const activityLabel: Record<string, string> = {
-  new: 'Uploaded',
-  not_viewed: 'Not Viewed',
-  viewed: 'Viewed',
+  new: 'New document uploaded',
+  not_viewed: 'Awaiting review',
+  viewed: 'Document reviewed',
 };
+
+// ── OverviewCard ──────────────────────────────────────────────────────────────
+
+function OverviewCard({
+  emoji,
+  label,
+  value,
+  subtitle,
+  accentColor,
+  delay,
+  loading,
+}: {
+  emoji: string;
+  label: string;
+  value: number;
+  subtitle: string;
+  accentColor: string;
+  delay: number;
+  loading: boolean;
+}) {
+  const opacity = useRef(new Animated.Value(0)).current;
+  const translateY = useRef(new Animated.Value(24)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(opacity, { toValue: 1, duration: 480, delay, useNativeDriver: nativeDriver }),
+      Animated.spring(translateY, { toValue: 0, damping: 16, stiffness: 110, delay, useNativeDriver: nativeDriver }),
+    ]).start();
+  }, []);
+
+  return (
+    <Animated.View style={[overviewCardStyles.card, { opacity, transform: [{ translateY }], borderLeftColor: accentColor }]}>
+      <Text style={overviewCardStyles.emoji}>{emoji}</Text>
+      {loading ? (
+        <ActivityIndicator color={accentColor} style={{ marginVertical: 8 }} />
+      ) : (
+        <Text style={[overviewCardStyles.value, { color: accentColor }]}>{value}</Text>
+      )}
+      <Text style={overviewCardStyles.label}>{label}</Text>
+      <Text style={overviewCardStyles.subtitle}>{subtitle}</Text>
+    </Animated.View>
+  );
+}
+
+const overviewCardStyles = StyleSheet.create({
+  card: {
+    flex: 1,
+    backgroundColor: Colors.bgCard,
+    borderRadius: 16,
+    padding: 12,
+    borderLeftWidth: 3,
+    shadowColor: '#3A3131',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  emoji: { fontSize: 18, marginBottom: 6 },
+  value: { fontSize: 26, fontWeight: '800', letterSpacing: -0.5, lineHeight: 30 },
+  label: { color: Colors.textPrimary, fontSize: 11, fontWeight: '600', marginTop: 3 },
+  subtitle: { color: Colors.textMuted, fontSize: 10, marginTop: 2 },
+});
+
+// ── MiniChart ─────────────────────────────────────────────────────────────────
+
+function MiniChart({ data, loading }: { data: ChartPoint[]; loading: boolean }) {
+  if (loading) {
+    return (
+      <View style={chartStyles.container}>
+        <ActivityIndicator color={Colors.primary} />
+      </View>
+    );
+  }
+
+  if (data.every(d => d.docs === 0)) {
+    return (
+      <View style={[chartStyles.container, chartStyles.empty]}>
+        <Ionicons name="bar-chart-outline" size={32} color={Colors.textMuted} />
+        <Text style={chartStyles.emptyText}>No uploads yet</Text>
+      </View>
+    );
+  }
+
+  const maxVal = Math.max(...data.map(d => d.docs), 1);
+
+  return (
+    <View style={chartStyles.container}>
+      <View style={chartStyles.bars}>
+        {data.map((item) => {
+          const heightPct = (item.docs / maxVal) * 100;
+          const isHighest = item.docs === maxVal && item.docs > 0;
+          return (
+            <View key={item.month} style={chartStyles.barWrapper}>
+              <View style={chartStyles.barColumn}>
+                {isHighest && (
+                  <View style={chartStyles.barTooltip}>
+                    <Text style={chartStyles.barTooltipText}>{item.docs}</Text>
+                  </View>
+                )}
+                <View
+                  style={[
+                    chartStyles.bar,
+                    {
+                      height: `${Math.max(heightPct, 8)}%` as any,
+                      backgroundColor: isHighest ? Colors.primary : Colors.bgMid,
+                    },
+                  ]}
+                />
+              </View>
+              <Text style={[chartStyles.barMonth, isHighest && { color: Colors.primary, fontWeight: '700' }]}>
+                {item.month}
+              </Text>
+            </View>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
+const chartStyles = StyleSheet.create({
+  container: { height: 120, justifyContent: 'center' },
+  empty: { alignItems: 'center', gap: 8 },
+  emptyText: { color: Colors.textMuted, fontSize: 13 },
+  bars: { flexDirection: 'row', alignItems: 'flex-end', height: '100%', gap: 6 },
+  barWrapper: { flex: 1, alignItems: 'center', height: '100%', justifyContent: 'flex-end' },
+  barColumn: { width: '100%', alignItems: 'center', flex: 1, justifyContent: 'flex-end', position: 'relative' },
+  barTooltip: {
+    position: 'absolute',
+    top: -20,
+    backgroundColor: Colors.primary,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 5,
+  },
+  barTooltipText: { color: Colors.white, fontSize: 9, fontWeight: '700' },
+  bar: { width: '75%', borderRadius: 5, minHeight: 8 },
+  barMonth: { color: Colors.textMuted, fontSize: 10, marginTop: 6, fontWeight: '500' },
+});
 
 // ── main screen ───────────────────────────────────────────────────────────────
 
 export function DashboardScreen() {
   const insets = useSafeAreaInsets();
-  const { user } = useAuth();
+  const { user, isLoading: authLoading } = useAuth();
 
   const [stats, setStats] = useState<Stats>({ total: 0, viewed: 0, newThisWeek: 0 });
   const [chartData, setChartData] = useState<ChartPoint[]>(last6Months());
@@ -249,15 +312,17 @@ export function DashboardScreen() {
     })));
   }, [user?.id]);
 
+  // Fire only after auth is fully resolved and user is available
   useEffect(() => {
-    setLoading(true);
-    fetchData().finally(() => setLoading(false));
-  }, [fetchData]);
-
-  // Wait for user to be available before fetching
-  useEffect(() => {
-    if (user?.id) fetchData().finally(() => setLoading(false));
-  }, [user?.id]);
+    if (!authLoading && user?.email) {
+      setLoading(true);
+      const safetyTimer = setTimeout(() => {
+        setLoading(false);
+        setRefreshing(false);
+      }, 12000);
+      fetchData().finally(() => { clearTimeout(safetyTimer); setLoading(false); });
+    }
+  }, [authLoading, user?.email]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -283,126 +348,171 @@ export function DashboardScreen() {
   const viewedPct = stats.total > 0 ? (stats.viewed / stats.total) * 100 : 0;
   const firstName = user?.name?.split(' ')[0] ?? 'there';
   const userInitials = user?.name ? initials(user.name) : '?';
+  const progressColor = viewedPct >= 50 ? Colors.primary : Colors.accentGold;
+
+  const headerPaddingTop = Platform.OS === 'web' ? 20 : insets.top + 20;
 
   return (
     <View style={styles.root}>
       <ScrollView
         style={styles.scroll}
-        contentContainerStyle={{ paddingTop: Platform.OS === 'web' ? 0 : insets.top, paddingBottom: Platform.OS === 'web' ? 24 : insets.bottom + 80 }}
+        contentContainerStyle={{ paddingBottom: Platform.OS === 'web' ? 40 : insets.bottom + 80 }}
         showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.primary} />}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.primary} />
+        }
       >
-        {/* Header */}
-        <LinearGradient colors={[Colors.bgDark, Colors.bgDeep]} style={styles.headerBanner}>
+        {/* ── HERO HEADER ─────────────────────────────────────────────────── */}
+        <LinearGradient
+          colors={['#3A3131', '#4A3E3E', '#3A3131']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={[styles.hero, { paddingTop: headerPaddingTop }]}
+        >
           <Animated.View style={{ opacity: headerOpacity, transform: [{ translateY: headerY }] }}>
-            <View style={styles.headerTop}>
-              <View>
-                <Text style={styles.greeting}>{greeting()}</Text>
-                <Text style={styles.welcomeName}>Welcome back, {firstName}</Text>
+            <View style={styles.heroTop}>
+              <View style={styles.heroGreetingBlock}>
+                <Text style={styles.heroName}>{user?.name ?? firstName}</Text>
               </View>
-              <View style={styles.avatarContainer}>
+
+              {/* Avatar */}
+              <TouchableOpacity activeOpacity={0.8} style={styles.avatarWrap}>
                 {avatarUrl ? (
                   <Image source={{ uri: avatarUrl }} style={styles.avatarImage} />
                 ) : (
-                  <LinearGradient colors={[Colors.primary, Colors.accent]} style={styles.avatar} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
-                    <Text style={styles.avatarText}>{userInitials}</Text>
+                  <LinearGradient
+                    colors={['#E8B923', '#B5905B']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.avatarCircle}
+                  >
+                    <Text style={styles.avatarInitials}>{userInitials}</Text>
                   </LinearGradient>
                 )}
-                <View style={styles.onlineDot} />
-              </View>
-            </View>
-
-            <View style={styles.clientCard}>
-              <View>
-                <Text style={styles.clientIdLabel}>Client ID</Text>
-                <Text style={styles.clientIdValue}>{user?.clientId ?? '—'}</Text>
-              </View>
-              <View style={styles.planBadge}>
-                <Text style={styles.planText}>{user?.plan ?? 'Free'}</Text>
-              </View>
+              </TouchableOpacity>
             </View>
           </Animated.View>
         </LinearGradient>
 
-        <View style={styles.content}>
+        {/* ── BODY ────────────────────────────────────────────────────────── */}
+        <View style={styles.body}>
 
-          {/* KPI Cards */}
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Overview</Text>
-          </View>
-          <View style={styles.kpiGrid}>
-            <KPICard title="Total Docs" value={stats.total} icon="documents-outline" color={Colors.primary} bgColor="rgba(37,99,235,0.15)" delay={100} loading={loading} />
-            <KPICard title="Viewed" value={stats.viewed} icon="eye-outline" color={Colors.viewed} bgColor="rgba(34,197,94,0.15)" delay={200} loading={loading} />
-            <KPICard title="New" value={stats.newThisWeek} icon="cloud-upload-outline" color={Colors.newDoc} bgColor="rgba(59,130,246,0.15)" delay={300} subtitle="This week" loading={loading} />
+          {/* ── OVERVIEW CARDS ────────────────────────────────────────────── */}
+          <Text style={styles.sectionTitle}>Overview</Text>
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            <OverviewCard
+              emoji="📄"
+              label="Total Docs"
+              value={stats.total}
+              subtitle="all time"
+              accentColor={Colors.accent}
+              delay={80}
+              loading={loading}
+            />
+            <OverviewCard
+              emoji="👁"
+              label="Viewed"
+              value={stats.viewed}
+              subtitle="reviewed"
+              accentColor={Colors.primary}
+              delay={160}
+              loading={loading}
+            />
+            <OverviewCard
+              emoji="🔔"
+              label="New"
+              value={stats.newThisWeek}
+              subtitle="this week"
+              accentColor={Colors.accentGold}
+              delay={240}
+              loading={loading}
+            />
           </View>
 
-          {/* Progress */}
-          <Card style={styles.progressCard}>
-            <View style={styles.progressHeader}>
-              <Text style={styles.progressTitle}>Document Review Progress</Text>
-              <Text style={styles.progressPct}>{Math.round(viewedPct)}%</Text>
+          {/* ── DOCUMENT REVIEW PROGRESS ──────────────────────────────────── */}
+          <View style={styles.card}>
+            <View style={styles.cardRow}>
+              <Text style={styles.cardTitle}>Document Review Progress</Text>
+              <Text style={[styles.progressPct, { color: progressColor }]}>
+                {Math.round(viewedPct)}%
+              </Text>
             </View>
-            <View style={styles.progressBar}>
-              <LinearGradient
-                colors={[Colors.primary, Colors.viewed]}
-                style={[styles.progressFill, { width: `${viewedPct}%` }]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
+
+            {/* Progress bar */}
+            <View style={styles.progressTrack}>
+              <View
+                style={[
+                  styles.progressFill,
+                  { width: `${viewedPct}%` as any, backgroundColor: progressColor },
+                ]}
               />
             </View>
+
+            {/* Legend */}
             <View style={styles.progressLegend}>
               <View style={styles.legendItem}>
-                <View style={[styles.legendDot, { backgroundColor: Colors.viewed }]} />
+                <View style={[styles.legendDot, { backgroundColor: Colors.primary }]} />
                 <Text style={styles.legendText}>{stats.viewed} Viewed</Text>
               </View>
+              <View style={styles.legendSep} />
               <View style={styles.legendItem}>
-                <View style={[styles.legendDot, { backgroundColor: Colors.newDoc }]} />
+                <View style={[styles.legendDot, { backgroundColor: Colors.accentGold }]} />
                 <Text style={styles.legendText}>{stats.newThisWeek} New this week</Text>
               </View>
             </View>
-          </Card>
-
-          {/* Chart */}
-          <Card style={styles.chartCard}>
-            <View style={styles.chartHeader}>
-              <Text style={styles.chartTitle}>Documents Uploaded</Text>
-              <Text style={styles.chartSubtitle}>Last 6 months</Text>
-            </View>
-            <MiniChart data={chartData} loading={loading} />
-          </Card>
-
-          {/* Recent Activity */}
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Recent Activity</Text>
           </View>
 
-          <Card noPadding>
+          {/* ── DOCUMENTS UPLOADED CHART ──────────────────────────────────── */}
+          <View style={styles.card}>
+            <View style={styles.cardRow}>
+              <Text style={styles.cardTitle}>Documents Uploaded</Text>
+              <Text style={styles.cardSubtitle}>Last 6 months</Text>
+            </View>
+            <MiniChart data={chartData} loading={loading} />
+          </View>
+
+          {/* ── RECENT ACTIVITY ───────────────────────────────────────────── */}
+          <View style={[styles.card, styles.cardNoPad]}>
+            <View style={[styles.cardRow, styles.cardInnerPad]}>
+              <Text style={styles.cardTitle}>Recent Activity</Text>
+            </View>
+
             {loading ? (
-              <ActivityIndicator color={Colors.primary} style={{ padding: 24 }} />
+              <ActivityIndicator color={Colors.primary} style={{ paddingVertical: 28 }} />
             ) : activity.length === 0 ? (
-              <View style={styles.emptyActivity}>
-                <Ionicons name="document-outline" size={32} color={Colors.textMuted} />
-                <Text style={styles.emptyText}>No documents yet</Text>
+              <View style={styles.emptyState}>
+                <Ionicons name="document-text-outline" size={34} color={Colors.textMuted} />
+                <Text style={styles.emptyTitle}>No activity yet</Text>
+                <Text style={styles.emptySubtitle}>Uploaded documents will appear here</Text>
               </View>
             ) : (
-              activity.map((item, index) => (
-                <View key={item.id} style={[styles.activityItem, index < activity.length - 1 && styles.activityBorder]}>
-                  <View style={[styles.activityIcon, { backgroundColor: `${activityColors[item.status] ?? Colors.primary}18` }]}>
-                    <Ionicons name={activityIcons[item.status] ?? 'document'} size={16} color={activityColors[item.status] ?? Colors.primary} />
+              activity.map((item, index) => {
+                const color = activityColors[item.status] ?? Colors.primary;
+                const icon = activityIcons[item.status] ?? 'document';
+                const label = activityLabel[item.status] ?? 'New document uploaded';
+                return (
+                  <View
+                    key={item.id}
+                    style={[
+                      styles.activityRow,
+                      index < activity.length - 1 && styles.activityDivider,
+                    ]}
+                  >
+                    <View style={[styles.activityIconCircle, { backgroundColor: `${color}18` }]}>
+                      <Ionicons name={icon} size={16} color={color} />
+                    </View>
+                    <View style={styles.activityContent}>
+                      <Text style={styles.activityLabel}>{label}</Text>
+                      <Text style={styles.activityName} numberOfLines={1}>{item.name}</Text>
+                      <Text style={styles.activityMeta}>
+                        {item.document_type ?? 'Document'} · {timeAgo(item.created_at)}
+                      </Text>
+                    </View>
                   </View>
-                  <View style={styles.activityInfo}>
-                    <Text style={styles.activityText} numberOfLines={1}>
-                      <Text style={styles.activityAction}>{activityLabel[item.status] ?? 'New'}: </Text>
-                      {item.name}
-                    </Text>
-                    <Text style={styles.activityTime}>
-                      {item.document_type ?? 'Document'} · {timeAgo(item.created_at)}
-                    </Text>
-                  </View>
-                </View>
-              ))
+                );
+              })
             )}
-          </Card>
+          </View>
 
         </View>
       </ScrollView>
@@ -413,61 +523,204 @@ export function DashboardScreen() {
 // ── styles ────────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: Colors.bgDeep },
+  root: {
+    flex: 1,
+    backgroundColor: Colors.bgDeep,
+  },
   scroll: { flex: 1 },
-  headerBanner: { paddingHorizontal: 20, paddingBottom: 24, paddingTop: 20 },
-  headerTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
-  greeting: { color: Colors.textMuted, fontSize: 13, marginBottom: 4 },
-  welcomeName: { color: Colors.textPrimary, fontSize: 22, fontWeight: '700', letterSpacing: -0.4 },
-  avatarContainer: { position: 'relative' },
-  avatar: { width: 46, height: 46, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
-  avatarImage: { width: 46, height: 46, borderRadius: 14 },
-  avatarText: { color: Colors.white, fontSize: 16, fontWeight: '700' },
-  onlineDot: { position: 'absolute', bottom: -2, right: -2, width: 12, height: 12, borderRadius: 6, backgroundColor: Colors.viewed, borderWidth: 2, borderColor: Colors.bgDark },
-  clientCard: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: Colors.bgCard, borderRadius: 14, padding: 14, borderWidth: 1, borderColor: Colors.border },
-  clientIdLabel: { color: Colors.textMuted, fontSize: 11, marginBottom: 3, fontWeight: '500' },
-  clientIdValue: { color: Colors.textPrimary, fontSize: 15, fontWeight: '700', letterSpacing: 1 },
-  planBadge: { backgroundColor: 'rgba(37,99,235,0.2)', paddingHorizontal: 12, paddingVertical: 5, borderRadius: 20, borderWidth: 1, borderColor: 'rgba(37,99,235,0.3)' },
-  planText: { color: Colors.primary, fontSize: 12, fontWeight: '700', letterSpacing: 0.5 },
-  content: { padding: 16 },
-  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, marginTop: 8 },
-  sectionTitle: { color: Colors.textPrimary, fontSize: 17, fontWeight: '700' },
-  kpiGrid: { flexDirection: 'row', gap: 8, marginBottom: 16 },
-  kpiCard: { flex: 1, borderRadius: 16, overflow: 'hidden', borderWidth: 1, borderColor: Colors.border },
-  kpiGradient: { padding: 12, minHeight: 100 },
-  kpiIcon: { width: 34, height: 34, borderRadius: 9, alignItems: 'center', justifyContent: 'center', marginBottom: 8 },
-  kpiValue: { fontSize: 24, fontWeight: '800', letterSpacing: -0.5, lineHeight: 28 },
-  kpiTitle: { color: Colors.textSecondary, fontSize: 11, fontWeight: '500', marginTop: 3 },
-  kpiSubtitle: { color: Colors.textMuted, fontSize: 10, marginTop: 2 },
-  progressCard: { marginBottom: 12 },
-  progressHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12 },
-  progressTitle: { color: Colors.textPrimary, fontSize: 14, fontWeight: '600' },
-  progressPct: { color: Colors.viewed, fontSize: 14, fontWeight: '700' },
-  progressBar: { height: 8, backgroundColor: Colors.bgElevated, borderRadius: 4, overflow: 'hidden', marginBottom: 12 },
-  progressFill: { height: '100%', borderRadius: 4 },
-  progressLegend: { flexDirection: 'row', gap: 16 },
-  legendItem: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  legendDot: { width: 8, height: 8, borderRadius: 4 },
-  legendText: { color: Colors.textMuted, fontSize: 11 },
-  chartCard: { marginBottom: 16 },
-  chartHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 16 },
-  chartTitle: { color: Colors.textPrimary, fontSize: 14, fontWeight: '600' },
-  chartSubtitle: { color: Colors.textMuted, fontSize: 12 },
-  chartContainer: { height: 100 },
-  chartBars: { flexDirection: 'row', alignItems: 'flex-end', height: '100%', gap: 4 },
-  barWrapper: { flex: 1, alignItems: 'center', height: '100%', justifyContent: 'flex-end' },
-  barColumn: { width: '100%', alignItems: 'center', flex: 1, justifyContent: 'flex-end', position: 'relative' },
-  barLabel: { position: 'absolute', top: -18, backgroundColor: Colors.primary, paddingHorizontal: 5, paddingVertical: 2, borderRadius: 4 },
-  barLabelText: { color: Colors.white, fontSize: 9, fontWeight: '700' },
-  bar: { width: '80%', borderRadius: 4, minHeight: 6 },
-  barMonth: { color: Colors.textMuted, fontSize: 10, marginTop: 6, fontWeight: '500' },
-  activityItem: { flexDirection: 'row', alignItems: 'center', padding: 14, gap: 12 },
-  activityBorder: { borderBottomWidth: 1, borderBottomColor: Colors.border },
-  activityIcon: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
-  activityInfo: { flex: 1 },
-  activityText: { color: Colors.textSecondary, fontSize: 13, lineHeight: 18 },
-  activityAction: { color: Colors.textPrimary, fontWeight: '600' },
-  activityTime: { color: Colors.textMuted, fontSize: 11, marginTop: 3 },
-  emptyActivity: { alignItems: 'center', padding: 32, gap: 10 },
-  emptyText: { color: Colors.textMuted, fontSize: 14 },
+
+  // ── Hero ──────────────────────────────────────────────────────────────────
+  hero: {
+    paddingHorizontal: 20,
+    paddingBottom: 28,
+  },
+  heroTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  heroGreetingBlock: { flex: 1, marginRight: 12 },
+  heroGreeting: {
+    color: 'rgba(255,255,255,0.55)',
+    fontSize: 13,
+    fontWeight: '500',
+    marginBottom: 4,
+    letterSpacing: 0.2,
+  },
+  heroName: {
+    color: Colors.white,
+    fontSize: 24,
+    fontWeight: '800',
+    letterSpacing: -0.5,
+  },
+
+  // ── Avatar ────────────────────────────────────────────────────────────────
+  avatarWrap: {
+    shadowColor: '#E8B923',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  avatarCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarImage: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+  },
+  avatarInitials: {
+    color: '#3A3131',
+    fontSize: 17,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+
+  // ── Body ──────────────────────────────────────────────────────────────────
+  body: {
+    paddingHorizontal: 20,
+    paddingTop: 24,
+    gap: 16,
+  },
+  sectionTitle: {
+    color: Colors.textPrimary,
+    fontSize: 17,
+    fontWeight: '700',
+    letterSpacing: -0.2,
+    marginBottom: 4,
+  },
+
+  // ── Overview scroll ───────────────────────────────────────────────────────
+  overviewScroll: {
+    paddingRight: 8,
+  },
+
+  // ── White card ────────────────────────────────────────────────────────────
+  card: {
+    backgroundColor: Colors.bgCard,
+    borderRadius: 20,
+    padding: 18,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    elevation: 4,
+  },
+  cardNoPad: { padding: 0 },
+  cardInnerPad: { paddingHorizontal: 18, paddingTop: 18, paddingBottom: 12 },
+  cardRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 14,
+  },
+  cardTitle: {
+    color: Colors.textPrimary,
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  cardSubtitle: {
+    color: Colors.textMuted,
+    fontSize: 12,
+  },
+
+  // ── Progress ──────────────────────────────────────────────────────────────
+  progressPct: {
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  progressTrack: {
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: Colors.bgMid,
+    overflow: 'hidden',
+    marginBottom: 14,
+  },
+  progressFill: {
+    height: '100%',
+    borderRadius: 4,
+  },
+  progressLegend: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  legendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  legendDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  legendText: {
+    color: Colors.textMuted,
+    fontSize: 12,
+  },
+  legendSep: {
+    width: 1,
+    height: 14,
+    backgroundColor: Colors.border,
+    marginHorizontal: 12,
+  },
+
+  // ── Activity ──────────────────────────────────────────────────────────────
+  activityRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 18,
+    paddingVertical: 14,
+    gap: 14,
+  },
+  activityDivider: {
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+  },
+  activityIconCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  activityContent: { flex: 1 },
+  activityLabel: {
+    color: Colors.textPrimary,
+    fontSize: 13,
+    fontWeight: '600',
+    marginBottom: 2,
+  },
+  activityName: {
+    color: Colors.textSecondary,
+    fontSize: 12,
+    marginBottom: 3,
+  },
+  activityMeta: {
+    color: Colors.textMuted,
+    fontSize: 11,
+  },
+
+  // ── Empty state ───────────────────────────────────────────────────────────
+  emptyState: {
+    alignItems: 'center',
+    paddingVertical: 36,
+    paddingHorizontal: 20,
+    gap: 8,
+  },
+  emptyTitle: {
+    color: Colors.textSecondary,
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  emptySubtitle: {
+    color: Colors.textMuted,
+    fontSize: 12,
+    textAlign: 'center',
+  },
 });

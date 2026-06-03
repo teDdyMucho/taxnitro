@@ -65,28 +65,28 @@ const FOLDERS: RootFolder[] = [
     key: 'TAX',
     label: 'TAX',
     description: 'Tax Documents & Returns',
-    color: '#3B82F6',
-    darkColor: '#1D4ED8',
-    gradient: ['#1E3A8A', '#1D4ED8', '#2563EB'],
+    color: '#00B16A',
+    darkColor: '#008C5A',
+    gradient: ['#2C2320', '#3A3131', '#4A3E3E'],
     subFolders: [
-      { key: 'tax_client_uploads',    label: 'Client Uploads',    icon: 'cloud-upload-outline',       color: '#60A5FA', bg: 'rgba(96,165,250,0.12)' },
-      { key: 'tax_contracts',          label: 'Contracts',          icon: 'document-text-outline',      color: '#A78BFA', bg: 'rgba(167,139,250,0.12)' },
-      { key: 'tax_invoices',           label: 'Invoices',           icon: 'receipt-outline',            color: '#FCD34D', bg: 'rgba(252,211,77,0.12)'  },
-      { key: 'tax_return_information', label: 'Return Information', icon: 'information-circle-outline', color: '#34D399', bg: 'rgba(52,211,153,0.12)'  },
+      { key: 'tax_client_uploads',    label: 'Client Uploads',    icon: 'cloud-upload-outline',       color: '#E8B923', bg: 'rgba(232,185,35,0.15)'  },
+      { key: 'tax_contracts',          label: 'Contracts',          icon: 'document-text-outline',      color: '#E8B923', bg: 'rgba(232,185,35,0.15)' },
+      { key: 'tax_invoices',           label: 'Invoices',           icon: 'receipt-outline',            color: '#B5905B', bg: 'rgba(181,144,91,0.15)' },
+      { key: 'tax_return_information', label: 'Return Information', icon: 'information-circle-outline', color: '#B5905B', bg: 'rgba(181,144,91,0.15)' },
     ],
   },
   {
     key: 'BK',
     label: 'BK',
     description: 'Bookkeeping & Financials',
-    color: '#10B981',
-    darkColor: '#059669',
-    gradient: ['#064E3B', '#065F46', '#059669'],
+    color: '#008C5A',
+    darkColor: '#006644',
+    gradient: ['#3A3131', '#4A3E3E', '#2C2320'],
     subFolders: [
-      { key: 'bk_contracts',         label: 'Contracts',                  icon: 'document-text-outline', color: '#A78BFA', bg: 'rgba(167,139,250,0.12)' },
-      { key: 'bk_invoices',          label: 'Invoices',                   icon: 'receipt-outline',       color: '#FCD34D', bg: 'rgba(252,211,77,0.12)'  },
-      { key: 'bk_for_client_review', label: 'For Client Review',          icon: 'eye-outline',           color: '#60A5FA', bg: 'rgba(96,165,250,0.12)'  },
-      { key: 'bk_final_pnl',         label: 'Final PNL & Balance Sheets', icon: 'bar-chart-outline',     color: '#34D399', bg: 'rgba(52,211,153,0.12)'  },
+      { key: 'bk_contracts',         label: 'Contracts',                  icon: 'document-text-outline', color: '#E8B923', bg: 'rgba(232,185,35,0.15)'  },
+      { key: 'bk_invoices',          label: 'Invoices',                   icon: 'receipt-outline',       color: '#B5905B', bg: 'rgba(181,144,91,0.15)'  },
+      { key: 'bk_for_client_review', label: 'For Client Review',          icon: 'eye-outline',           color: '#E8B923', bg: 'rgba(232,185,35,0.15)'   },
+      { key: 'bk_final_pnl',         label: 'Final PNL & Balance Sheets', icon: 'bar-chart-outline',     color: '#B5905B', bg: 'rgba(181,144,91,0.15)'  },
     ],
   },
 ];
@@ -117,23 +117,28 @@ function RootView({ documents, loading, refreshing, onRefresh, onSelect, pb, pt 
 
   return (
     <View style={s.screen}>
-      {/* ── Page header */}
-      <View style={[s.pageHeader, { paddingTop: pt }]}>
-        <View>
+      {/* ── Page header — same gradient as dashboard ── */}
+      <LinearGradient
+        colors={['#3A3131', '#4A3E3E', '#3A3131']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={[s.pageHeader, { paddingTop: pt }]}
+      >
+        <View style={{ flex: 1 }}>
           <Text style={s.pageTitle}>Documents</Text>
           <Text style={s.pageSub}>
             {loading ? 'Loading…' : `${total} file${total !== 1 ? 's' : ''}${unread > 0 ? ` · ${unread} unread` : ''}`}
           </Text>
         </View>
         <View style={s.headerBadge}>
-          <Ionicons name="folder" size={16} color={Colors.primary} />
+          <Ionicons name="folder" size={14} color="#2C2320" />
           <Text style={s.headerBadgeText}>2 Categories</Text>
         </View>
-      </View>
+      </LinearGradient>
 
       <ScrollView
         contentContainerStyle={[s.rootScroll, { paddingBottom: pb }]}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.primary} />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor='#E8B923' />}
         showsVerticalScrollIndicator={false}
       >
         <Text style={s.sectionLabel}>Select a category</Text>
@@ -224,14 +229,14 @@ function SubFolderView({ root, documents, refreshing, onRefresh, onBack, onSelec
 
   return (
     <View style={s.screen}>
-      {/* ── Header with gradient accent */}
-      <LinearGradient colors={[root.gradient[0], Colors.bgDark]} style={[s.subHeader, { paddingTop: pt }]} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }}>
+      {/* ── Header — FTG gradient ── */}
+      <LinearGradient colors={['#3A3131', '#4A3E3E', '#3A3131']} style={[s.subHeader, { paddingTop: pt }]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
         <View style={s.subHeaderRow}>
           <TouchableOpacity style={s.backBtn} onPress={onBack}>
-            <Ionicons name="chevron-back" size={20} color={Colors.white} />
+            <Ionicons name="chevron-back" size={20} color="rgba(255,255,255,0.9)" />
           </TouchableOpacity>
           <View style={s.subHeaderCenter}>
-            <View style={[s.subRootBadge, { backgroundColor: root.color }]}>
+            <View style={s.subRootBadge}>
               <Text style={s.subRootBadgeText}>{root.label}</Text>
             </View>
             <Text style={s.subHeaderTitle}>{root.description}</Text>
@@ -251,7 +256,7 @@ function SubFolderView({ root, documents, refreshing, onRefresh, onBack, onSelec
 
       <ScrollView
         contentContainerStyle={[s.subScroll, { paddingBottom: pb }]}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.primary} />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor='#E8B923' />}
         showsVerticalScrollIndicator={false}
       >
         <Text style={s.sectionLabel}>Folders</Text>
@@ -262,8 +267,8 @@ function SubFolderView({ root, documents, refreshing, onRefresh, onBack, onSelec
           return (
             <TouchableOpacity key={sf.key} style={s.sfCard} onPress={() => onSelect(sf)} activeOpacity={0.8}>
               {/* Left icon */}
-              <View style={[s.sfIconBox, { backgroundColor: sf.bg }]}>
-                <Ionicons name={sf.icon} size={24} color={sf.color} />
+              <View style={[s.sfIconBox, { backgroundColor: 'rgba(232,185,35,0.12)' }]}>
+                <Ionicons name={sf.icon} size={24} color="#E8B923" />
               </View>
 
               {/* Center content */}
@@ -271,8 +276,8 @@ function SubFolderView({ root, documents, refreshing, onRefresh, onBack, onSelec
                 <View style={s.sfTitleRow}>
                   <Text style={s.sfName}>{sf.label}</Text>
                   {unread > 0 && (
-                    <View style={[s.sfBadge, { backgroundColor: sf.color }]}>
-                      <Text style={s.sfBadgeText}>{unread}</Text>
+                    <View style={[s.sfBadge, { backgroundColor: '#E8B923' }]}>
+                      <Text style={[s.sfBadgeText, { color: '#2C2320' }]}>{unread}</Text>
                     </View>
                   )}
                 </View>
@@ -282,7 +287,7 @@ function SubFolderView({ root, documents, refreshing, onRefresh, onBack, onSelec
                 </Text>
                 {/* Mini progress bar */}
                 <View style={s.miniBar}>
-                  <View style={[s.miniBarFill, { width: `${pct}%` as any, backgroundColor: sf.color }]} />
+                  <View style={[s.miniBarFill, { width: `${pct}%` as any, backgroundColor: '#E8B923' }]} />
                 </View>
               </View>
 
@@ -324,15 +329,19 @@ function DocListView({ sf, root, rootColor, documents, refreshing, onRefresh, on
 
   return (
     <View style={s.screen}>
-      {/* ── Header */}
-      <View style={[s.docHeader, { paddingTop: pt }]}>
+      {/* ── Header — FTG gradient ── */}
+      <LinearGradient
+        colors={['#3A3131', '#4A3E3E', '#3A3131']}
+        start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+        style={[s.docHeader, { paddingTop: pt }]}
+      >
         <View style={s.docHeaderTop}>
           <TouchableOpacity style={s.backBtn} onPress={onBack}>
-            <Ionicons name="chevron-back" size={20} color={Colors.textPrimary} />
+            <Ionicons name="chevron-back" size={20} color="rgba(255,255,255,0.9)" />
           </TouchableOpacity>
 
-          <View style={[s.docFolderIcon, { backgroundColor: sf.bg }]}>
-            <Ionicons name={sf.icon} size={18} color={sf.color} />
+          <View style={[s.docFolderIcon, { backgroundColor: 'rgba(232,185,35,0.2)' }]}>
+            <Ionicons name={sf.icon} size={18} color="#E8B923" />
           </View>
 
           <View style={s.docHeaderMid}>
@@ -343,25 +352,25 @@ function DocListView({ sf, root, rootColor, documents, refreshing, onRefresh, on
             </Text>
           </View>
 
-          <TouchableOpacity style={[s.uploadFab, { backgroundColor: sf.color }]} onPress={() => setUploadOpen(true)}>
-            <Ionicons name="cloud-upload-outline" size={15} color={Colors.white} />
+          <TouchableOpacity style={s.uploadFab} onPress={() => setUploadOpen(true)}>
+            <Ionicons name="cloud-upload-outline" size={15} color="#2C2320" />
             <Text style={s.uploadFabText}>Upload</Text>
           </TouchableOpacity>
         </View>
 
         {/* Search */}
         <View style={s.searchWrap}>
-          <Ionicons name="search-outline" size={16} color={Colors.textMuted} />
+          <Ionicons name="search-outline" size={16} color="rgba(255,255,255,0.5)" />
           <TextInput
             style={s.searchInput}
             placeholder="Search files…"
-            placeholderTextColor={Colors.textMuted}
+            placeholderTextColor="rgba(255,255,255,0.4)"
             value={search}
             onChangeText={setSearch}
           />
           {!!search && (
             <TouchableOpacity onPress={() => setSearch('')}>
-              <Ionicons name="close-circle" size={16} color={Colors.textMuted} />
+              <Ionicons name="close-circle" size={16} color="rgba(255,255,255,0.5)" />
             </TouchableOpacity>
           )}
         </View>
@@ -371,21 +380,21 @@ function DocListView({ sf, root, rootColor, documents, refreshing, onRefresh, on
           {filters.map(f => (
             <TouchableOpacity
               key={f.key}
-              style={[s.filterPill, filter === f.key && { backgroundColor: sf.color, borderColor: sf.color }]}
+              style={[s.filterPill, filter === f.key && s.filterPillActive]}
               onPress={() => setFilter(f.key)}
             >
-              <Text style={[s.filterPillText, filter === f.key && { color: Colors.white }]}>{f.label}</Text>
+              <Text style={[s.filterPillText, filter === f.key && s.filterPillTextActive]}>{f.label}</Text>
             </TouchableOpacity>
           ))}
           <Text style={s.filterCount}>{filtered.length} result{filtered.length !== 1 ? 's' : ''}</Text>
         </View>
-      </View>
+      </LinearGradient>
 
       <FlatList
         data={filtered}
         keyExtractor={item => item.id}
         contentContainerStyle={[s.docList, { paddingBottom: pb }]}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.primary} />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor='#E8B923' />}
         showsVerticalScrollIndicator={false}
         renderItem={({ item }) => <DocCard doc={item} sf={sf} onPress={() => onDocPress(item)} />}
         ListEmptyComponent={<EmptyDocs sf={sf} onUpload={() => setUploadOpen(true)} />}
@@ -923,7 +932,7 @@ function DetailRow({ icon, label, value, color }: {
 type Nav = 'root' | 'sub' | 'docs';
 
 export function DocumentsScreen() {
-  const { user } = useAuth();
+  const { user, isLoading: authLoading } = useAuth();
   const insets   = useSafeAreaInsets();
   const pt = Platform.OS === 'web' ? 16 : insets.top + 12;
   const pb = Platform.OS === 'web' ? 24 : insets.bottom + 90;
@@ -938,21 +947,27 @@ export function DocumentsScreen() {
 
   const load = useCallback(async (isRefresh = false) => {
     if (!user?.email) return;
-    if (!isRefresh) setLoading(true);
+    if (isRefresh) setRefreshing(true); else setLoading(true);
+    const safetyTimer = setTimeout(() => {
+      setLoading(false);
+      setRefreshing(false);
+    }, 12000);
     try {
       const docs = await getDocumentsByEmail(user.email);
       setDocuments(docs);
     } catch (e) {
       console.error('load documents:', e);
     } finally {
+      clearTimeout(safetyTimer);
       setLoading(false);
+      setRefreshing(false);
     }
   }, [user?.email]);
 
-  // Load once when user email becomes available
+  // Load only after auth is fully resolved and user email is available
   useEffect(() => {
-    if (user?.email) load();
-  }, [user?.email]);
+    if (!authLoading && user?.email) load();
+  }, [authLoading, user?.email]);
 
   useEffect(() => {
     if (!user?.email) return;
@@ -977,7 +992,7 @@ export function DocumentsScreen() {
     return () => { channels.forEach(ch => supabase.removeChannel(ch)); };
   }, [user?.email]);
 
-  const onRefresh = useCallback(async () => { setRefreshing(true); await load(true); setRefreshing(false); }, [load]);
+  const onRefresh = useCallback(async () => { await load(true); }, [load]);
   const markViewed = useCallback(async (doc: Document) => {
     if (doc.status === 'viewed') return;
     const table = doc.document_type ?? '';
@@ -1054,11 +1069,11 @@ const s = StyleSheet.create({
   loader:   { flex: 1, alignItems: 'center', justifyContent: 'center' },
 
   // page header
-  pageHeader: { backgroundColor: Colors.bgDark, paddingHorizontal: 20, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: Colors.border, flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between' },
-  pageTitle:  { color: Colors.textPrimary, fontSize: 26, fontWeight: '800', letterSpacing: -0.5 },
-  pageSub:    { color: Colors.textMuted,   fontSize: 12, marginTop: 3 },
-  headerBadge: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: 'rgba(37,99,235,0.12)', paddingHorizontal: 11, paddingVertical: 6, borderRadius: 20, borderWidth: 1, borderColor: 'rgba(37,99,235,0.25)' },
-  headerBadgeText: { color: Colors.primary, fontSize: 12, fontWeight: '600' },
+  pageHeader: { paddingHorizontal: 20, paddingBottom: 18, flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between' },
+  pageTitle:  { color: '#FFFFFF', fontSize: 24, fontWeight: '800', letterSpacing: -0.5 },
+  pageSub:    { color: 'rgba(255,255,255,0.55)', fontSize: 12, marginTop: 3 },
+  headerBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#E8B923', paddingHorizontal: 12, paddingVertical: 7, borderRadius: 20 },
+  headerBadgeText: { color: '#2C2320', fontSize: 12, fontWeight: '700' },
 
   sectionLabel: { color: Colors.textMuted, fontSize: 11, fontWeight: '700', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 12, paddingHorizontal: 20, paddingTop: 20 },
 
@@ -1070,8 +1085,8 @@ const s = StyleSheet.create({
   rootIconBox:   { width: 54, height: 54, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.15)', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)' },
   rootIconText:  { color: Colors.white, fontSize: 16, fontWeight: '900', letterSpacing: 1 },
   rootCardTopRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  rootUnreadBadge:  { backgroundColor: Colors.error, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 },
-  rootUnreadText:   { color: Colors.white, fontSize: 11, fontWeight: '700' },
+  rootUnreadBadge:  { backgroundColor: '#E8B923', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 },
+  rootUnreadText:   { color: '#2C2320', fontSize: 11, fontWeight: '700' },
   rootChevron:   { width: 32, height: 32, borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.15)', alignItems: 'center', justifyContent: 'center' },
   rootCardTitle: { color: Colors.white, fontSize: 17, fontWeight: '700', marginBottom: 16, opacity: 0.95 },
   rootDivider:   { height: 1, backgroundColor: 'rgba(255,255,255,0.12)', marginBottom: 14 },
@@ -1088,54 +1103,56 @@ const s = StyleSheet.create({
   infoText: { color: Colors.textMuted, fontSize: 12, flex: 1, lineHeight: 18 },
 
   // back btn
-  backBtn: { width: 36, height: 36, borderRadius: 11, backgroundColor: 'rgba(255,255,255,0.08)', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: Colors.border },
+  backBtn: { width: 36, height: 36, borderRadius: 11, backgroundColor: 'rgba(255,255,255,0.12)', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)' },
 
   // subfolder header
   subHeader:     { paddingHorizontal: 16, paddingBottom: 16 },
   subHeaderRow:  { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 14 },
   subHeaderCenter: { flex: 1, gap: 4 },
-  subRootBadge:  { alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 },
-  subRootBadgeText: { color: Colors.white, fontSize: 12, fontWeight: '800', letterSpacing: 0.5 },
-  subHeaderTitle: { color: Colors.textPrimary, fontSize: 17, fontWeight: '700' },
-  subHeaderMeta: { flexDirection: 'row', gap: 10 },
+  subRootBadge:  { alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, backgroundColor: '#E8B923' },
+  subRootBadgeText: { color: '#2C2320', fontSize: 12, fontWeight: '800', letterSpacing: 0.5 },
+  subHeaderTitle: { color: '#FFFFFF', fontSize: 17, fontWeight: '700' },
+  subHeaderMeta: { flexDirection: 'row', gap: 10, marginTop: 2 },
   metaPill:      { flexDirection: 'row', alignItems: 'center', gap: 4 },
   metaPillText:  { color: 'rgba(255,255,255,0.5)', fontSize: 11 },
 
   // subfolder cards
   subScroll: { paddingHorizontal: 16, paddingBottom: 20 },
-  sfCard:    { flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.bgCard, borderRadius: 18, padding: 16, marginBottom: 10, borderWidth: 1, borderColor: Colors.border, gap: 14, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 4, elevation: 2 },
-  sfIconBox: { width: 54, height: 54, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
+  sfCard:    { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFFFFF', borderRadius: 16, padding: 16, marginBottom: 10, borderWidth: 1, borderColor: '#E8E0D0', gap: 14, shadowColor: '#3A3131', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 2 },
+  sfIconBox: { width: 52, height: 52, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   sfBody:    { flex: 1 },
   sfTitleRow:{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 },
-  sfName:    { color: Colors.textPrimary, fontSize: 15, fontWeight: '700', flex: 1 },
+  sfName:    { color: '#1C1713', fontSize: 15, fontWeight: '700', flex: 1 },
   sfBadge:   { minWidth: 20, height: 20, borderRadius: 10, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 5 },
-  sfBadgeText: { color: Colors.white, fontSize: 10, fontWeight: '800' },
-  sfMeta:    { color: Colors.textMuted, fontSize: 12, marginBottom: 8 },
-  miniBar:   { height: 3, backgroundColor: Colors.bgElevated, borderRadius: 2, overflow: 'hidden' },
+  sfBadgeText: { color: '#2C2320', fontSize: 10, fontWeight: '800' },
+  sfMeta:    { color: '#A8998A', fontSize: 12, marginBottom: 8 },
+  miniBar:   { height: 3, backgroundColor: '#F5F0E8', borderRadius: 2, overflow: 'hidden' },
   miniBarFill: { height: '100%', borderRadius: 2 },
 
-  // doc header
-  docHeader:    { backgroundColor: Colors.bgDark, paddingHorizontal: 16, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: Colors.border },
-  docHeaderTop: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8 },
-  docFolderIcon:{ width: 34, height: 34, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  // doc header — gradient, no bg color needed
+  docHeader:    { paddingHorizontal: 16, paddingBottom: 14 },
+  docHeaderTop: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10 },
+  docFolderIcon:{ width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   docHeaderMid: { flex: 1 },
-  docHeaderTitle: { color: Colors.textPrimary, fontSize: 17, fontWeight: '700' },
-  docHeaderSub:   { color: Colors.textMuted,   fontSize: 11, marginTop: 1 },
-  uploadFab:  { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 13, paddingVertical: 8, borderRadius: 22, shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.3, shadowRadius: 5, elevation: 4 },
-  uploadFabText: { color: Colors.white, fontSize: 12, fontWeight: '700' },
+  docHeaderTitle: { color: '#FFFFFF', fontSize: 17, fontWeight: '700' },
+  docHeaderSub:   { color: 'rgba(255,255,255,0.5)', fontSize: 11, marginTop: 1 },
+  uploadFab:  { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingVertical: 9, borderRadius: 22, backgroundColor: '#E8B923', shadowColor: '#E8B923', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.35, shadowRadius: 8, elevation: 4 },
+  uploadFabText: { color: '#2C2320', fontSize: 12, fontWeight: '800' },
 
   // search & filter
-  searchWrap:  { flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.bgMid, borderRadius: 12, paddingHorizontal: 12, marginBottom: 10, borderWidth: 1, borderColor: Colors.border, gap: 8 },
-  searchInput: { flex: 1, color: Colors.textPrimary, fontSize: 14, paddingVertical: 10 },
+  searchWrap:  { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 12, paddingHorizontal: 12, marginBottom: 10, borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)', gap: 8 },
+  searchInput: { flex: 1, color: '#FFFFFF', fontSize: 14, paddingVertical: 10 },
   filterWrap:  { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  filterPill:  { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20, backgroundColor: Colors.bgMid, borderWidth: 1, borderColor: Colors.border },
-  filterPillText: { color: Colors.textMuted, fontSize: 12, fontWeight: '600' },
-  filterCount:    { color: Colors.textMuted, fontSize: 11, marginLeft: 'auto' as any },
+  filterPill:  { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.1)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)' },
+  filterPillActive: { backgroundColor: '#E8B923', borderColor: '#E8B923' },
+  filterPillText: { color: 'rgba(255,255,255,0.7)', fontSize: 12, fontWeight: '600' },
+  filterPillTextActive: { color: '#2C2320', fontWeight: '700' },
+  filterCount:    { color: 'rgba(255,255,255,0.45)', fontSize: 11, marginLeft: 'auto' as any },
 
   // doc list
   docList: { padding: 14 },
-  docCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.bgCard, borderRadius: 16, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: Colors.border, gap: 12, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 3, elevation: 1 },
-  docCardNew:  { backgroundColor: Colors.bgElevated, borderColor: 'rgba(37,99,235,0.2)' },
+  docCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFFFFF', borderRadius: 16, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: '#E8E0D0', gap: 12, overflow: 'hidden', shadowColor: '#3A3131', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 2 },
+  docCardNew:  { borderColor: '#E8B923', borderLeftWidth: 3 },
   newAccent:   { position: 'absolute', left: 0, top: 0, bottom: 0, width: 3 },
   extBox:      { width: 50, height: 50, borderRadius: 13, alignItems: 'center', justifyContent: 'center', gap: 2 },
   extText:     { fontSize: 8, fontWeight: '800', letterSpacing: 0.3 },
