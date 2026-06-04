@@ -10,6 +10,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Animated,
+  Easing,
   Modal,
   TextInput,
   Alert,
@@ -57,12 +58,79 @@ export function LoginScreen({ onLoginSuccess, onNavigateRegister }: Props) {
   const opacity = useRef(new Animated.Value(0)).current;
   const translateY = useRef(new Animated.Value(30)).current;
   const logoScale = useRef(new Animated.Value(0.8)).current;
+  const orb1Y = useRef(new Animated.Value(0)).current;
+  const orb2Y = useRef(new Animated.Value(0)).current;
+  const orb1Scale = useRef(new Animated.Value(1)).current;
+  const orb2Scale = useRef(new Animated.Value(1)).current;
+  const shimmerX = useRef(new Animated.Value(-440)).current;
+  const heroOpacity = useRef(new Animated.Value(0)).current;
+  const heroY = useRef(new Animated.Value(30)).current;
+  const featureAnims = useRef(
+    [0, 1, 2, 3].map(() => ({ opacity: new Animated.Value(0), y: new Animated.Value(20) }))
+  ).current;
+  const cardEntranceRX   = useRef(new Animated.Value(-12)).current;
+  const cardHoverRX      = useRef(new Animated.Value(0)).current;
+  const cardHoverRY      = useRef(new Animated.Value(0)).current;
+  const cardHoverScale   = useRef(new Animated.Value(1)).current;
+  const loginParticles   = useRef([0,1,2,3,4,5].map(() => new Animated.Value(0))).current;
 
   useEffect(() => {
     Animated.parallel([
       Animated.timing(opacity, { toValue: 1, duration: 700, useNativeDriver: nativeDriver }),
       Animated.spring(translateY, { toValue: 0, damping: 18, stiffness: 120, useNativeDriver: nativeDriver }),
       Animated.spring(logoScale, { toValue: 1, damping: 14, stiffness: 100, useNativeDriver: nativeDriver }),
+    ]).start();
+    Animated.spring(cardEntranceRX, { toValue: 0, damping: 16, stiffness: 72, delay: 350, useNativeDriver: nativeDriver }).start();
+  }, []);
+
+  useEffect(() => {
+    const float = (anim: Animated.Value, range: number, dur: number, delay: number) =>
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(anim, { toValue: -range, duration: dur, delay, easing: Easing.inOut(Easing.sin), useNativeDriver: nativeDriver }),
+          Animated.timing(anim, { toValue: 0, duration: dur, easing: Easing.inOut(Easing.sin), useNativeDriver: nativeDriver }),
+        ])
+      ).start();
+
+    const pulsate = (anim: Animated.Value, to: number, dur: number, delay: number) =>
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(anim, { toValue: to, duration: dur, delay, easing: Easing.inOut(Easing.sin), useNativeDriver: nativeDriver }),
+          Animated.timing(anim, { toValue: 1, duration: dur, easing: Easing.inOut(Easing.sin), useNativeDriver: nativeDriver }),
+        ])
+      ).start();
+
+    float(orb1Y, 40, 8000, 0);
+    float(orb2Y, 26, 11000, 3500);
+    pulsate(orb1Scale, 1.2, 7000, 800);
+    pulsate(orb2Scale, 1.14, 9000, 2000);
+    [6000, 8000, 7000, 9000, 6500, 8500].forEach((dur, i) =>
+      float(loginParticles[i], 22, dur, [0, 1200, 2400, 800, 3000, 1600][i])
+    );
+
+    Animated.loop(
+      Animated.sequence([
+        Animated.delay(2000),
+        Animated.timing(shimmerX, { toValue: 440, duration: 1000, easing: Easing.inOut(Easing.quad), useNativeDriver: nativeDriver }),
+        Animated.timing(shimmerX, { toValue: -440, duration: 0, useNativeDriver: nativeDriver }),
+      ])
+    ).start();
+  }, []);
+
+  useEffect(() => {
+    if (!isDesktopWeb) return;
+    Animated.sequence([
+      Animated.delay(300),
+      Animated.parallel([
+        Animated.timing(heroOpacity, { toValue: 1, duration: 600, useNativeDriver: nativeDriver }),
+        Animated.spring(heroY, { toValue: 0, damping: 18, stiffness: 100, useNativeDriver: nativeDriver }),
+      ]),
+      Animated.stagger(100, featureAnims.map(a =>
+        Animated.parallel([
+          Animated.timing(a.opacity, { toValue: 1, duration: 400, useNativeDriver: nativeDriver }),
+          Animated.spring(a.y, { toValue: 0, damping: 16, stiffness: 120, useNativeDriver: nativeDriver }),
+        ])
+      )),
     ]).start();
   }, []);
 
@@ -136,6 +204,30 @@ export function LoginScreen({ onLoginSuccess, onNavigateRegister }: Props) {
     setForgotSent(false);
     setForgotLoading(false);
   };
+
+  // ── Card 3D hover handlers ────────────────────────────────────────────────
+  const handleCardMove = (e: any) => {
+    if (Platform.OS !== 'web') return;
+    const rect = e.currentTarget?.getBoundingClientRect?.();
+    if (!rect) return;
+    const tx = ((e.clientY - (rect.top + rect.height / 2)) / (rect.height / 2)) * -4;
+    const ty = ((e.clientX - (rect.left + rect.width / 2)) / (rect.width / 2)) * 4;
+    Animated.parallel([
+      Animated.spring(cardHoverRX, { toValue: tx, damping: 10, stiffness: 200, useNativeDriver: nativeDriver }),
+      Animated.spring(cardHoverRY, { toValue: ty, damping: 10, stiffness: 200, useNativeDriver: nativeDriver }),
+      Animated.spring(cardHoverScale, { toValue: 1.015, damping: 14, stiffness: 180, useNativeDriver: nativeDriver }),
+    ]).start();
+  };
+  const handleCardLeave = () => {
+    Animated.parallel([
+      Animated.spring(cardHoverRX, { toValue: 0, damping: 14, stiffness: 180, useNativeDriver: nativeDriver }),
+      Animated.spring(cardHoverRY, { toValue: 0, damping: 14, stiffness: 180, useNativeDriver: nativeDriver }),
+      Animated.spring(cardHoverScale, { toValue: 1, damping: 14, stiffness: 180, useNativeDriver: nativeDriver }),
+    ]).start();
+  };
+  const totalRX        = Animated.add(cardEntranceRX, cardHoverRX);
+  const totalRXInterp  = totalRX.interpolate({ inputRange: [-16, 16], outputRange: ['-16deg', '16deg'] });
+  const cardRYInterp   = cardHoverRY.interpolate({ inputRange: [-4, 4], outputRange: ['-4deg', '4deg'] });
 
   // ── Shared login form (used in both layouts) ──────────────────────────────
   const loginForm = (
@@ -257,93 +349,126 @@ export function LoginScreen({ onLoginSuccess, onNavigateRegister }: Props) {
     </Modal>
   );
 
-  // ── Desktop Web: full-screen background + floating card ──────────────────
+  // ── Desktop Web ───────────────────────────────────────────────────────────
   if (isDesktopWeb) {
+    const PX = [
+      { top: 8,  left: 14, size: 2.5, op: 0.28 },
+      { top: 22, left: 72, size: 2.0, op: 0.20 },
+      { top: 45, left: 88, size: 3.0, op: 0.32 },
+      { top: 60, left: 24, size: 2.0, op: 0.22 },
+      { top: 35, left: 42, size: 3.5, op: 0.18 },
+      { top: 12, left: 58, size: 2.0, op: 0.25 },
+    ];
     return (
       <View style={split.root}>
-        {/* Full-screen background gradient */}
+        {/* Dark background */}
         <LinearGradient
-          colors={['#2C2320', '#3A3131', '#2C2320']}
+          colors={['#020817', '#0b1224', '#180c06', '#020817']}
           style={StyleSheet.absoluteFillObject}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
         />
+        {/* CSS dot grid */}
+        {Platform.OS === 'web' && (
+          <View style={{ ...StyleSheet.absoluteFillObject, backgroundImage: 'radial-gradient(rgba(232,185,35,0.07) 1px, transparent 1px)', backgroundSize: '48px 48px' } as any} />
+        )}
 
-        {/* Subtle orbs */}
-        <View style={split.orbBlue} />
-        <View style={split.orbPurple} />
+        {/* Animated orbs */}
+        <Animated.View style={[split.orbBlue,   { transform: [{ translateY: orb1Y }, { scale: orb1Scale }] }]} />
+        <Animated.View style={[split.orbPurple,  { transform: [{ translateY: orb2Y }, { scale: orb2Scale }] }]} />
+        <View style={split.orbAccent} />
 
-        {/* Grid lines overlay (decorative) */}
-        <View style={split.gridOverlay} />
+        {/* Floating particles */}
+        {PX.map((p, i) => (
+          <Animated.View key={i} style={{
+            position: 'absolute', width: p.size, height: p.size,
+            borderRadius: p.size / 2, backgroundColor: '#E8B923',
+            top: `${p.top}%` as any, left: `${p.left}%` as any,
+            opacity: p.op,
+            transform: [{ translateY: loginParticles[i] }],
+          }} />
+        ))}
 
-        {/* LEFT: branding content — absolutely fills left side */}
+        {/* LEFT pane */}
         <View style={split.leftPane}>
-          {/* Top logo */}
           <View style={split.brandRow}>
-            <Image
-              source={require('../../../assets/main-logo.png')}
-              style={{ width: 260, height: 100 }}
-              resizeMode="contain"
-            />
+            <Image source={require('../../../assets/main-logo.png')} style={{ width: 220, height: 88 }} resizeMode="contain" />
           </View>
 
-          {/* Main headline */}
-          <View style={split.headlineWrap}>
-            <Text style={split.headline}>Your Financial{'\n'}Documents,{'\n'}
-              <Text style={[split.headlineAccent, { color: '#E8B923' }]}>Secured.</Text>
+          <Animated.View style={[split.headlineWrap, { opacity: heroOpacity, transform: [{ translateY: heroY }] }]}>
+            <Text style={split.headline}>
+              Your Financial{'\n'}Documents,{'\n'}
+              {Platform.OS === 'web' ? (
+                <Text style={{ color: '#E8B923', ...({ backgroundImage: 'linear-gradient(135deg,#E8B923,#FFD700,#B5905B)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' } as any) }}>
+                  Secured.
+                </Text>
+              ) : (
+                <Text style={{ color: '#E8B923' }}>Secured.</Text>
+              )}
             </Text>
             <Text style={split.headlineSub}>
               The all-in-one portal to access, manage,{'\n'}and track all your important documents.
             </Text>
-          </View>
+          </Animated.View>
 
-          {/* Feature cards */}
           <View style={split.featureGrid}>
             {[
-              { icon: 'document-text', label: 'Document Hub', sub: 'All your files, organized' },
+              { icon: 'document-text',    label: 'Document Hub',        sub: 'All your files, organized' },
               { icon: 'shield-checkmark', label: 'Bank-Level Security', sub: '256-bit SSL encryption' },
-              { icon: 'flash', label: 'Real-time Sync', sub: 'Instant updates, always' },
-              { icon: 'notifications', label: 'Smart Alerts', sub: 'Never miss a thing' },
-            ].map(f => (
-              <View key={f.label} style={split.featureCard}>
-                <LinearGradient colors={['rgba(232,185,35,0.15)', 'rgba(181,144,91,0.08)']} style={split.featureCardGrad} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
-                  <Ionicons name={f.icon as any} size={22} color="#E8B923" />
+              { icon: 'flash',            label: 'Real-time Sync',      sub: 'Instant updates, always' },
+              { icon: 'notifications',    label: 'Smart Alerts',        sub: 'Never miss a thing' },
+            ].map((f, i) => (
+              <Animated.View key={f.label} style={[split.featureCard, { opacity: featureAnims[i].opacity, transform: [{ translateY: featureAnims[i].y }] }]}>
+                {/* gold top bar */}
+                <LinearGradient colors={['#E8B923', '#B5905B', 'transparent']} style={split.featureTopBar} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} />
+                <LinearGradient colors={['rgba(232,185,35,0.09)', 'rgba(8,14,30,0.7)']} style={StyleSheet.absoluteFillObject} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} />
+                <View style={split.featureCardInner}>
+                  <LinearGradient colors={['#E8B923', '#B5905B']} style={split.featureCardIconBox} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
+                    <Ionicons name={f.icon as any} size={16} color="#2C2320" />
+                  </LinearGradient>
                   <Text style={split.featureCardLabel}>{f.label}</Text>
                   <Text style={split.featureCardSub}>{f.sub}</Text>
-                </LinearGradient>
-              </View>
+                </View>
+              </Animated.View>
             ))}
           </View>
 
           <Text style={split.leftFooter}>Trusted · Secure · Real-time</Text>
         </View>
 
-        {/* RIGHT: floating glass card */}
+        {/* RIGHT pane: 3D interactive glass card */}
         <View style={split.rightPane}>
-          <ScrollView
-            contentContainerStyle={split.cardScroll}
-            showsVerticalScrollIndicator={false}
-            keyboardShouldPersistTaps="handled"
-          >
-            <View style={split.glassCard}>
-              {/* Card top accent line */}
-              <LinearGradient colors={['#E8B923', '#B5905B']} style={split.cardTopAccent} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} />
+          <ScrollView contentContainerStyle={split.cardScroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+            {/* glow ring */}
+            <View style={split.cardGlowRing}>
+              <Animated.View
+                style={{
+                  transform: [
+                    { perspective: 1200 },
+                    { rotateX: totalRXInterp },
+                    { rotateY: cardRYInterp },
+                    { scale: cardHoverScale },
+                  ],
+                }}
+                {...(Platform.OS === 'web' ? { onMouseMove: handleCardMove, onMouseLeave: handleCardLeave } as any : {})}
+              >
+                <View style={split.glassCard}>
+                  {/* shimmer top accent */}
+                  <View style={[split.cardTopAccent, { overflow: 'hidden' as any }]}>
+                    <LinearGradient colors={['#E8B923', '#B5905B']} style={StyleSheet.absoluteFillObject} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} />
+                    <Animated.View style={{ position: 'absolute' as any, top: 0, bottom: 0, left: 0, width: 80, backgroundColor: 'rgba(255,255,255,0.45)', transform: [{ translateX: shimmerX }] }} />
+                  </View>
 
-              {/* Card header */}
-              <View style={split.cardHeader}>
-                <Text style={split.cardTitle}>Welcome Back</Text>
-                <Text style={split.cardSubtitle}>Sign in to continue to Finance Therapy Group</Text>
-              </View>
+                  <View style={split.cardHeader}>
+                    <Text style={split.cardTitle}>Welcome Back</Text>
+                    <Text style={split.cardSubtitle}>Sign in to continue to Finance Therapy Group</Text>
+                  </View>
 
-              {/* Form */}
-              <View style={split.cardBody}>
-                {loginForm}
-              </View>
+                  <View style={split.cardBody}>{loginForm}</View>
 
-              {/* Card footer note */}
-              <Text style={split.cardNote}>
-                Need help? Contact your administrator.
-              </Text>
+                  <Text style={split.cardNote}>Need help? Contact your administrator.</Text>
+                </View>
+              </Animated.View>
             </View>
           </ScrollView>
         </View>
@@ -356,18 +481,16 @@ export function LoginScreen({ onLoginSuccess, onNavigateRegister }: Props) {
   // ── Mobile layout ─────────────────────────────────────────────────────────
   return (
     <View style={styles.root}>
-      {/* Full background — covers everything including scroll overscroll area */}
-      <View style={StyleSheet.absoluteFillObject}>
-        <LinearGradient
-          colors={['#3A3131', '#4A3E3E']}
-          style={{ flex: 1 }}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-        />
-      </View>
+      {/* Full background */}
+      <LinearGradient
+        colors={['#020817', '#0b1224', '#180c06']}
+        style={StyleSheet.absoluteFillObject}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+      />
 
-      <View style={[styles.orb, styles.orb1]} />
-      <View style={[styles.orb, styles.orb2]} />
+      <Animated.View style={[styles.orb, styles.orb1, { transform: [{ translateY: orb1Y }, { scale: orb1Scale }] }]} />
+      <Animated.View style={[styles.orb, styles.orb2, { transform: [{ translateY: orb2Y }, { scale: orb2Scale }] }]} />
 
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -407,7 +530,7 @@ export function LoginScreen({ onLoginSuccess, onNavigateRegister }: Props) {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: '#3A3131',
+    backgroundColor: '#020817',
     overflow: 'hidden' as any,
     ...(Platform.OS === 'web' ? { height: '100vh' as any, maxHeight: '100vh' as any } : {}),
   },
@@ -419,8 +542,8 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   orb: { position: 'absolute', borderRadius: 999 },
-  orb1: { width: 250, height: 250, backgroundColor: 'rgba(232,185,35,0.06)', top: -80, right: -60 },
-  orb2: { width: 180, height: 180, backgroundColor: 'rgba(181,144,91,0.05)', bottom: 80, left: -50 },
+  orb1: { width: 320, height: 320, backgroundColor: 'rgba(232,185,35,0.07)', top: -100, right: -80 },
+  orb2: { width: 220, height: 220, backgroundColor: 'rgba(181,144,91,0.06)', bottom: 60, left: -60 },
   logoSection: { alignItems: 'center', marginBottom: 20 },
   logoContainer: {
     marginBottom: 14,
@@ -465,38 +588,24 @@ const split = StyleSheet.create({
     backgroundColor: '#020817',
   },
 
-  // glowing orbs
+  // Orbs — bigger and richer to match landing page
   orbBlue: {
     position: 'absolute',
-    width: 600,
-    height: 600,
-    borderRadius: 300,
-    backgroundColor: 'rgba(232,185,35,0.06)',
-    top: -200,
-    left: -100,
+    width: 800, height: 800, borderRadius: 400,
+    backgroundColor: 'rgba(232,185,35,0.055)',
+    top: -280, left: -220,
   },
   orbPurple: {
     position: 'absolute',
-    width: 500,
-    height: 500,
-    borderRadius: 250,
+    width: 650, height: 650, borderRadius: 325,
     backgroundColor: 'rgba(181,144,91,0.05)',
-    bottom: -150,
-    left: 200,
+    bottom: -180, left: 160,
   },
-  orbCyan: {
+  orbAccent: {
     position: 'absolute',
-    width: 350,
-    height: 350,
-    borderRadius: 175,
-    backgroundColor: 'rgba(6,182,212,0.06)',
-    top: 100,
-    left: '40%' as any,
-  },
-  gridOverlay: {
-    position: 'absolute',
-    top: 0, left: 0, right: 0, bottom: 0,
-    opacity: 0.03,
+    width: 320, height: 320, borderRadius: 160,
+    backgroundColor: 'rgba(232,185,35,0.03)',
+    top: '40%' as any, right: 80,
   },
 
   // LEFT pane
@@ -506,25 +615,7 @@ const split = StyleSheet.create({
     paddingVertical: 48,
     justifyContent: 'space-between',
   },
-  brandRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  brandIcon: {
-    width: 42,
-    height: 42,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  brandEmoji: { fontSize: 22 },
-  brandName: {
-    color: '#f1f5f9',
-    fontSize: 17,
-    fontWeight: '700',
-    letterSpacing: -0.2,
-  },
+  brandRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
 
   headlineWrap: {
     flex: 1,
@@ -533,21 +624,20 @@ const split = StyleSheet.create({
   },
   headline: {
     color: '#ffffff',
-    fontSize: 56,
+    fontSize: 58,
     fontWeight: '800',
-    lineHeight: 66,
+    lineHeight: 68,
     letterSpacing: -2,
     marginBottom: 20,
   },
-  headlineAccent: {
-    color: '#E8B923',
-  },
+  headlineAccent: { color: '#E8B923' },
   headlineSub: {
     color: 'rgba(255,255,255,0.45)',
     fontSize: 16,
     lineHeight: 26,
   },
 
+  // Premium feature cards (match landing page style)
   featureGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap' as any,
@@ -560,58 +650,63 @@ const split = StyleSheet.create({
     overflow: 'hidden' as any,
     borderWidth: 1,
     borderColor: 'rgba(232,185,35,0.2)',
+    backgroundColor: 'rgba(8,14,30,0.6)',
   },
-  featureCardGrad: {
-    padding: 18,
-    gap: 8,
+  featureTopBar: { height: 3 },
+  featureCardInner: { padding: 16, gap: 7 },
+  featureCardIconBox: {
+    width: 34, height: 34, borderRadius: 10,
+    alignItems: 'center', justifyContent: 'center',
+    marginBottom: 2,
   },
   featureCardLabel: {
     color: 'rgba(255,255,255,0.9)',
-    fontSize: 13,
-    fontWeight: '700',
-    marginTop: 4,
+    fontSize: 13, fontWeight: '700',
   },
   featureCardSub: {
-    color: 'rgba(255,255,255,0.45)',
-    fontSize: 12,
+    color: 'rgba(255,255,255,0.42)',
+    fontSize: 11,
   },
   leftFooter: {
     color: 'rgba(232,185,35,0.4)',
-    fontSize: 12,
-    letterSpacing: 2,
+    fontSize: 12, letterSpacing: 2,
     textTransform: 'uppercase' as any,
   },
 
-  // RIGHT pane — flex: 0, fixed width, centered
+  // RIGHT pane
   rightPane: {
-    width: 440,
+    width: 460,
     justifyContent: 'center',
     paddingVertical: 40,
-    paddingRight: 48,
+    paddingRight: 52,
     paddingLeft: 8,
   },
-  cardScroll: {
-    flexGrow: 1,
-    justifyContent: 'center',
+  cardScroll: { flexGrow: 1, justifyContent: 'center' },
+
+  // Glow ring wrapping the card
+  cardGlowRing: {
+    borderRadius: 26,
+    borderWidth: 1,
+    borderColor: 'rgba(232,185,35,0.25)',
+    shadowColor: '#E8B923',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.2,
+    shadowRadius: 48,
+    elevation: 24,
   },
 
-  // The floating glass card — white on dark background
+  // White glass card
   glassCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: 24,
-    borderWidth: 1,
-    borderColor: '#E8E0D0',
     overflow: 'hidden' as any,
     shadowColor: '#E8B923',
-    shadowOffset: { width: 0, height: 24 },
-    shadowOpacity: 0.15,
-    shadowRadius: 60,
-    elevation: 30,
+    shadowOffset: { width: 0, height: 28 },
+    shadowOpacity: 0.18,
+    shadowRadius: 64,
+    elevation: 32,
   },
-  cardTopAccent: {
-    height: 4,
-    width: '100%',
-  },
+  cardTopAccent: { height: 4, width: '100%' },
   cardHeader: {
     paddingHorizontal: 32,
     paddingTop: 32,
@@ -619,23 +714,17 @@ const split = StyleSheet.create({
   },
   cardTitle: {
     color: '#1C1713',
-    fontSize: 26,
-    fontWeight: '800',
-    letterSpacing: -0.5,
-    marginBottom: 6,
+    fontSize: 26, fontWeight: '800',
+    letterSpacing: -0.5, marginBottom: 6,
   },
-  cardSubtitle: {
-    color: '#A8998A',
-    fontSize: 14,
-  },
+  cardSubtitle: { color: '#A8998A', fontSize: 14 },
   cardBody: {
     paddingHorizontal: 32,
     paddingTop: 24,
     paddingBottom: 8,
   },
   cardNote: {
-    color: '#A8998A',
-    fontSize: 11,
+    color: '#A8998A', fontSize: 11,
     textAlign: 'center',
     paddingHorizontal: 32,
     paddingBottom: 24,

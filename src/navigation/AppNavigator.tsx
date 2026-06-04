@@ -8,6 +8,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors } from '../constants/colors';
 import { supabase } from '../lib/supabase';
+import { LandingScreen } from '../screens/auth/LandingScreen';
 import { LoginScreen } from '../screens/auth/LoginScreen';
 import { RegisterScreen } from '../screens/auth/RegisterScreen';
 import { DashboardScreen } from '../screens/main/DashboardScreen';
@@ -305,7 +306,9 @@ function MobileTabs({ onLogout }: { onLogout: () => void }) {
 
 export function AppNavigator() {
   const { isAuthenticated, isLoading, logout, user } = useAuth();
-  const [authView, setAuthView] = useState<'login' | 'register'>('login');
+  const [authView, setAuthView] = useState<'landing' | 'login' | 'register'>(
+    Platform.OS === 'web' ? 'landing' : 'login'
+  );
 
   if (isLoading) {
     return (
@@ -317,6 +320,9 @@ export function AppNavigator() {
   }
 
   if (!isAuthenticated) {
+    if (authView === 'landing') {
+      return <LandingScreen onGetStarted={() => setAuthView('login')} />;
+    }
     if (authView === 'login') {
       return <LoginScreen onLoginSuccess={() => {}} onNavigateRegister={() => setAuthView('register')} />;
     }
