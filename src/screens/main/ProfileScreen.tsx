@@ -25,6 +25,7 @@ import { Colors } from '../../constants/colors';
 import { Button } from '../../components/Button';
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../lib/supabase';
+import { getDocumentsByEmail, FOLDER_TABLES } from '../../db/documents';
 
 const BIOMETRIC_KEY = 'biometric_enabled';
 const BIOMETRIC_EMAIL_KEY = 'biometric_email';
@@ -328,7 +329,7 @@ function InfoRow({
 
 // ── main screen ───────────────────────────────────────────────────────────────
 
-interface Stats { total: number; viewed: number; }
+interface Stats { total: number; viewed: number; pending: number; }
 interface ProfileData {
   full_name: string;
   email: string;
@@ -345,7 +346,7 @@ export function ProfileScreen({ onLogout }: Props) {
   const { user, logout } = useAuth();
 
   const [profile, setProfile] = useState<ProfileData | null>(null);
-  const [stats, setStats] = useState<Stats>({ total: 0, viewed: 0 });
+  const [stats, setStats] = useState<Stats>({ total: 0, viewed: 0, pending: 0 });
   const [loading, setLoading] = useState(true);
   const [avatarUploading, setAvatarUploading] = useState(false);
 
@@ -366,26 +367,49 @@ export function ProfileScreen({ onLogout }: Props) {
     if (!user?.id) return;
     setLoading(true);
 
-    const [profileRes, docsRes] = await Promise.all([
-      supabase
-        .from('profiles')
-        .select('full_name, email, client_id, plan, created_at, avatar_url')
-        .eq('id', user.id)
-        .single(),
-      supabase.from('documents').select('status').eq('email', user.email),
-    ]);
+    const isAdminOrStaff = user.role === 'admin' || user.role === 'staff';
 
-    if (profileRes.data) setProfile(profileRes.data);
+    if (isAdminOrStaff) {
+      const [profileRes, ...tableResults] = await Promise.all([
+        supabase
+          .from('profiles')
+          .select('full_name, email, client_id, plan, created_at, avatar_url')
+          .eq('id', user.id)
+          .single(),
+        ...FOLDER_TABLES.map(t =>
+          supabase.from(t).select('id, status, approval_status')
+        ),
+      ]);
 
-    if (docsRes.data) {
-      const docs = docsRes.data;
+      if (profileRes.data) setProfile(profileRes.data);
+
+      const allDocs = tableResults.flatMap(r => r.data ?? []);
       setStats({
-        total: docs.length,
-        viewed: docs.filter(d => d.status === 'viewed').length,
+        total:   allDocs.length,
+        viewed:  allDocs.filter((d: any) => d.status === 'viewed').length,
+        pending: allDocs.filter((d: any) => (d.approval_status ?? 'approved') === 'pending').length,
+      });
+    } else {
+      const [profileRes, docs] = await Promise.all([
+        supabase
+          .from('profiles')
+          .select('full_name, email, client_id, plan, created_at, avatar_url')
+          .eq('id', user.id)
+          .single(),
+        getDocumentsByEmail(user.email ?? ''),
+      ]);
+
+      if (profileRes.data) setProfile(profileRes.data);
+
+      setStats({
+        total:   docs.length,
+        viewed:  docs.filter(d => d.status === 'viewed').length,
+        pending: docs.filter(d => (d.approval_status ?? 'approved') === 'pending').length,
       });
     }
+
     setLoading(false);
-  }, [user?.id]);
+  }, [user?.id, user?.role]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -536,6 +560,11 @@ export function ProfileScreen({ onLogout }: Props) {
             { paddingTop: Platform.OS === 'web' ? 28 : insets.top + 28 },
           ]}
         >
+          {/* Subtle overlay */}
+          <View style={styles.headerOverlay} pointerEvents="none" />
+          {/* Decorative circles */}
+          <View style={styles.decorCircle1} pointerEvents="none" />
+          <View style={styles.decorCircle2} pointerEvents="none" />
           {/* Avatar */}
           <TouchableOpacity
             style={styles.avatarWrapper}
@@ -609,7 +638,7 @@ export function ProfileScreen({ onLogout }: Props) {
                   <Ionicons name="time-outline" size={20} color={Colors.accentGold} />
                 </View>
                 <Text style={[styles.statValue, { color: Colors.accentGold }]}>
-                  {stats.total - stats.viewed}
+                  {stats.pending}
                 </Text>
                 <Text style={styles.statLabel}>Pending</Text>
               </View>
@@ -836,7 +865,31 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 24,
     paddingBottom: 32,
+    overflow: 'hidden',
+    position: 'relative',
   },
+  headerOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    opacity: 0.04,
+  },
+  decorCircle1: {
+    position: 'absolute',
+    width: 200,
+    height: 200,
+    borderRadius: 100,
+    backgroundColor: 'rgba(232,185,35,0.06)',
+    top: -60,
+    right: -40,
+  } as any,
+  decorCircle2: {
+    position: 'absolute',
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: 'rgba(232,185,35,0.05)',
+    bottom: -30,
+    left: 60,
+  } as any,
   avatarWrapper: {
     position: 'relative',
     marginBottom: 16,

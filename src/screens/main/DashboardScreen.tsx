@@ -103,7 +103,7 @@ const activityLabel: Record<string, string> = {
 // ── OverviewCard ──────────────────────────────────────────────────────────────
 
 function OverviewCard({
-  emoji,
+  icon,
   label,
   value,
   subtitle,
@@ -111,7 +111,7 @@ function OverviewCard({
   delay,
   loading,
 }: {
-  emoji: string;
+  icon: keyof typeof Ionicons.glyphMap;
   label: string;
   value: number;
   subtitle: string;
@@ -130,8 +130,14 @@ function OverviewCard({
   }, []);
 
   return (
-    <Animated.View style={[overviewCardStyles.card, { opacity, transform: [{ translateY }], borderLeftColor: accentColor }]}>
-      <Text style={overviewCardStyles.emoji}>{emoji}</Text>
+    <Animated.View style={[overviewCardStyles.card, { opacity, transform: [{ translateY }], borderTopColor: accentColor }]}>
+      <LinearGradient
+        colors={[accentColor + '22', accentColor + '08']}
+        start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+        style={overviewCardStyles.iconWrap}
+      >
+        <Ionicons name={icon} size={20} color={accentColor} />
+      </LinearGradient>
       {loading ? (
         <ActivityIndicator color={accentColor} style={{ marginVertical: 8 }} />
       ) : (
@@ -147,19 +153,24 @@ const overviewCardStyles = StyleSheet.create({
   card: {
     flex: 1,
     backgroundColor: Colors.bgCard,
-    borderRadius: 16,
-    padding: 12,
-    borderLeftWidth: 3,
+    borderRadius: 18,
+    padding: 14,
+    borderTopWidth: 3,
     shadowColor: '#3A3131',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 2,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 3,
+    gap: 4,
   },
-  emoji: { fontSize: 18, marginBottom: 6 },
-  value: { fontSize: 26, fontWeight: '800', letterSpacing: -0.5, lineHeight: 30 },
-  label: { color: Colors.textPrimary, fontSize: 11, fontWeight: '600', marginTop: 3 },
-  subtitle: { color: Colors.textMuted, fontSize: 10, marginTop: 2 },
+  iconWrap: {
+    width: 42, height: 42, borderRadius: 13,
+    alignItems: 'center', justifyContent: 'center',
+    marginBottom: 6,
+  },
+  value: { fontSize: 28, fontWeight: '800', letterSpacing: -0.5, lineHeight: 32 },
+  label: { color: Colors.textPrimary, fontSize: 11, fontWeight: '700', marginTop: 2 },
+  subtitle: { color: Colors.textMuted, fontSize: 10, marginTop: 1 },
 });
 
 // ── MiniChart ─────────────────────────────────────────────────────────────────
@@ -370,6 +381,9 @@ export function DashboardScreen() {
           end={{ x: 1, y: 1 }}
           style={[styles.hero, { paddingTop: headerPaddingTop }]}
         >
+          <View style={styles.headerOverlay} pointerEvents="none" />
+          <View style={styles.decorCircle1} pointerEvents="none" />
+          <View style={styles.decorCircle2} pointerEvents="none" />
           <Animated.View style={{ opacity: headerOpacity, transform: [{ translateY: headerY }] }}>
             <View style={styles.heroTop}>
               <View style={styles.heroGreetingBlock}>
@@ -402,7 +416,7 @@ export function DashboardScreen() {
           <Text style={styles.sectionTitle}>Overview</Text>
           <View style={{ flexDirection: 'row', gap: 8 }}>
             <OverviewCard
-              emoji="📄"
+              icon="documents-outline"
               label="Total Docs"
               value={stats.total}
               subtitle="all time"
@@ -411,7 +425,7 @@ export function DashboardScreen() {
               loading={loading}
             />
             <OverviewCard
-              emoji="👁"
+              icon="eye-outline"
               label="Viewed"
               value={stats.viewed}
               subtitle="reviewed"
@@ -420,7 +434,7 @@ export function DashboardScreen() {
               loading={loading}
             />
             <OverviewCard
-              emoji="🔔"
+              icon="notifications-outline"
               label="New"
               value={stats.newThisWeek}
               subtitle="this week"
@@ -534,7 +548,12 @@ const styles = StyleSheet.create({
   hero: {
     paddingHorizontal: 20,
     paddingBottom: 28,
+    overflow: 'hidden',
+    position: 'relative',
   },
+  headerOverlay: { ...StyleSheet.absoluteFillObject, opacity: 0.04 },
+  decorCircle1: { position: 'absolute', width: 200, height: 200, borderRadius: 100, backgroundColor: 'rgba(232,185,35,0.06)', top: -60, right: -40 } as any,
+  decorCircle2: { position: 'absolute', width: 120, height: 120, borderRadius: 60, backgroundColor: 'rgba(232,185,35,0.05)', bottom: -30, left: 60 } as any,
   heroTop: {
     flexDirection: 'row',
     justifyContent: 'space-between',

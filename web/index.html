@@ -1,52 +1,180 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" dir="ltr">
   <head>
     <meta charset="utf-8" />
-    <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no, viewport-fit=cover" />
 
+    <!-- ── Primary ── -->
     <title>Finance Therapy Group</title>
-    <meta name="description" content="Your secure document portal" />
+    <meta name="description" content="Your secure document portal — upload, manage and track your financial documents." />
+    <meta name="keywords"    content="finance, documents, portal, tax, bookkeeping, FTG" />
+    <meta name="author"      content="Finance Therapy Group" />
+    <meta name="robots"      content="noindex, nofollow" />
 
-    <!-- PWA manifest -->
+    <!-- ── PWA manifest ── -->
     <link rel="manifest" href="/manifest.json" />
 
-    <!-- iOS PWA support -->
-    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <!-- ── Theme colors ── -->
+    <meta name="theme-color" content="#E8B923" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#3A3131" media="(prefers-color-scheme: dark)" />
+    <meta name="msapplication-TileColor"  content="#3A3131" />
+    <meta name="msapplication-TileImage"  content="/icon-192.png" />
+    <meta name="msapplication-config"     content="none" />
+
+    <!-- ── iOS PWA ── -->
+    <meta name="apple-mobile-web-app-capable"          content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="apple-mobile-web-app-title" content="FTG" />
-    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-    <link rel="apple-touch-icon" sizes="152x152" href="/apple-touch-icon-152.png" />
-    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon-180.png" />
+    <meta name="apple-mobile-web-app-title"            content="FTG" />
+    <meta name="format-detection" content="telephone=no" />
 
-    <!-- Theme / status bar color -->
-    <meta name="theme-color" content="#0f172a" />
-    <meta name="msapplication-TileColor" content="#0f172a" />
+    <!-- Apple touch icons -->
+    <link rel="apple-touch-icon"                  href="/apple-touch-icon.png" />
+    <link rel="apple-touch-icon" sizes="152x152"  href="/apple-touch-icon-152.png" />
+    <link rel="apple-touch-icon" sizes="180x180"  href="/apple-touch-icon-180.png" />
 
-    <!-- Favicon -->
-    <link rel="icon" href="/favicon.ico" />
+    <!-- Apple splash screens (portrait) -->
+    <link rel="apple-touch-startup-image"
+      media="screen and (device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3)"
+      href="/apple-touch-icon-180.png" />
+    <link rel="apple-touch-startup-image"
+      media="screen and (device-width: 375px) and (device-height: 812px) and (-webkit-device-pixel-ratio: 3)"
+      href="/apple-touch-icon-180.png" />
+    <link rel="apple-touch-startup-image"
+      media="screen and (device-width: 428px) and (device-height: 926px) and (-webkit-device-pixel-ratio: 3)"
+      href="/apple-touch-icon-180.png" />
 
-    <!-- react-native-web style reset -->
+    <!-- ── Android / Chrome ── -->
+    <meta name="mobile-web-app-capable" content="yes" />
+    <link rel="shortcut icon" href="/favicon.ico" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />
+    <link rel="icon" type="image/png" sizes="512x512" href="/icon-512.png" />
+
+    <!-- ── Open Graph ── -->
+    <meta property="og:type"        content="website" />
+    <meta property="og:url"         content="https://taxnitro.netlify.app/" />
+    <meta property="og:title"       content="Finance Therapy Group" />
+    <meta property="og:description" content="Your secure document portal — upload, manage and track your financial documents." />
+    <meta property="og:image"       content="/icon-512.png" />
+    <meta property="og:image:width"  content="512" />
+    <meta property="og:image:height" content="512" />
+    <meta property="og:locale"      content="en_US" />
+    <meta property="og:site_name"   content="Finance Therapy Group" />
+
+    <!-- ── Twitter Card ── -->
+    <meta name="twitter:card"        content="summary" />
+    <meta name="twitter:title"       content="Finance Therapy Group" />
+    <meta name="twitter:description" content="Your secure document portal." />
+    <meta name="twitter:image"       content="/icon-512.png" />
+
+    <!-- ── Style reset ── -->
     <style id="expo-reset">
-      html, body { height: 100%; margin: 0; padding: 0; background-color: #020617; }
-      body { overflow: hidden; background-color: #020617; }
-      #root { display: flex; height: 100%; flex: 1; background-color: #020617; }
+      *, *::before, *::after { -webkit-tap-highlight-color: transparent; }
+      html {
+        height: 100%;
+        background-color: #020817;
+        overscroll-behavior: none;
+      }
+      body {
+        height: 100%;
+        margin: 0;
+        padding: 0;
+        background-color: #020817;
+        -webkit-text-size-adjust: 100%;
+        overscroll-behavior: none;
+        overflow: hidden;
+      }
+      #root {
+        display: flex;
+        height: 100%;
+        flex: 1;
+        background-color: #020817;
+      }
+      /* Hide scrollbars on web */
+      ::-webkit-scrollbar { width: 0; height: 0; }
     </style>
   </head>
 
   <body>
-    <noscript>You need to enable JavaScript to run this app.</noscript>
+    <noscript>
+      <div style="font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;background:#3A3131;color:#fff;text-align:center;padding:24px">
+        <div>
+          <div style="font-size:48px;font-weight:900;color:#E8B923;margin-bottom:16px">FTG</div>
+          <p>JavaScript is required to run Finance Therapy Group. Please enable it in your browser settings.</p>
+        </div>
+      </div>
+    </noscript>
+
     <div id="root"></div>
 
-    <!-- Service worker registration -->
+    <!-- ── PWA Install + Service Worker ── -->
     <script>
-      if ('serviceWorker' in navigator) {
-        window.addEventListener('load', function () {
-          navigator.serviceWorker.register('/sw.js').catch(function (err) {
-            console.warn('SW registration failed:', err);
-          });
+      (function () {
+        // ── Install prompt ──────────────────────────────────────────────────
+        var deferredPrompt = null;
+
+        window.addEventListener('beforeinstallprompt', function (e) {
+          e.preventDefault();
+          deferredPrompt = e;
+          // Expose globally so the React app can trigger it
+          window.__pwaInstallPrompt = function () {
+            if (!deferredPrompt) return Promise.resolve(false);
+            deferredPrompt.prompt();
+            return deferredPrompt.userChoice.then(function (result) {
+              deferredPrompt = null;
+              window.__pwaInstallPrompt = null;
+              return result.outcome === 'accepted';
+            });
+          };
+          // Dispatch event so React components can listen
+          window.dispatchEvent(new CustomEvent('pwaInstallAvailable'));
         });
-      }
+
+        window.addEventListener('appinstalled', function () {
+          deferredPrompt = null;
+          window.__pwaInstallPrompt = null;
+          window.dispatchEvent(new CustomEvent('pwaInstalled'));
+        });
+
+        // ── Service Worker ──────────────────────────────────────────────────
+        if ('serviceWorker' in navigator) {
+          window.addEventListener('load', function () {
+            navigator.serviceWorker.register('/sw.js', { scope: '/' })
+              .then(function (reg) {
+                // Check for updates every 60 seconds while app is open
+                setInterval(function () { reg.update(); }, 60000);
+
+                reg.addEventListener('updatefound', function () {
+                  var newWorker = reg.installing;
+                  if (!newWorker) return;
+
+                  newWorker.addEventListener('statechange', function () {
+                    if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                      // New version available — notify the React app
+                      window.dispatchEvent(new CustomEvent('pwaUpdateAvailable', {
+                        detail: { worker: newWorker }
+                      }));
+                    }
+                  });
+                });
+              })
+              .catch(function (err) {
+                console.warn('[SW] Registration failed:', err);
+              });
+
+            // Allow React app to activate new SW immediately
+            window.__pwaSkipWaiting = function (worker) {
+              if (worker) worker.postMessage({ type: 'SKIP_WAITING' });
+            };
+          });
+
+          // Reload once new SW takes control
+          var refreshing = false;
+          navigator.serviceWorker.addEventListener('controllerchange', function () {
+            if (!refreshing) { refreshing = true; window.location.reload(); }
+          });
+        }
+      })();
     </script>
   </body>
 </html>

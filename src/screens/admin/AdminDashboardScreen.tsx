@@ -169,25 +169,22 @@ export function AdminDashboardScreen({ onViewAllDocuments }: { onViewAllDocument
       label: 'Total Clients',
       value: stats.totalClients,
       sub:   '↑ 20% this month',
-      icon:  'people'    as const,
+      icon:  'people-outline'          as const,
       color: '#E8B923',
-      borderColor: '#E8B923',
     },
     {
       label: 'Staff Members',
       value: stats.totalStaff,
       sub:   '↑ 10% this month',
-      icon:  'shield'    as const,
+      icon:  'shield-checkmark-outline' as const,
       color: '#B5905B',
-      borderColor: '#B5905B',
     },
     {
       label: 'Total Docs',
       value: stats.totalDocs,
       sub:   '↑ 15% this month',
-      icon:  'documents' as const,
+      icon:  'documents-outline'        as const,
       color: '#2C2320',
-      borderColor: '#2C2320',
     },
   ];
 
@@ -266,8 +263,14 @@ export function AdminDashboardScreen({ onViewAllDocuments }: { onViewAllDocument
           {/* ── 3 stat cards — fixed row, no scroll ── */}
           <View style={{ flexDirection: 'row', gap: 8 }}>
             {overviewCards.map((card) => (
-              <View key={card.label} style={s.statCard}>
-                <View style={[s.statTopBar, { backgroundColor: card.color }]} />
+              <View key={card.label} style={[s.statCard, { borderTopColor: card.color }]}>
+                <LinearGradient
+                  colors={[card.color + '22', card.color + '08']}
+                  start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+                  style={s.statIconWrap}
+                >
+                  <Ionicons name={card.icon} size={20} color={card.color} />
+                </LinearGradient>
                 <View style={s.statCardInner}>
                   <Text style={[s.statValue, { color: card.color }]}>{card.value}</Text>
                   <Text style={s.statLabel} numberOfLines={2}>{card.label}</Text>
@@ -636,33 +639,35 @@ const s = StyleSheet.create({
   statCard: {
     flex: 1,
     backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    overflow: 'hidden',
-    borderWidth: 1,
+    borderRadius: 18,
+    borderTopWidth: 3,
     borderColor: '#E8E0D0',
+    borderWidth: 1,
     shadowColor: '#3A3131',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 2,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 3,
+    padding: 12,
+    gap: 4,
   },
-  statTopBar: {
-    height: 3,
-    width: '100%',
+  statIconWrap: {
+    width: 42, height: 42, borderRadius: 13,
+    alignItems: 'center', justifyContent: 'center',
+    marginBottom: 4,
   },
   statCardInner: {
-    padding: 10,
     gap: 2,
   },
   statValue: {
-    fontSize: 24,
+    fontSize: 26,
     fontWeight: '800',
     letterSpacing: -0.5,
   },
   statLabel: {
     color: '#6B5E52',
     fontSize: 11,
-    fontWeight: '500',
+    fontWeight: '700',
     lineHeight: 14,
   },
   statSub: {

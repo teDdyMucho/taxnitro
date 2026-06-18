@@ -111,10 +111,18 @@ export function UploadScreen() {
 
   return (
     <View style={styles.root}>
-      <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
+      <LinearGradient
+        colors={['#3A3131', '#4A3E3E', '#3A3131']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={[styles.header, { paddingTop: insets.top + 12 }]}
+      >
+        <View style={styles.headerOverlay} pointerEvents="none" />
+        <View style={styles.decorCircle1} pointerEvents="none" />
+        <View style={styles.decorCircle2} pointerEvents="none" />
         <Text style={styles.headerTitle}>Upload Document</Text>
         <Text style={styles.headerSubtitle}>Add files to your document portal</Text>
-      </View>
+      </LinearGradient>
 
       <ScrollView
         contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 90 }]}
@@ -263,9 +271,12 @@ export function UploadScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: Colors.bgDeep },
-  header: { backgroundColor: Colors.bgDark, paddingHorizontal: 20, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: Colors.border },
-  headerTitle: { color: Colors.textPrimary, fontSize: 22, fontWeight: '700' },
-  headerSubtitle: { color: Colors.textMuted, fontSize: 13, marginTop: 3 },
+  header: { paddingHorizontal: 20, paddingBottom: 16, overflow: 'hidden', position: 'relative' },
+  headerOverlay: { ...StyleSheet.absoluteFillObject, opacity: 0.04 },
+  decorCircle1: { position: 'absolute', width: 200, height: 200, borderRadius: 100, backgroundColor: 'rgba(232,185,35,0.06)', top: -60, right: -40 } as any,
+  decorCircle2: { position: 'absolute', width: 120, height: 120, borderRadius: 60, backgroundColor: 'rgba(232,185,35,0.05)', bottom: -30, left: 60 } as any,
+  headerTitle: { color: '#FFFFFF', fontSize: 22, fontWeight: '700' },
+  headerSubtitle: { color: 'rgba(255,255,255,0.5)', fontSize: 13, marginTop: 3 },
   content: { padding: 16, gap: 16 },
   dropZone: { borderRadius: 20, overflow: 'hidden', borderWidth: 2, borderColor: 'rgba(37,99,235,0.3)', borderStyle: 'dashed' },
   dropZoneGradient: { padding: 40, alignItems: 'center' },

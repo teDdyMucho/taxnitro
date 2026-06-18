@@ -246,7 +246,10 @@ export function ClientDocumentsScreen({ client, onBack }: Props) {
   return (
     <View style={[s.root, { paddingTop: insets.top }]}>
       {/* Header */}
-      <LinearGradient colors={['#111827', '#111827']} style={s.header}>
+      <LinearGradient colors={['#3A3131', '#4A3E3E', '#3A3131']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={s.header}>
+        <View style={s.headerOverlay} pointerEvents="none" />
+        <View style={s.decorCircle1} pointerEvents="none" />
+        <View style={s.decorCircle2} pointerEvents="none" />
         <TouchableOpacity style={s.backBtn} onPress={onBack}>
           <Ionicons name="arrow-back" size={20} color={Colors.textPrimary} />
         </TouchableOpacity>
@@ -297,12 +300,17 @@ export function ClientDocumentsScreen({ client, onBack }: Props) {
 
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: Colors.bgDeep },
+  headerOverlay: { ...StyleSheet.absoluteFillObject, opacity: 0.04 },
+  decorCircle1: { position: 'absolute', width: 200, height: 200, borderRadius: 100, backgroundColor: 'rgba(232,185,35,0.06)', top: -60, right: -40 } as any,
+  decorCircle2: { position: 'absolute', width: 120, height: 120, borderRadius: 60, backgroundColor: 'rgba(232,185,35,0.05)', bottom: -30, left: 60 } as any,
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 16,
     gap: 12,
+    overflow: 'hidden',
+    position: 'relative',
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
   },

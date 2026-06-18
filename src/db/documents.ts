@@ -1,7 +1,8 @@
 import { Platform } from 'react-native';
 import { supabase } from '../lib/supabase';
 
-export type DocumentStatus = 'new' | 'viewed' | 'not_viewed';
+export type DocumentStatus   = 'new' | 'viewed' | 'not_viewed';
+export type ApprovalStatus   = 'pending' | 'approved' | 'rejected';
 
 export interface Document {
   id: string;
@@ -12,6 +13,10 @@ export interface Document {
   document_type: string | null;
   email: string | null;
   status: DocumentStatus;
+  approval_status: ApprovalStatus;
+  approval_note: string | null;
+  approved_by: string | null;
+  approved_at: string | null;
   created_at: string;
   updated_at?: string;
 }
@@ -33,7 +38,6 @@ export type FolderTable = typeof FOLDER_TABLES[number];
 // ── Fetch from all 8 tables and merge ────────────────────────────────────────
 
 export async function getDocumentsByEmail(email: string): Promise<Document[]> {
-  // allSettled: even if some tables are slow or missing, we still get data from the rest
   const settled = await Promise.allSettled(
     FOLDER_TABLES.map(async (table) => {
       const { data, error } = await supabase
@@ -43,7 +47,12 @@ export async function getDocumentsByEmail(email: string): Promise<Document[]> {
         .order('created_at', { ascending: false });
 
       if (error) { console.error(`getDocumentsByEmail [${table}]:`, error.message); return [] as Document[]; }
-      return (data ?? []).map(d => ({ ...d, document_type: table } as Document));
+      return (data ?? []).map(d => ({
+        ...d,
+        document_type: table,
+        approval_status: d.approval_status ?? 'approved', // default for pre-migration rows
+        approval_note: d.approval_note ?? null,
+      } as Document));
     })
   );
 
@@ -55,12 +64,15 @@ export async function getDocumentsByEmail(email: string): Promise<Document[]> {
   const legacyDocs: Document[] = [];
   if (legacySettled[0].status === 'fulfilled') {
     const { data } = legacySettled[0].value;
-    (data ?? []).forEach(d => legacyDocs.push(d as Document));
+    (data ?? []).forEach(d => legacyDocs.push({
+      ...d,
+      approval_status: 'approved',
+      approval_note: null,
+    } as Document));
   }
 
   const newDocs = settled.flatMap(r => r.status === 'fulfilled' ? r.value : []);
 
-  // Merge: prefer new-table records, deduplicate by id
   const seen = new Set<string>();
   const merged: Document[] = [];
   for (const d of [...newDocs, ...legacyDocs]) {
@@ -80,14 +92,42 @@ export async function getAllDocuments(): Promise<Document[]> {
         .select('*')
         .order('created_at', { ascending: false });
       if (error) { console.error(`getAllDocuments [${table}]:`, error.message); return [] as Document[]; }
-      return (data ?? []).map(d => ({ ...d, document_type: table } as Document));
+      return (data ?? []).map(d => ({
+        ...d,
+        document_type: table,
+        approval_status: d.approval_status ?? 'approved',
+        approval_note: d.approval_note ?? null,
+      } as Document));
     })
   );
   const docs = settled.flatMap(r => r.status === 'fulfilled' ? r.value : []);
   return docs.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 }
 
-// ── Update status in the correct table ───────────────────────────────────────
+// ── Fetch only PENDING documents across all tables (admin only) ──────────────
+
+export async function getPendingDocuments(): Promise<Document[]> {
+  const settled = await Promise.allSettled(
+    FOLDER_TABLES.map(async (table) => {
+      const { data, error } = await supabase
+        .from(table)
+        .select('*')
+        .eq('approval_status', 'pending')
+        .order('created_at', { ascending: false });
+      if (error) { console.error(`getPendingDocuments [${table}]:`, error.message); return [] as Document[]; }
+      return (data ?? []).map(d => ({
+        ...d,
+        document_type: table,
+        approval_status: 'pending' as ApprovalStatus,
+        approval_note: d.approval_note ?? null,
+      } as Document));
+    })
+  );
+  const docs = settled.flatMap(r => r.status === 'fulfilled' ? r.value : []);
+  return docs.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+}
+
+// ── Update view status in the correct table ───────────────────────────────────
 
 export async function updateDocumentStatus(
   documentId: string,
@@ -100,6 +140,40 @@ export async function updateDocumentStatus(
     .eq('id', documentId);
 
   if (error) { console.error(`updateDocumentStatus [${table}]:`, error.message); return false; }
+  return true;
+}
+
+// ── Approve a document (via RPC to bypass RLS) ───────────────────────────────
+
+export async function approveDocument(
+  documentId: string,
+  table: string,
+  approvedBy: string,
+): Promise<boolean> {
+  const { error } = await supabase.rpc('approve_document', {
+    p_table:       table,
+    p_doc_id:      documentId,
+    p_approved_by: approvedBy,
+  });
+  if (error) { console.error('approveDocument:', error.message); return false; }
+  return true;
+}
+
+// ── Reject a document (via RPC to bypass RLS) ────────────────────────────────
+
+export async function rejectDocument(
+  documentId: string,
+  table: string,
+  rejectedBy: string,
+  note?: string,
+): Promise<boolean> {
+  const { error } = await supabase.rpc('reject_document', {
+    p_table:        table,
+    p_doc_id:       documentId,
+    p_rejected_by:  rejectedBy,
+    p_note:         note ?? null,
+  });
+  if (error) { console.error('rejectDocument:', error.message); return false; }
   return true;
 }
 
@@ -163,14 +237,14 @@ export async function renameDocument(documentId: string, newName: string, table:
   return true;
 }
 
-// ── Insert into the correct folder table ─────────────────────────────────────
+// ── Insert into the correct folder table (starts as 'pending') ───────────────
 
 export async function createDocumentRecord(params: {
   userId: string;
   email: string;
   name: string;
   documentUrl: string;
-  documentType: string;   // used as the table name
+  documentType: string;
 }): Promise<Document | null> {
   const { data, error } = await supabase
     .from(params.documentType)
@@ -181,11 +255,16 @@ export async function createDocumentRecord(params: {
       file_name: params.name,
       document_url: params.documentUrl,
       status: 'new',
+      approval_status: 'pending',
     })
     .select()
     .single();
 
   if (error) { console.error(`createDocumentRecord [${params.documentType}]:`, error.message); return null; }
-  // Re-attach document_type since individual tables don't store it as a column
-  return { ...data, document_type: params.documentType } as Document;
+  return {
+    ...data,
+    document_type: params.documentType,
+    approval_status: 'pending',
+    approval_note: null,
+  } as Document;
 }

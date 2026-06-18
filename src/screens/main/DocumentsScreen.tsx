@@ -23,6 +23,7 @@ import * as WebBrowser from 'expo-web-browser';
 import WebView from 'react-native-webview';
 import { Colors } from '../../constants/colors';
 import { StatusBadge } from '../../components/StatusBadge';
+import { FileConversationPanel } from '../../components/FileConversationPanel';
 import { useAuth } from '../../context/AuthContext';
 import {
   getDocumentsByEmail,
@@ -124,6 +125,9 @@ function RootView({ documents, loading, refreshing, onRefresh, onSelect, pb, pt 
         end={{ x: 1, y: 1 }}
         style={[s.pageHeader, { paddingTop: pt }]}
       >
+        <View style={s.headerOverlay} pointerEvents="none" />
+        <View style={s.decorCircle1} pointerEvents="none" />
+        <View style={s.decorCircle2} pointerEvents="none" />
         <View style={{ flex: 1 }}>
           <Text style={s.pageTitle}>Documents</Text>
           <Text style={s.pageSub}>
@@ -431,20 +435,55 @@ function EmptyDocs({ sf, onUpload }: { sf: SubFolder; onUpload: () => void }) {
   );
 }
 
+// ── Approval status badge ─────────────────────────────────────────────────────
+
+function ApprovalBadge({ status }: { status: string }) {
+  if (status === 'approved') return null;
+  const isPending  = status === 'pending';
+  const bg         = isPending ? '#FEF3C7' : '#FEF2F2';
+  const textColor  = isPending ? '#92400E' : '#991B1B';
+  const icon: any  = isPending ? 'time-outline' : 'close-circle-outline';
+  const label      = isPending ? 'Pending Approval' : 'Rejected';
+
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: bg, borderRadius: 10, paddingHorizontal: 7, paddingVertical: 3, alignSelf: 'flex-start', marginTop: 4 }}>
+      <Ionicons name={icon} size={10} color={textColor} />
+      <Text style={{ color: textColor, fontSize: 9, fontWeight: '700', letterSpacing: 0.2 }}>{label}</Text>
+    </View>
+  );
+}
+
 // ── Doc card ──────────────────────────────────────────────────────────────────
 
 function DocCard({ doc, sf, onPress }: { doc: Document; sf: SubFolder; onPress: () => void }) {
-  const isNew = doc.status !== 'viewed';
-  const ext   = (displayName(doc).split('.').pop() ?? '').toUpperCase().slice(0, 4);
+  const isNew      = doc.status !== 'viewed';
+  const isPending  = (doc.approval_status ?? 'approved') === 'pending';
+  const isRejected = (doc.approval_status ?? 'approved') === 'rejected';
+  const ext        = (displayName(doc).split('.').pop() ?? '').toUpperCase().slice(0, 4);
 
   return (
-    <TouchableOpacity style={[s.docCard, isNew && s.docCardNew]} onPress={onPress} activeOpacity={0.78}>
-      {isNew && <View style={[s.newAccent, { backgroundColor: sf.color }]} />}
+    <TouchableOpacity
+      style={[
+        s.docCard,
+        isNew && !isPending && !isRejected && s.docCardNew,
+        isPending  && s.docCardPending,
+        isRejected && s.docCardRejected,
+      ]}
+      onPress={onPress}
+      activeOpacity={0.78}
+    >
+      {isPending  && <View style={[s.newAccent, { backgroundColor: '#F59E0B' }]} />}
+      {isRejected && <View style={[s.newAccent, { backgroundColor: '#EF4444' }]} />}
+      {isNew && !isPending && !isRejected && <View style={[s.newAccent, { backgroundColor: sf.color }]} />}
 
       {/* File type badge */}
-      <View style={[s.extBox, { backgroundColor: sf.bg }]}>
-        <Ionicons name="document-text" size={20} color={sf.color} />
-        {!!ext && <Text style={[s.extText, { color: sf.color }]}>{ext}</Text>}
+      <View style={[s.extBox, { backgroundColor: isPending ? '#FEF3C7' : isRejected ? '#FEF2F2' : sf.bg }]}>
+        <Ionicons
+          name={isPending ? 'time-outline' : isRejected ? 'close-circle-outline' : 'document-text'}
+          size={20}
+          color={isPending ? '#F59E0B' : isRejected ? '#EF4444' : sf.color}
+        />
+        {!!ext && <Text style={[s.extText, { color: isPending ? '#F59E0B' : isRejected ? '#EF4444' : sf.color }]}>{ext}</Text>}
       </View>
 
       <View style={s.docCardBody}>
@@ -453,10 +492,16 @@ function DocCard({ doc, sf, onPress }: { doc: Document; sf: SubFolder; onPress: 
           <Ionicons name="calendar-outline" size={11} color={Colors.textMuted} />
           <Text style={s.docCardMetaText}>{fmtDate(doc.created_at)}</Text>
         </View>
+        <ApprovalBadge status={doc.approval_status ?? 'approved'} />
+        {isRejected && !!doc.approval_note && (
+          <Text style={{ color: '#EF4444', fontSize: 10, marginTop: 2, fontStyle: 'italic' }} numberOfLines={1}>
+            {doc.approval_note}
+          </Text>
+        )}
       </View>
 
       <View style={s.docCardRight}>
-        <StatusBadge status={doc.status} size="sm" />
+        {!isPending && !isRejected && <StatusBadge status={doc.status} size="sm" />}
         <Ionicons name="chevron-forward" size={15} color={Colors.textMuted} style={{ marginTop: 4 }} />
       </View>
     </TouchableOpacity>
@@ -572,10 +617,14 @@ function UploadModal({ visible, sf, root, userId, userEmail, onClose, onUploaded
           {done && (
             <View style={up.doneWrap}>
               <View style={up.doneCircle}>
-                <Ionicons name="checkmark-circle" size={72} color={Colors.viewed} />
+                <Ionicons name="time-outline" size={72} color="#F59E0B" />
               </View>
-              <Text style={up.doneTitle}>Uploaded!</Text>
-              <Text style={up.doneSub}>"{picked?.name}" was added to {sf.label}</Text>
+              <Text style={up.doneTitle}>Sent for Review</Text>
+              <Text style={up.doneSub}>"{picked?.name}" is pending admin approval before it appears in {sf.label}</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#FEF3C7', borderRadius: 14, paddingHorizontal: 14, paddingVertical: 8, marginTop: 8 }}>
+                <Ionicons name="shield-checkmark-outline" size={14} color="#92400E" />
+                <Text style={{ color: '#92400E', fontSize: 12, fontWeight: '600' }}>Admin will review shortly</Text>
+              </View>
             </View>
           )}
 
@@ -765,15 +814,17 @@ function RenameModal({ visible, current, onConfirm, onCancel }: {
 
 // ── Document detail — metadata page ──────────────────────────────────────────
 
-function DocDetailPage({ doc, sf, root, onClose, onMarkViewed, onDelete, onRename }: {
+function DocDetailPage({ doc, sf, root, fileOwnerId, onClose, onMarkViewed, onDelete, onRename }: {
   doc: Document; sf: SubFolder; root: RootFolder;
+  fileOwnerId: string;
   onClose: () => void; onMarkViewed: () => void;
   onDelete: () => void; onRename: (newName: string) => void;
 }) {
   const insets = useSafeAreaInsets();
-  const [viewerOpen, setViewerOpen] = useState(false);
-  const [renameOpen, setRenameOpen] = useState(false);
-  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [viewerOpen, setViewerOpen]           = useState(false);
+  const [renameOpen, setRenameOpen]           = useState(false);
+  const [deleteOpen, setDeleteOpen]           = useState(false);
+  const [conversationOpen, setConversationOpen] = useState(false);
 
   const hasValidUrl = !!doc.document_url && doc.document_url.startsWith('http');
   const ext = (displayName(doc).split('.').pop() ?? '').toUpperCase().slice(0, 4);
@@ -839,6 +890,32 @@ function DocDetailPage({ doc, sf, root, onClose, onMarkViewed, onDelete, onRenam
           </View>
         </View>
 
+        {/* ── Admin Feedback ── */}
+        {!!doc.approval_note && doc.approval_status !== 'approved' && (
+          <View style={dp.section}>
+            <Text style={dp.sectionLabel}>Admin Feedback</Text>
+            <View style={[dp.feedbackCard, doc.approval_status === 'rejected' ? dp.feedbackRejected : dp.feedbackPending]}>
+              <View style={dp.feedbackRow}>
+                <Ionicons
+                  name={doc.approval_status === 'rejected' ? 'close-circle' : 'time'}
+                  size={16}
+                  color={doc.approval_status === 'rejected' ? '#EF4444' : '#F59E0B'}
+                />
+                <Text style={[dp.feedbackStatus, { color: doc.approval_status === 'rejected' ? '#991B1B' : '#92400E' }]}>
+                  {doc.approval_status === 'rejected' ? 'Rejected' : 'Pending Approval'}
+                </Text>
+              </View>
+              <Text style={[dp.feedbackNote, { color: doc.approval_status === 'rejected' ? '#B91C1C' : '#B45309' }]}>
+                {doc.approval_note}
+              </Text>
+              <TouchableOpacity style={dp.replyBtn} onPress={() => setConversationOpen(true)} activeOpacity={0.85}>
+                <Ionicons name="chatbubble-outline" size={15} color="#2C2320" />
+                <Text style={dp.replyBtnText}>Reply to Feedback</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+
         {/* ── Actions */}
         <View style={dp.section}>
           <TouchableOpacity
@@ -857,6 +934,12 @@ function DocDetailPage({ doc, sf, root, onClose, onMarkViewed, onDelete, onRenam
               <Text style={dp.markBtnText}>Mark as Viewed</Text>
             </TouchableOpacity>
           )}
+
+          {/* Message button (always available) */}
+          <TouchableOpacity style={dp.msgBtn} onPress={() => setConversationOpen(true)} activeOpacity={0.8}>
+            <Ionicons name="chatbubbles-outline" size={16} color="rgba(255,255,255,0.7)" />
+            <Text style={dp.msgBtnText}>Message Admin</Text>
+          </TouchableOpacity>
         </View>
 
       </ScrollView>
@@ -876,6 +959,14 @@ function DocDetailPage({ doc, sf, root, onClose, onMarkViewed, onDelete, onRenam
         current={displayName(doc)}
         onConfirm={name => { onRename(name); setRenameOpen(false); }}
         onCancel={() => setRenameOpen(false)}
+      />
+
+      {/* ── Conversation panel */}
+      <FileConversationPanel
+        visible={conversationOpen}
+        doc={doc}
+        fileOwnerId={fileOwnerId}
+        onClose={() => setConversationOpen(false)}
       />
 
       {/* ── Delete confirmation modal */}
@@ -975,19 +1066,41 @@ export function DocumentsScreen() {
     if (!user?.email) return;
     const email = user.email;
 
-    // Subscribe to all 8 folder tables
+    // Subscribe to all 8 folder tables.
+    // UPDATE events: no row-level filter here — Supabase needs REPLICA IDENTITY FULL
+    // for filtered UPDATEs to work. Instead we check client-side (only update docs
+    // already in local state, which guarantees they belong to this user).
     const channels = FOLDER_TABLES.map(table =>
       supabase.channel(`docs:${table}:${email}`)
         .on('postgres_changes', { event: 'INSERT', schema: 'public', table, filter: `email=eq.${email}` },
-          p => setDocuments(prev => [{ ...p.new as Document, document_type: table }, ...prev]))
-        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table, filter: `email=eq.${email}` },
           p => {
-            const u = { ...p.new as Document, document_type: table };
-            setDocuments(prev => prev.map(d => d.id === u.id ? u : d));
+            const newDoc: Document = {
+              ...p.new as Document,
+              document_type: table,
+              approval_status: (p.new as any).approval_status ?? 'pending',
+              approval_note: (p.new as any).approval_note ?? null,
+            };
+            // Skip if already added by onUploadDone (optimistic update)
+            setDocuments(prev => prev.find(d => d.id === newDoc.id) ? prev : [newDoc, ...prev]);
+          })
+        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table },
+          p => {
+            const raw = p.new as any;
+            const u: Document = {
+              ...raw,
+              document_type: table,
+              approval_status: raw.approval_status ?? 'approved',
+              approval_note: raw.approval_note ?? null,
+            };
+            setDocuments(prev => {
+              // Only update docs already in this user's list
+              if (!prev.find(d => d.id === u.id)) return prev;
+              return prev.map(d => d.id === u.id ? u : d);
+            });
             setSelectedDoc(prev => prev?.id === u.id ? u : prev);
           })
         .on('postgres_changes', { event: 'DELETE', schema: 'public', table },
-          p => setDocuments(prev => prev.filter(d => d.id !== (p.old as Document).id)))
+          p => setDocuments(prev => prev.filter(d => d.id !== (p.old as any).id)))
         .subscribe()
     );
 
@@ -1022,7 +1135,7 @@ export function DocumentsScreen() {
         <DocListView sf={activeSub} root={activeRoot} rootColor={activeRoot.color} documents={subDocs}
           refreshing={refreshing} onRefresh={onRefresh}
           onBack={() => setNav('sub')} onDocPress={setSelectedDoc}
-          onUploadDone={d => setDocuments(prev => [d, ...prev])}
+          onUploadDone={d => setDocuments(prev => prev.find(x => x.id === d.id) ? prev : [d, ...prev])}
           userId={user?.id ?? ''} userEmail={user?.email ?? ''} pb={pb} pt={pt} />
       )}
 
@@ -1032,6 +1145,7 @@ export function DocumentsScreen() {
             doc={selectedDoc}
             sf={activeSub}
             root={activeRoot}
+            fileOwnerId={user?.id ?? ''}
             onClose={() => setSelectedDoc(null)}
             onMarkViewed={() => markViewed(selectedDoc)}
             onDelete={async () => {
@@ -1071,7 +1185,10 @@ const s = StyleSheet.create({
   loader:   { flex: 1, alignItems: 'center', justifyContent: 'center' },
 
   // page header
-  pageHeader: { paddingHorizontal: 20, paddingBottom: 18, flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between' },
+  pageHeader: { paddingHorizontal: 20, paddingBottom: 18, flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', overflow: 'hidden', position: 'relative' },
+  headerOverlay: { ...StyleSheet.absoluteFillObject, opacity: 0.04 },
+  decorCircle1: { position: 'absolute', width: 200, height: 200, borderRadius: 100, backgroundColor: 'rgba(232,185,35,0.06)', top: -60, right: -40 } as any,
+  decorCircle2: { position: 'absolute', width: 120, height: 120, borderRadius: 60, backgroundColor: 'rgba(232,185,35,0.05)', bottom: -30, left: 60 } as any,
   pageTitle:  { color: '#FFFFFF', fontSize: 24, fontWeight: '800', letterSpacing: -0.5 },
   pageSub:    { color: 'rgba(255,255,255,0.55)', fontSize: 12, marginTop: 3 },
   headerBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#E8B923', paddingHorizontal: 12, paddingVertical: 7, borderRadius: 20 },
@@ -1154,7 +1271,9 @@ const s = StyleSheet.create({
   // doc list
   docList: { padding: 14 },
   docCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFFFFF', borderRadius: 16, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: '#E8E0D0', gap: 12, overflow: 'hidden', shadowColor: '#3A3131', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 2 },
-  docCardNew:  { borderColor: '#E8B923', borderLeftWidth: 3 },
+  docCardNew:      { borderColor: '#E8B923', borderLeftWidth: 3 },
+  docCardPending:  { borderColor: '#F59E0B', borderLeftWidth: 3, backgroundColor: '#FFFBEB' },
+  docCardRejected: { borderColor: '#EF4444', borderLeftWidth: 3, backgroundColor: '#FFF5F5' },
   newAccent:   { position: 'absolute', left: 0, top: 0, bottom: 0, width: 3 },
   extBox:      { width: 50, height: 50, borderRadius: 13, alignItems: 'center', justifyContent: 'center', gap: 2 },
   extText:     { fontSize: 8, fontWeight: '800', letterSpacing: 0.3 },
@@ -1246,8 +1365,20 @@ const dp = StyleSheet.create({
 
   viewBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, paddingVertical: 16, borderRadius: 16, marginBottom: 10 },
   viewBtnText: { color: Colors.white, fontSize: 16, fontWeight: '800' },
-  markBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 13, borderRadius: 14, borderWidth: 1, borderColor: 'rgba(37,99,235,0.3)', backgroundColor: 'rgba(37,99,235,0.08)' },
+  markBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 13, borderRadius: 14, borderWidth: 1, borderColor: 'rgba(37,99,235,0.3)', backgroundColor: 'rgba(37,99,235,0.08)', marginBottom: 10 },
   markBtnText: { color: Colors.primary, fontSize: 14, fontWeight: '600' },
+  msgBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 13, borderRadius: 14, borderWidth: 1, borderColor: 'rgba(255,255,255,0.14)', backgroundColor: 'rgba(255,255,255,0.05)' },
+  msgBtnText: { color: 'rgba(255,255,255,0.65)', fontSize: 14, fontWeight: '600' },
+
+  // Feedback card
+  feedbackCard:     { borderRadius: 16, borderWidth: 1, padding: 14, gap: 8 },
+  feedbackRejected: { backgroundColor: '#FEF2F2', borderColor: '#FECACA' },
+  feedbackPending:  { backgroundColor: '#FFFBEB', borderColor: '#FDE68A' },
+  feedbackRow:      { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  feedbackStatus:   { fontSize: 12, fontWeight: '700' },
+  feedbackNote:     { fontSize: 13, lineHeight: 19 },
+  replyBtn:         { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: '#E8B923', paddingVertical: 10, borderRadius: 12, marginTop: 4 },
+  replyBtnText:     { color: '#2C2320', fontSize: 13, fontWeight: '800' },
 });
 
 // ── Viewer modal styles ───────────────────────────────────────────────────────

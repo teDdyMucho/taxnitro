@@ -1,6 +1,6 @@
 import { supabase } from '../lib/supabase';
 
-export type NotificationType = 'new' | 'upload' | 'viewed' | 'reminder';
+export type NotificationType = 'new' | 'upload' | 'viewed' | 'reminder' | 'approved' | 'rejected';
 
 export interface Notification {
   id: string;
@@ -41,6 +41,26 @@ export async function markAllNotificationsRead(userId: string): Promise<boolean>
     .eq('read', false);
 
   if (error) { console.error('markAllNotificationsRead:', error.message); return false; }
+  return true;
+}
+
+export async function deleteNotification(notificationId: string): Promise<boolean> {
+  const { error } = await supabase
+    .from('notifications')
+    .delete()
+    .eq('id', notificationId);
+
+  if (error) { console.error('deleteNotification:', error.message); return false; }
+  return true;
+}
+
+export async function deleteAllNotifications(userId: string): Promise<boolean> {
+  const { error } = await supabase
+    .from('notifications')
+    .delete()
+    .eq('user_id', userId);
+
+  if (error) { console.error('deleteAllNotifications:', error.message); return false; }
   return true;
 }
 

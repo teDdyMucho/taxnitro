@@ -19,11 +19,15 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import WebView from 'react-native-webview';
 import { Colors } from '../../constants/colors';
 import { StatusBadge } from '../../components/StatusBadge';
+import { AdminReplyBell } from '../../components/AdminReplyBell';
+import { AdminFileBrowser } from '../../components/AdminFileBrowser';
 import { useAuth } from '../../context/AuthContext';
 import {
   getAllDocuments,
   deleteDocument,
   updateDocumentStatus,
+  approveDocument,
+  rejectDocument,
   Document,
 } from '../../db/documents';
 
@@ -50,38 +54,17 @@ function DocViewerModal({ url, name, onClose }: { url: string; name: string; onC
 
 const vm = StyleSheet.create({
   bar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-    gap: 12,
-    backgroundColor: Colors.bgCard,
+    flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16,
+    paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: Colors.border, gap: 12, backgroundColor: Colors.bgCard,
   },
-  closeBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    backgroundColor: Colors.bgMid,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+  closeBtn: { width: 36, height: 36, borderRadius: 10, backgroundColor: Colors.bgMid, alignItems: 'center', justifyContent: 'center' },
   title: { color: Colors.textPrimary, fontSize: 15, fontWeight: '700', flex: 1 },
 });
 
 // ── Delete Modal ───────────────────────────────────────────────────────────────
 
-function DeleteModal({
-  visible,
-  name,
-  onConfirm,
-  onCancel,
-}: {
-  visible: boolean;
-  name: string;
-  onConfirm: () => void;
-  onCancel: () => void;
+function DeleteModal({ visible, name, onConfirm, onCancel }: {
+  visible: boolean; name: string; onConfirm: () => void; onCancel: () => void;
 }) {
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
@@ -97,10 +80,7 @@ function DeleteModal({
             <TouchableOpacity style={dm.cancelBtn} onPress={onCancel}>
               <Text style={dm.cancelText}>Cancel</Text>
             </TouchableOpacity>
-            <TouchableOpacity
-              style={dm.deleteBtn}
-              onPress={() => { onCancel(); onConfirm(); }}
-            >
+            <TouchableOpacity style={dm.deleteBtn} onPress={() => { onCancel(); onConfirm(); }}>
               <Text style={dm.deleteText}>Delete</Text>
             </TouchableOpacity>
           </View>
@@ -111,62 +91,74 @@ function DeleteModal({
 }
 
 const dm = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.55)',
-    alignItems: 'center',
-    justifyContent: 'center',
+  overlay:   { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', alignItems: 'center', justifyContent: 'center' },
+  box:       { backgroundColor: '#FFFFFF', borderRadius: 28, padding: 28, width: 320, alignItems: 'center', gap: 8, shadowColor: '#000', shadowOffset: { width: 0, height: 20 }, shadowOpacity: 0.18, shadowRadius: 40, elevation: 24 },
+  iconWrap:  { width: 64, height: 64, borderRadius: 20, backgroundColor: '#FEF2F2', alignItems: 'center', justifyContent: 'center', marginBottom: 4 },
+  title:     { color: '#111827', fontSize: 18, fontWeight: '800', letterSpacing: -0.3 },
+  sub:       { color: '#64748B', fontSize: 13, textAlign: 'center', lineHeight: 18 },
+  warning:   { color: '#EF4444', fontSize: 11, fontWeight: '600', letterSpacing: 0.1 },
+  row:       { flexDirection: 'row', gap: 10, width: '100%', marginTop: 10 },
+  cancelBtn: { flex: 1, backgroundColor: '#F1F5F9', borderRadius: 14, paddingVertical: 14, alignItems: 'center', borderWidth: 1, borderColor: '#E5E7EB' },
+  cancelText:{ color: '#64748B', fontWeight: '700', fontSize: 14 },
+  deleteBtn: { flex: 1, backgroundColor: '#EF4444', borderRadius: 14, paddingVertical: 14, alignItems: 'center' },
+  deleteText:{ color: '#FFFFFF', fontWeight: '700', fontSize: 14 },
+});
+
+// ── Reject Modal ──────────────────────────────────────────────────────────────
+
+function RejectModal({ visible, name, onConfirm, onCancel }: {
+  visible: boolean; name: string; onConfirm: (note: string) => void; onCancel: () => void;
+}) {
+  const [note, setNote] = useState('');
+  useEffect(() => { if (visible) setNote(''); }, [visible]);
+
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
+      <Pressable style={dm.overlay} onPress={onCancel}>
+        <Pressable style={[dm.box, { gap: 12 }]} onPress={() => {}}>
+          <View style={[dm.iconWrap, { backgroundColor: '#FEF2F2' }]}>
+            <Ionicons name="close-circle-outline" size={28} color="#EF4444" />
+          </View>
+          <Text style={dm.title}>Reject Document?</Text>
+          <Text style={[dm.sub, { textAlign: 'center' }]} numberOfLines={2}>{name}</Text>
+
+          <TextInput
+            style={rj.input}
+            placeholder="Reason for rejection (optional)"
+            placeholderTextColor="#94A3B8"
+            value={note}
+            onChangeText={setNote}
+            multiline
+            numberOfLines={3}
+            textAlignVertical="top"
+          />
+
+          <View style={dm.row}>
+            <TouchableOpacity style={dm.cancelBtn} onPress={onCancel}>
+              <Text style={dm.cancelText}>Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[dm.deleteBtn, { backgroundColor: '#EF4444' }]} onPress={() => { onCancel(); onConfirm(note.trim()); }}>
+              <Text style={dm.deleteText}>Reject</Text>
+            </TouchableOpacity>
+          </View>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
+const rj = StyleSheet.create({
+  input: {
+    width: '100%', borderWidth: 1.5, borderColor: '#E5E7EB', borderRadius: 14,
+    padding: 12, color: '#111827', fontSize: 13, minHeight: 80,
   },
-  box: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 28,
-    padding: 28,
-    width: 320,
-    alignItems: 'center',
-    gap: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 20 },
-    shadowOpacity: 0.18,
-    shadowRadius: 40,
-    elevation: 24,
-  },
-  iconWrap: {
-    width: 64,
-    height: 64,
-    borderRadius: 20,
-    backgroundColor: '#FEF2F2',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 4,
-  },
-  title: { color: '#111827', fontSize: 18, fontWeight: '800', letterSpacing: -0.3 },
-  sub: { color: '#64748B', fontSize: 13, textAlign: 'center', lineHeight: 18 },
-  warning: { color: '#EF4444', fontSize: 11, fontWeight: '600', letterSpacing: 0.1 },
-  row: { flexDirection: 'row', gap: 10, width: '100%', marginTop: 10 },
-  cancelBtn: {
-    flex: 1,
-    backgroundColor: '#F1F5F9',
-    borderRadius: 14,
-    paddingVertical: 14,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-  },
-  cancelText: { color: '#64748B', fontWeight: '700', fontSize: 14 },
-  deleteBtn: {
-    flex: 1,
-    backgroundColor: '#EF4444',
-    borderRadius: 14,
-    paddingVertical: 14,
-    alignItems: 'center',
-  },
-  deleteText: { color: '#FFFFFF', fontWeight: '700', fontSize: 14 },
 });
 
 // ── Config ─────────────────────────────────────────────────────────────────────
 
 const FOLDERS = [
   { key: 'all',                    label: 'All',            color: '#2C2320' },
+  { key: 'pending',                label: 'Pending',        color: '#F59E0B' },
   { key: 'tax_client_uploads',     label: 'Client Uploads', color: '#E8B923' },
   { key: 'tax_contracts',          label: 'Tax Contracts',  color: '#B5905B' },
   { key: 'tax_invoices',           label: 'Tax Invoices',   color: '#E8B923' },
@@ -178,19 +170,45 @@ const FOLDERS = [
 ];
 
 const EXT_COLOR: Record<string, string> = {
-  pdf:  '#2C2320',
-  doc:  '#B5905B',
-  docx: '#B5905B',
-  xls:  '#E8B923',
-  xlsx: '#E8B923',
-  jpg:  '#B5905B',
-  jpeg: '#B5905B',
-  png:  '#B5905B',
+  pdf: '#2C2320', doc: '#B5905B', docx: '#B5905B',
+  xls: '#E8B923', xlsx: '#E8B923', jpg: '#B5905B', jpeg: '#B5905B', png: '#B5905B',
 };
 
-const getExt    = (name: string) => name.split('.').pop()?.toLowerCase() ?? 'file';
-const folderOf  = (key: string)  => FOLDERS.find(f => f.key === key) ?? FOLDERS[0];
-const fmtDate   = (iso: string)  => new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+const getExt   = (name: string) => name.split('.').pop()?.toLowerCase() ?? 'file';
+const folderOf = (key: string)  => FOLDERS.find(f => f.key === key) ?? FOLDERS[0];
+const fmtDate  = (iso: string)  => new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+
+// ── Approval status pill ───────────────────────────────────────────────────────
+
+function ApprovalPill({ status }: { status: string }) {
+  if (status === 'approved') {
+    return (
+      <View style={[ap.pill, { backgroundColor: '#D1FAE5' }]}>
+        <Ionicons name="checkmark-circle" size={10} color="#065F46" />
+        <Text style={[ap.text, { color: '#065F46' }]}>Approved</Text>
+      </View>
+    );
+  }
+  if (status === 'pending') {
+    return (
+      <View style={[ap.pill, { backgroundColor: '#FEF3C7' }]}>
+        <Ionicons name="time-outline" size={10} color="#92400E" />
+        <Text style={[ap.text, { color: '#92400E' }]}>Pending</Text>
+      </View>
+    );
+  }
+  return (
+    <View style={[ap.pill, { backgroundColor: '#FEE2E2' }]}>
+      <Ionicons name="close-circle" size={10} color="#991B1B" />
+      <Text style={[ap.text, { color: '#991B1B' }]}>Rejected</Text>
+    </View>
+  );
+}
+
+const ap = StyleSheet.create({
+  pill: { flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 7, paddingVertical: 3, borderRadius: 20 },
+  text: { fontSize: 9, fontWeight: '700', letterSpacing: 0.2 },
+});
 
 // ── Main ───────────────────────────────────────────────────────────────────────
 
@@ -199,37 +217,45 @@ export function AdminDocumentsScreen() {
   const mountedRef = useRef(true);
   useEffect(() => () => { mountedRef.current = false; }, []);
 
+  const { user, isLoading: authLoading } = useAuth();
+
   const [documents, setDocuments]   = useState<Document[]>([]);
   const [loading, setLoading]       = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [query, setQuery]           = useState('');
-  const [filter, setFilter]         = useState('all'); // 'all' = show all, used internally
+  const [filter, setFilter]         = useState('pending'); // default: show pending first
   const [viewerDoc, setViewerDoc]   = useState<Document | null>(null);
   const [deleteDoc, setDeleteDoc]   = useState<Document | null>(null);
+  const [rejectDoc, setRejectDoc]   = useState<Document | null>(null);
+  const [actionBusy, setActionBusy] = useState<string | null>(null); // doc id being actioned
+  const [browserOpen, setBrowserOpen] = useState(false);
 
   const load = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
-    // No setLoading(true) — show existing content immediately
     const safetyTimer = setTimeout(() => {
       if (mountedRef.current) { setLoading(false); setRefreshing(false); }
     }, 8000);
     try {
       const docs = await getAllDocuments();
       if (mountedRef.current) setDocuments(docs);
-    }
-    catch (e) { console.error(e); }
+    } catch (e) { console.error(e); }
     finally { clearTimeout(safetyTimer); if (mountedRef.current) { setLoading(false); setRefreshing(false); } }
   }, []);
 
-  const { user, isLoading: authLoading } = useAuth();
   useEffect(() => { if (!authLoading && user?.id) load(); }, [authLoading, user?.id]);
 
-  const filtered = documents.filter(d =>
-    (filter === 'all' || d.document_type === filter) &&
-    (!query.trim() ||
+  const pendingCount = documents.filter(d => (d.approval_status ?? 'approved') === 'pending').length;
+
+  const filtered = documents.filter(d => {
+    const approval = d.approval_status ?? 'approved';
+    if (filter === 'pending' && approval !== 'pending') return false;
+    if (filter !== 'all' && filter !== 'pending' && d.document_type !== filter) return false;
+    if (!query.trim()) return true;
+    return (
       d.name?.toLowerCase().includes(query.toLowerCase()) ||
-      d.email?.toLowerCase().includes(query.toLowerCase()))
-  );
+      d.email?.toLowerCase().includes(query.toLowerCase())
+    );
+  });
 
   const handleView = async (doc: Document) => {
     if (doc.status === 'new') {
@@ -244,15 +270,33 @@ export function AdminDocumentsScreen() {
       setDocuments(prev => prev.filter(d => d.id !== doc.id));
   };
 
+  const handleApprove = async (doc: Document) => {
+    if (actionBusy) return;
+    setActionBusy(doc.id);
+    const ok = await approveDocument(doc.id, doc.document_type ?? '', user?.email ?? 'admin');
+    if (ok) setDocuments(prev => prev.map(d => d.id === doc.id ? { ...d, approval_status: 'approved', approved_by: user?.email ?? 'admin' } : d));
+    setActionBusy(null);
+  };
+
+  const handleReject = async (doc: Document, note: string) => {
+    if (actionBusy) return;
+    setActionBusy(doc.id);
+    const ok = await rejectDocument(doc.id, doc.document_type ?? '', user?.email ?? 'admin', note);
+    if (ok) setDocuments(prev => prev.map(d => d.id === doc.id ? { ...d, approval_status: 'rejected', approval_note: note || null } : d));
+    setActionBusy(null);
+  };
+
   // ── Document Card ────────────────────────────────────────────────────────────
 
   const renderDoc = ({ item }: { item: Document }) => {
-    const ext    = getExt(item.name);
-    const color  = EXT_COLOR[ext] ?? '#64748B';
-    const folder = folderOf(item.document_type ?? '');
+    const ext      = getExt(item.name);
+    const color    = EXT_COLOR[ext] ?? '#64748B';
+    const folder   = folderOf(item.document_type ?? '');
+    const approval = item.approval_status ?? 'approved';
+    const isBusy   = actionBusy === item.id;
 
     return (
-      <View style={s.card}>
+      <View style={[s.card, approval === 'pending' && s.cardPending, approval === 'rejected' && s.cardRejected]}>
         {/* File type badge */}
         <View style={[s.fileBadge, { backgroundColor: color + '15' }]}>
           <Text style={[s.fileBadgeExt, { color }]}>{ext.slice(0, 4).toUpperCase()}</Text>
@@ -270,24 +314,46 @@ export function AdminDocumentsScreen() {
             </View>
             <Text style={s.dateText}>{fmtDate(item.created_at)}</Text>
           </View>
+          {/* Rejection note */}
+          {approval === 'rejected' && !!item.approval_note && (
+            <Text style={s.rejectNote} numberOfLines={1}>Reason: {item.approval_note}</Text>
+          )}
         </View>
 
         {/* Actions */}
         <View style={s.actions}>
-          <StatusBadge status={item.status} />
+          <ApprovalPill status={approval} />
+
+          {/* Approve / Reject for pending */}
+          {approval === 'pending' && (
+            <View style={s.approvalRow}>
+              <TouchableOpacity
+                style={[s.approveBtn, isBusy && { opacity: 0.5 }]}
+                onPress={() => handleApprove(item)}
+                disabled={!!isBusy}
+                activeOpacity={0.75}
+              >
+                {isBusy
+                  ? <ActivityIndicator size={12} color="#065F46" />
+                  : <Ionicons name="checkmark" size={14} color="#065F46" />}
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[s.rejectBtn, isBusy && { opacity: 0.5 }]}
+                onPress={() => setRejectDoc(item)}
+                disabled={!!isBusy}
+                activeOpacity={0.75}
+              >
+                <Ionicons name="close" size={14} color="#991B1B" />
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {/* View / Delete always visible */}
           <View style={s.btnRow}>
-            <TouchableOpacity
-              style={[s.actionBtn, s.viewBtn]}
-              onPress={() => handleView(item)}
-              activeOpacity={0.75}
-            >
+            <TouchableOpacity style={[s.actionBtn, s.viewBtn]} onPress={() => handleView(item)} activeOpacity={0.75}>
               <Ionicons name="eye-outline" size={14} color="#1C1713" />
             </TouchableOpacity>
-            <TouchableOpacity
-              style={[s.actionBtn, s.deleteBtn]}
-              onPress={() => setDeleteDoc(item)}
-              activeOpacity={0.75}
-            >
+            <TouchableOpacity style={[s.actionBtn, s.deleteActionBtn]} onPress={() => setDeleteDoc(item)} activeOpacity={0.75}>
               <Ionicons name="trash-outline" size={14} color="#FFFFFF" />
             </TouchableOpacity>
           </View>
@@ -300,15 +366,16 @@ export function AdminDocumentsScreen() {
 
   const EmptyState = () => (
     <View style={s.emptyWrap}>
-      <LinearGradient
-        colors={['#FEF3C7', '#FDE68A']}
-        style={s.emptyCircle}
-      >
+      <LinearGradient colors={['#FEF3C7', '#FDE68A']} style={s.emptyCircle}>
         <Ionicons name="documents-outline" size={40} color="#E8B923" />
       </LinearGradient>
-      <Text style={s.emptyTitle}>No documents found</Text>
+      <Text style={s.emptyTitle}>
+        {filter === 'pending' ? 'No pending documents' : 'No documents found'}
+      </Text>
       <Text style={s.emptyText}>
-        {query
+        {filter === 'pending'
+          ? 'All uploads have been reviewed. Nothing waiting for approval.'
+          : query
           ? `No results for "${query}"`
           : filter !== 'all'
           ? 'No documents in this folder yet.'
@@ -324,19 +391,36 @@ export function AdminDocumentsScreen() {
   return (
     <View style={s.root}>
 
-      {/* ── Header — same gradient as dashboard ── */}
+      {/* ── Header ── */}
       <LinearGradient
         colors={['#3A3131', '#4A3E3E', '#3A3131']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
+        start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
         style={[s.header, { paddingTop: insets.top + 16 }]}
       >
+        <View style={s.headerOverlay} pointerEvents="none" />
+        <View style={s.decorCircle1} pointerEvents="none" />
+        <View style={s.decorCircle2} pointerEvents="none" />
         <View style={{ flex: 1 }}>
           <Text style={s.headerTitle}>All Documents</Text>
           <Text style={s.headerSub}>
-            {documents.length} total{newCount > 0 ? ` · ${newCount} new` : ''}
+            {documents.length} total
+            {pendingCount > 0 ? ` · ${pendingCount} pending` : ''}
+            {newCount > 0 ? ` · ${newCount} new` : ''}
           </Text>
         </View>
+        {/* Pending badge */}
+        {pendingCount > 0 && (
+          <View style={s.pendingBadge}>
+            <Ionicons name="time-outline" size={13} color="#92400E" />
+            <Text style={s.pendingBadgeText}>{pendingCount}</Text>
+          </View>
+        )}
+        {/* Browse by folder */}
+        <TouchableOpacity style={s.browseBtn} onPress={() => setBrowserOpen(true)} activeOpacity={0.75}>
+          <Ionicons name="folder-open-outline" size={18} color="#FFFFFF" />
+        </TouchableOpacity>
+        {/* Reply notification bell */}
+        <AdminReplyBell onMarkedRead={() => load()} />
         <TouchableOpacity style={s.refreshBtn} onPress={() => load(true)} activeOpacity={0.7}>
           <Ionicons name="refresh-outline" size={18} color="#2C2320" />
         </TouchableOpacity>
@@ -363,14 +447,16 @@ export function AdminDocumentsScreen() {
 
       {/* ── Filter Chips ── */}
       <View style={s.filterWrap}>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={s.filterScroll}
-        >
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.filterScroll}>
           {FOLDERS.map(f => {
             const active = filter === f.key;
-            const cnt = f.key === 'all' ? documents.length : documents.filter(d => d.document_type === f.key).length;
+            const isPendingChip = f.key === 'pending';
+            const cnt = isPendingChip
+              ? pendingCount
+              : f.key === 'all'
+              ? documents.length
+              : documents.filter(d => d.document_type === f.key).length;
+
             return (
               <TouchableOpacity
                 key={f.key}
@@ -379,33 +465,19 @@ export function AdminDocumentsScreen() {
                 style={[
                   s.chip,
                   active
-                    ? { backgroundColor: '#E8B923', borderColor: '#E8B923' }
+                    ? { backgroundColor: isPendingChip ? '#F59E0B' : '#E8B923', borderColor: isPendingChip ? '#F59E0B' : '#E8B923' }
                     : { backgroundColor: '#FFFFFF', borderColor: '#E8E0D0' },
                 ]}
               >
-                <Text
-                  style={[
-                    s.chipText,
-                    active ? { color: '#1C1713' } : { color: '#6B5E52' },
-                  ]}
-                >
+                {isPendingChip && (
+                  <Ionicons name="time-outline" size={12} color={active ? '#FFFFFF' : '#92400E'} />
+                )}
+                <Text style={[s.chipText, active ? { color: '#1C1713' } : { color: '#6B5E52' }]}>
                   {f.label}
                 </Text>
                 {cnt > 0 && (
-                  <View
-                    style={[
-                      s.chipCount,
-                      active
-                        ? { backgroundColor: 'rgba(255,255,255,0.25)' }
-                        : { backgroundColor: '#F1F5F9' },
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        s.chipCountText,
-                        active ? { color: '#FFFFFF' } : { color: '#94A3B8' },
-                      ]}
-                    >
+                  <View style={[s.chipCount, active ? { backgroundColor: 'rgba(255,255,255,0.25)' } : { backgroundColor: '#F1F5F9' }]}>
+                    <Text style={[s.chipCountText, active ? { color: '#FFFFFF' } : { color: '#94A3B8' }]}>
                       {cnt}
                     </Text>
                   </View>
@@ -415,6 +487,16 @@ export function AdminDocumentsScreen() {
           })}
         </ScrollView>
       </View>
+
+      {/* ── Pending notice banner ── */}
+      {filter === 'pending' && pendingCount > 0 && (
+        <View style={s.pendingBanner}>
+          <Ionicons name="shield-checkmark-outline" size={14} color="#92400E" />
+          <Text style={s.pendingBannerText}>
+            {pendingCount} file{pendingCount !== 1 ? 's' : ''} waiting for your review
+          </Text>
+        </View>
+      )}
 
       {/* ── List ── */}
       {loading ? (
@@ -429,12 +511,7 @@ export function AdminDocumentsScreen() {
           renderItem={renderDoc}
           contentContainerStyle={s.list}
           refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={() => load(true)}
-              tintColor="#10B981"
-              colors={['#10B981']}
-            />
+            <RefreshControl refreshing={refreshing} onRefresh={() => load(true)} tintColor="#10B981" colors={['#10B981']} />
           }
           ListEmptyComponent={<EmptyState />}
         />
@@ -442,11 +519,7 @@ export function AdminDocumentsScreen() {
 
       {/* ── Modals ── */}
       {viewerDoc && (
-        <DocViewerModal
-          url={viewerDoc.document_url}
-          name={viewerDoc.name}
-          onClose={() => setViewerDoc(null)}
-        />
+        <DocViewerModal url={viewerDoc.document_url} name={viewerDoc.name} onClose={() => setViewerDoc(null)} />
       )}
       <DeleteModal
         visible={!!deleteDoc}
@@ -454,6 +527,15 @@ export function AdminDocumentsScreen() {
         onConfirm={() => { if (deleteDoc) { handleDelete(deleteDoc); setDeleteDoc(null); } }}
         onCancel={() => setDeleteDoc(null)}
       />
+      <RejectModal
+        visible={!!rejectDoc}
+        name={rejectDoc?.name ?? ''}
+        onConfirm={note => { if (rejectDoc) { handleReject(rejectDoc, note); setRejectDoc(null); } }}
+        onCancel={() => setRejectDoc(null)}
+      />
+
+      {/* ── File Browser ── */}
+      <AdminFileBrowser visible={browserOpen} onClose={() => setBrowserOpen(false)} />
     </View>
   );
 }
@@ -463,206 +545,102 @@ export function AdminDocumentsScreen() {
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#F8FAFC' },
 
-  // Header — gradient matches dashboard
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingBottom: 20,
-    gap: 12,
+    flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingBottom: 20, gap: 12,
+    overflow: 'hidden', position: 'relative',
   },
-  headerTitle: {
-    color: '#FFFFFF',
-    fontSize: 22,
-    fontWeight: '800',
-    letterSpacing: -0.5,
+  headerOverlay: { ...StyleSheet.absoluteFillObject, opacity: 0.04 },
+  decorCircle1: { position: 'absolute', width: 200, height: 200, borderRadius: 100, backgroundColor: 'rgba(232,185,35,0.06)', top: -60, right: -40 } as any,
+  decorCircle2: { position: 'absolute', width: 120, height: 120, borderRadius: 60, backgroundColor: 'rgba(232,185,35,0.05)', bottom: -30, left: 60 } as any,
+  headerTitle: { color: '#FFFFFF', fontSize: 22, fontWeight: '800', letterSpacing: -0.5 },
+  headerSub:   { color: 'rgba(255,255,255,0.5)', fontSize: 12, marginTop: 2, fontWeight: '500' },
+
+  pendingBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    backgroundColor: '#FEF3C7', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 20,
   },
-  headerSub: {
-    color: 'rgba(255,255,255,0.5)',
-    fontSize: 12,
-    marginTop: 2,
-    fontWeight: '500',
+  pendingBadgeText: { color: '#92400E', fontWeight: '800', fontSize: 13 },
+
+  browseBtn: {
+    width: 36, height: 36, borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.15)',
+    alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)',
   },
+
   refreshBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    backgroundColor: '#E8B923',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
+    width: 36, height: 36, borderRadius: 10, backgroundColor: '#E8B923',
+    alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#E5E7EB',
   },
 
-  // Search
-  searchWrap: {
-    paddingHorizontal: 16,
-    paddingTop: 14,
-    paddingBottom: 4,
-    backgroundColor: '#FFFFFF',
+  searchWrap:  { paddingHorizontal: 16, paddingTop: 14, paddingBottom: 4, backgroundColor: '#FFFFFF' },
+  searchBox:   {
+    flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#FFFFFF',
+    borderRadius: 16, borderWidth: 1.5, borderColor: '#E5E7EB',
+    paddingHorizontal: 14, paddingVertical: 11,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 2,
   },
-  searchBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    borderWidth: 1.5,
-    borderColor: '#E5E7EB',
-    paddingHorizontal: 14,
-    paddingVertical: 11,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
-  },
-  searchInput: {
-    flex: 1,
-    color: '#111827',
-    fontSize: 14,
-    fontWeight: '500',
-  },
+  searchInput: { flex: 1, color: '#111827', fontSize: 14, fontWeight: '500' },
 
-  // Filter chips
-  filterWrap: {
-    height: 60,
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
-  },
-  filterScroll: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    alignItems: 'center',
-    gap: 8,
-    flexDirection: 'row',
-  },
+  filterWrap:   { height: 60, backgroundColor: '#FFFFFF', borderBottomWidth: 1, borderBottomColor: '#E5E7EB' },
+  filterScroll: { paddingHorizontal: 16, paddingVertical: 12, alignItems: 'center', gap: 8, flexDirection: 'row' },
   chip: {
-    height: 36,
-    borderRadius: 18,
-    borderWidth: 1.5,
-    paddingHorizontal: 14,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
+    height: 36, borderRadius: 18, borderWidth: 1.5, paddingHorizontal: 14,
+    flexDirection: 'row', alignItems: 'center', gap: 6,
   },
-  chipText: {
-    fontSize: 13,
-    fontWeight: '600',
-    letterSpacing: -0.1,
-  },
-  chipCount: {
-    minWidth: 20,
-    height: 20,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 5,
-  },
-  chipCountText: {
-    fontSize: 11,
-    fontWeight: '700',
-  },
+  chipText:      { fontSize: 13, fontWeight: '600', letterSpacing: -0.1 },
+  chipCount:     { minWidth: 20, height: 20, borderRadius: 10, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 5 },
+  chipCountText: { fontSize: 11, fontWeight: '700' },
 
-  // List
+  pendingBanner: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: '#FEF3C7', paddingHorizontal: 16, paddingVertical: 10,
+    borderBottomWidth: 1, borderBottomColor: '#FDE68A',
+  },
+  pendingBannerText: { color: '#92400E', fontSize: 12, fontWeight: '600', flex: 1 },
+
   list: { padding: 16, gap: 10, paddingBottom: 48 },
 
-  // Document card
   card: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    padding: 16,
-    gap: 12,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 12,
-    elevation: 3,
+    flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFFFFF',
+    borderRadius: 20, padding: 16, gap: 12,
+    borderWidth: 1, borderColor: '#E5E7EB',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 12, elevation: 3,
   },
+  cardPending:  { borderColor: '#F59E0B', borderLeftWidth: 3, backgroundColor: '#FFFBEB' },
+  cardRejected: { borderColor: '#EF4444', borderLeftWidth: 3, backgroundColor: '#FFF5F5' },
 
-  // File badge (left side)
-  fileBadge: {
-    width: 52,
-    height: 52,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 3,
-  },
-  fileBadgeExt: {
-    fontSize: 11,
-    fontWeight: '900',
-    letterSpacing: 0.5,
-  },
+  fileBadge:    { width: 52, height: 52, borderRadius: 16, alignItems: 'center', justifyContent: 'center', gap: 3 },
+  fileBadgeExt: { fontSize: 11, fontWeight: '900', letterSpacing: 0.5 },
 
-  // Middle info
-  info:     { flex: 1, gap: 3 },
-  docName:  { color: '#111827', fontSize: 14, fontWeight: '700', letterSpacing: -0.2 },
-  docEmail: { color: '#94A3B8', fontSize: 12, fontWeight: '400' },
-  metaRow:  { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4 },
-
-  folderPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 20,
-    borderWidth: 1,
-  },
+  info:        { flex: 1, gap: 3 },
+  docName:     { color: '#111827', fontSize: 14, fontWeight: '700', letterSpacing: -0.2 },
+  docEmail:    { color: '#94A3B8', fontSize: 12, fontWeight: '400' },
+  metaRow:     { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4 },
+  folderPill:  { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 20, borderWidth: 1 },
   folderDot:   { width: 5, height: 5, borderRadius: 3 },
   folderLabel: { fontSize: 10, fontWeight: '700', letterSpacing: 0.2 },
   dateText:    { color: '#94A3B8', fontSize: 10, fontWeight: '500' },
+  rejectNote:  { color: '#EF4444', fontSize: 10, fontStyle: 'italic', marginTop: 2 },
 
-  // Right actions
-  actions: { alignItems: 'flex-end', gap: 8 },
-  btnRow:  { flexDirection: 'row', gap: 6 },
-  actionBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
+  actions:     { alignItems: 'flex-end', gap: 6 },
+  approvalRow: { flexDirection: 'row', gap: 5 },
+  approveBtn:  {
+    width: 32, height: 32, borderRadius: 10, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: '#D1FAE5', borderWidth: 1, borderColor: '#A7F3D0',
   },
-  viewBtn:   { backgroundColor: '#E8B923' },
-  deleteBtn: { backgroundColor: '#DC2626' },
+  rejectBtn: {
+    width: 32, height: 32, borderRadius: 10, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: '#FEE2E2', borderWidth: 1, borderColor: '#FECACA',
+  },
+  btnRow:         { flexDirection: 'row', gap: 6 },
+  actionBtn:      { width: 32, height: 32, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  viewBtn:        { backgroundColor: '#E8B923' },
+  deleteActionBtn:{ backgroundColor: '#DC2626' },
 
-  // Loading
   loadingWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
   loadingText: { color: '#94A3B8', fontSize: 14, fontWeight: '500' },
 
-  // Empty state
-  emptyWrap: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 80,
-    gap: 14,
-    paddingHorizontal: 32,
-  },
-  emptyCircle: {
-    width: 88,
-    height: 88,
-    borderRadius: 28,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 4,
-  },
-  emptyTitle: {
-    color: '#111827',
-    fontSize: 18,
-    fontWeight: '800',
-    letterSpacing: -0.3,
-  },
-  emptyText: {
-    color: '#94A3B8',
-    fontSize: 14,
-    textAlign: 'center',
-    lineHeight: 20,
-    fontWeight: '400',
-  },
+  emptyWrap: { alignItems: 'center', justifyContent: 'center', marginTop: 80, gap: 14, paddingHorizontal: 32 },
+  emptyCircle: { width: 88, height: 88, borderRadius: 28, alignItems: 'center', justifyContent: 'center', marginBottom: 4 },
+  emptyTitle: { color: '#111827', fontSize: 18, fontWeight: '800', letterSpacing: -0.3 },
+  emptyText:  { color: '#94A3B8', fontSize: 14, textAlign: 'center', lineHeight: 20, fontWeight: '400' },
 });

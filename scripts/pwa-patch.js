@@ -1,55 +1,58 @@
 /**
- * Run after `expo export --platform web` to inject PWA tags and copy public/ files.
- * Usage: node scripts/pwa-patch.js
+ * pwa-patch.js — runs after `expo export --platform web`
+ * 1. Copies all public/ files into dist/
+ * 2. Ensures dist/index.html has manifest link + SW registration
  */
-const fs = require('fs');
+const fs   = require('fs');
 const path = require('path');
 
-const distDir = path.join(__dirname, '../dist');
-const publicDir = path.join(__dirname, '../public');
-const indexPath = path.join(distDir, 'index.html');
+const ROOT    = path.resolve(__dirname, '..');
+const PUBLIC  = path.join(ROOT, 'public');
+const DIST    = path.join(ROOT, 'dist');
+const INDEX   = path.join(DIST, 'index.html');
 
-// Copy public/ files into dist/
-const publicFiles = fs.readdirSync(publicDir);
-for (const file of publicFiles) {
-  fs.copyFileSync(path.join(publicDir, file), path.join(distDir, file));
-  console.log(`Copied: ${file}`);
+if (!fs.existsSync(DIST)) {
+  console.error('[pwa-patch] dist/ not found — did expo export succeed?');
+  process.exit(1);
 }
 
-// Patch index.html
-let html = fs.readFileSync(indexPath, 'utf8');
+// ── Copy public/ → dist/ ─────────────────────────────────────────────────────
+let copied = 0;
+for (const file of fs.readdirSync(PUBLIC)) {
+  const src = path.join(PUBLIC, file);
+  if (fs.statSync(src).isFile()) {
+    fs.copyFileSync(src, path.join(DIST, file));
+    console.log(`[pwa-patch] copied: ${file}`);
+    copied++;
+  }
+}
+console.log(`[pwa-patch] ${copied} file(s) copied`);
 
-const pwaHead = `
-    <!-- PWA manifest -->
-    <link rel="manifest" href="/manifest.json" />
+// ── Patch index.html ─────────────────────────────────────────────────────────
+if (!fs.existsSync(INDEX)) {
+  console.warn('[pwa-patch] dist/index.html not found — skipping patch');
+  process.exit(0);
+}
 
-    <!-- iOS PWA support -->
-    <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="apple-mobile-web-app-title" content="FTG" />
-    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-    <link rel="apple-touch-icon" sizes="152x152" href="/apple-touch-icon-152.png" />
-    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon-180.png" />`;
+let html = fs.readFileSync(INDEX, 'utf8');
 
-const swScript = `
-    <!-- Service worker registration -->
-    <script>
-      if ('serviceWorker' in navigator) {
-        window.addEventListener('load', function () {
-          navigator.serviceWorker.register('/sw.js').catch(function (err) {
-            console.warn('SW registration failed:', err);
-          });
-        });
-      }
-    </script>`;
-
-if (!html.includes('manifest.json')) {
-  html = html.replace('</head>', pwaHead + '\n  </head>');
+if (!html.includes('rel="manifest"')) {
+  html = html.replace('</head>', '  <link rel="manifest" href="/manifest.json" />\n</head>');
+  console.log('[pwa-patch] injected manifest link');
 }
 
 if (!html.includes('serviceWorker')) {
-  html = html.replace('<div id="root"></div>', '<div id="root"></div>\n' + swScript);
+  const swScript = `  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', function () {
+        navigator.serviceWorker.register('/sw.js', { scope: '/' })
+          .catch(function (err) { console.warn('[SW] Registration failed:', err); });
+      });
+    }
+  </script>`;
+  html = html.replace('</body>', swScript + '\n</body>');
+  console.log('[pwa-patch] injected service worker registration');
 }
 
-fs.writeFileSync(indexPath, html);
-console.log('Patched: index.html with PWA tags');
+fs.writeFileSync(INDEX, html, 'utf8');
+console.log('[pwa-patch] done.');

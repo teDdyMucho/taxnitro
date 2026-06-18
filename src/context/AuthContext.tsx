@@ -83,12 +83,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
         if (session?.user) {
-          const minimal = sessionUser(session.user.id, session.user.email ?? '');
-          setUser(minimal);
           setIsAuthenticated(true);
-          // Load full profile in background
-          fetchProfile(session.user.id, session.user.email ?? '').then(profile => {
-            setUser(profile);
+          // Use functional update: if a user already exists (re-fire on web focus/token refresh),
+          // keep their current data while silently refreshing the profile so we never
+          // briefly reset role to 'client', which would unmount AdminNavigator.
+          setUser(prev => {
+            fetchProfile(session.user.id, session.user.email ?? '').then(profile => {
+              setUser(profile);
+            });
+            // Fresh login — show minimal user immediately while profile loads
+            if (!prev) return sessionUser(session.user.id, session.user.email ?? '');
+            // Already authenticated — preserve current user until profile arrives
+            return prev;
           });
         }
       } else if (event === 'SIGNED_OUT') {

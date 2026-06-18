@@ -594,6 +594,9 @@ export function StaffManagementScreen() {
 
       {/* Header */}
       <LinearGradient colors={['#3A3131', '#4A3E3E', '#3A3131']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[s.header, { paddingTop: insets.top + 16 }]}>
+        <View style={s.headerOverlay} pointerEvents="none" />
+        <View style={s.decorCircle1} pointerEvents="none" />
+        <View style={s.decorCircle2} pointerEvents="none" />
         <View style={{ flex: 1 }}>
           <Text style={s.title}>Staff</Text>
           <Text style={s.sub}>{staff.length} member{staff.length !== 1 ? 's' : ''}</Text>
@@ -723,11 +726,13 @@ const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#F8FAFC' },
 
   /* ── Header ── */
+  headerOverlay: { ...StyleSheet.absoluteFillObject, opacity: 0.04 },
+  decorCircle1: { position: 'absolute', width: 200, height: 200, borderRadius: 100, backgroundColor: 'rgba(232,185,35,0.06)', top: -60, right: -40 } as any,
+  decorCircle2: { position: 'absolute', width: 120, height: 120, borderRadius: 60, backgroundColor: 'rgba(232,185,35,0.05)', bottom: -30, left: 60 } as any,
   header: {
     flexDirection: 'row', alignItems: 'center',
     paddingHorizontal: 20, paddingVertical: 20,
-    backgroundColor: '#2C2320',
-    borderBottomWidth: 1, borderBottomColor: '#F1F5F9',
+    overflow: 'hidden', position: 'relative',
     shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.04, shadowRadius: 8, elevation: 2,
   },

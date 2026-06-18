@@ -7,6 +7,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { StyleSheet } from 'react-native';
 import { AppNavigator } from './src/navigation/AppNavigator';
 import { AuthProvider } from './src/context/AuthContext';
+import { PWAInstallBanner } from './src/components/PWAInstallBanner';
 
 // Remove browser focus outline from all inputs globally on web
 if (Platform.OS === 'web') {
@@ -25,6 +26,7 @@ export default function App() {
         <AuthProvider>
           <StatusBar style="light" backgroundColor="transparent" translucent />
           <AppNavigator />
+          <PWAInstallBanner />
         </AuthProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
@@ -34,6 +36,6 @@ export default function App() {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: '#020617',
+    backgroundColor: '#3A3131',
   },
 });
