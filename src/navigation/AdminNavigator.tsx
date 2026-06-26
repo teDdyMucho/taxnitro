@@ -19,10 +19,11 @@ import { ClientListScreen } from '../screens/admin/ClientListScreen';
 import { ClientDocumentsScreen } from '../screens/admin/ClientDocumentsScreen';
 import { StaffManagementScreen } from '../screens/admin/StaffManagementScreen';
 import { ProfileScreen } from '../screens/main/ProfileScreen';
+import { WorkflowDashboardScreen } from '../screens/admin/WorkflowDashboardScreen';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-type AdminTab = 'Dashboard' | 'Documents' | 'Clients' | 'Staff' | 'Profile';
+type AdminTab = 'Dashboard' | 'Documents' | 'Clients' | 'Staff' | 'Workflow' | 'Profile';
 
 interface NavItem {
   name: AdminTab;
@@ -39,6 +40,7 @@ const NAV_ITEMS: NavItem[] = [
   { name: 'Documents', label: 'Documents', active: 'documents',     inactive: 'documents-outline' },
   { name: 'Clients',   label: 'Clients',   active: 'people',        inactive: 'people-outline' },
   { name: 'Staff',     label: 'Staff',     active: 'shield',        inactive: 'shield-outline', adminOnly: true },
+  { name: 'Workflow',  label: 'Workflow',  active: 'git-branch',    inactive: 'git-branch-outline', adminOnly: true },
   { name: 'Profile',   label: 'Profile',   active: 'person',        inactive: 'person-outline' },
 ];
 
@@ -89,6 +91,7 @@ export function AdminNavigator({ onLogout }: { onLogout: () => void }) {
       case 'Documents': return <AdminDocumentsScreen />;
       case 'Clients':   return <ClientListScreen onSelectClient={c => setSelectedClient(c)} />;
       case 'Staff':     return <StaffManagementScreen />;
+      case 'Workflow':  return <WorkflowDashboardScreen />;
       case 'Profile':   return <ProfileScreen onLogout={onLogout} />;
     }
   };

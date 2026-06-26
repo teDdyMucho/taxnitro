@@ -64,7 +64,7 @@ export async function getAllStaff(): Promise<Profile[]> {
   const { data, error } = await supabase
     .from('profiles')
     .select('*')
-    .in('role', ['staff', 'admin'])
+    .eq('role', 'staff')
     .order('full_name', { ascending: true });
   if (error) { console.error('getAllStaff:', error.message); return []; }
   return (data ?? []) as Profile[];
