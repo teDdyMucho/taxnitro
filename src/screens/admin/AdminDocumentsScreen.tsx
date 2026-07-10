@@ -30,6 +30,13 @@ import {
   rejectDocument,
   Document,
 } from '../../db/documents';
+import {
+  REQUIRED_UPLOADS,
+  RequiredItem,
+  tagDocumentRequirement,
+  monthOf,
+  formatMonthLabel,
+} from '../../db/requirements';
 
 // ── Viewer Modal ───────────────────────────────────────────────────────────────
 
@@ -154,6 +161,90 @@ const rj = StyleSheet.create({
   },
 });
 
+// ── Approve & Tag Modal ──────────────────────────────────────────────────────
+// Approving a client upload also lets the admin tag WHICH required monthly item
+// it fulfills. Tagging is what advances the client's upload progress bar.
+
+function ApproveTagModal({ visible, doc, onConfirm, onCancel }: {
+  visible: boolean;
+  doc: Document | null;
+  onConfirm: (item: RequiredItem | null) => void;
+  onCancel: () => void;
+}) {
+  const [selected, setSelected] = useState<RequiredItem | null>(null);
+  useEffect(() => { if (visible) setSelected(null); }, [visible]);
+
+  const services: Array<RequiredItem['service']> = ['BK', 'CFO'];
+
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
+      <Pressable style={dm.overlay} onPress={onCancel}>
+        <Pressable style={[dm.box, { gap: 10, width: 340, alignItems: 'stretch' }]} onPress={() => {}}>
+          <View style={{ alignItems: 'center', gap: 6 }}>
+            <View style={[dm.iconWrap, { backgroundColor: '#D1FAE5' }]}>
+              <Ionicons name="checkmark-circle-outline" size={28} color="#065F46" />
+            </View>
+            <Text style={dm.title}>Approve Upload</Text>
+            <Text style={[dm.sub, { textAlign: 'center' }]} numberOfLines={2}>{doc?.name}</Text>
+          </View>
+
+          <Text style={at.prompt}>
+            Tag which required item this fulfills for{' '}
+            <Text style={{ fontWeight: '800' }}>{formatMonthLabel(monthOf())}</Text>:
+          </Text>
+
+          <ScrollView style={{ maxHeight: 260 }} showsVerticalScrollIndicator={false}>
+            {services.map(svc => (
+              <View key={svc} style={{ marginBottom: 6 }}>
+                <Text style={at.groupLabel}>{svc === 'BK' ? 'Bookkeeping' : 'CFO'}</Text>
+                {REQUIRED_UPLOADS.filter(i => i.service === svc).map(item => {
+                  const active = selected?.key === item.key;
+                  return (
+                    <TouchableOpacity
+                      key={item.key}
+                      style={[at.itemRow, active && at.itemRowActive]}
+                      onPress={() => setSelected(active ? null : item)}
+                      activeOpacity={0.75}
+                    >
+                      <Ionicons
+                        name={active ? 'radio-button-on' : 'radio-button-off'}
+                        size={18}
+                        color={active ? '#065F46' : '#94A3B8'}
+                      />
+                      <Text style={[at.itemText, active && { color: '#065F46', fontWeight: '700' }]}>{item.label}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            ))}
+          </ScrollView>
+
+          <View style={dm.row}>
+            <TouchableOpacity style={dm.cancelBtn} onPress={() => { onCancel(); onConfirm(null); }}>
+              <Text style={dm.cancelText}>Approve only</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[dm.deleteBtn, { backgroundColor: selected ? '#059669' : '#A7F3D0' }]}
+              disabled={!selected}
+              onPress={() => { const s = selected; onCancel(); onConfirm(s); }}
+            >
+              <Text style={dm.deleteText}>Approve & Tag</Text>
+            </TouchableOpacity>
+          </View>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
+const at = StyleSheet.create({
+  prompt:     { color: '#374151', fontSize: 12, fontWeight: '500', lineHeight: 17 },
+  groupLabel: { color: '#94A3B8', fontSize: 10, fontWeight: '800', letterSpacing: 0.6, textTransform: 'uppercase', marginBottom: 4, marginTop: 4 },
+  itemRow:      { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 9, paddingHorizontal: 10, borderRadius: 12, borderWidth: 1, borderColor: '#E5E7EB', marginBottom: 6, backgroundColor: '#FFFFFF' },
+  itemRowActive:{ borderColor: '#059669', backgroundColor: '#ECFDF5' },
+  itemText:     { color: '#374151', fontSize: 13, flex: 1 },
+});
+
 // ── Config ─────────────────────────────────────────────────────────────────────
 
 const FOLDERS = [
@@ -227,6 +318,7 @@ export function AdminDocumentsScreen() {
   const [viewerDoc, setViewerDoc]   = useState<Document | null>(null);
   const [deleteDoc, setDeleteDoc]   = useState<Document | null>(null);
   const [rejectDoc, setRejectDoc]   = useState<Document | null>(null);
+  const [approveDoc, setApproveDoc] = useState<Document | null>(null);
   const [actionBusy, setActionBusy] = useState<string | null>(null); // doc id being actioned
   const [browserOpen, setBrowserOpen] = useState(false);
 
@@ -270,11 +362,27 @@ export function AdminDocumentsScreen() {
       setDocuments(prev => prev.filter(d => d.id !== doc.id));
   };
 
-  const handleApprove = async (doc: Document) => {
+  const handleApprove = async (doc: Document, requirement: RequiredItem | null) => {
     if (actionBusy) return;
     setActionBusy(doc.id);
-    const ok = await approveDocument(doc.id, doc.document_type ?? '', user?.email ?? 'admin');
-    if (ok) setDocuments(prev => prev.map(d => d.id === doc.id ? { ...d, approval_status: 'approved', approved_by: user?.email ?? 'admin' } : d));
+    const table    = doc.document_type ?? '';
+    const approver = user?.email ?? 'admin';
+    const ok = await approveDocument(doc.id, table, approver);
+    if (ok) {
+      // Tag which required monthly item this upload fulfills → moves the client's progress bar
+      if (requirement && doc.email) {
+        await tagDocumentRequirement({
+          clientEmail:    doc.email,
+          documentId:     doc.id,
+          documentTable:  table,
+          service:        requirement.service,
+          requirementKey: requirement.key,
+          month:          monthOf(),
+          taggedBy:       approver,
+        });
+      }
+      setDocuments(prev => prev.map(d => d.id === doc.id ? { ...d, approval_status: 'approved', approved_by: approver } : d));
+    }
     setActionBusy(null);
   };
 
@@ -329,7 +437,7 @@ export function AdminDocumentsScreen() {
             <View style={s.approvalRow}>
               <TouchableOpacity
                 style={[s.approveBtn, isBusy && { opacity: 0.5 }]}
-                onPress={() => handleApprove(item)}
+                onPress={() => setApproveDoc(item)}
                 disabled={!!isBusy}
                 activeOpacity={0.75}
               >
@@ -532,6 +640,12 @@ export function AdminDocumentsScreen() {
         name={rejectDoc?.name ?? ''}
         onConfirm={note => { if (rejectDoc) { handleReject(rejectDoc, note); setRejectDoc(null); } }}
         onCancel={() => setRejectDoc(null)}
+      />
+      <ApproveTagModal
+        visible={!!approveDoc}
+        doc={approveDoc}
+        onConfirm={item => { if (approveDoc) handleApprove(approveDoc, item); }}
+        onCancel={() => setApproveDoc(null)}
       />
 
       {/* ── File Browser ── */}

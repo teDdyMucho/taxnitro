@@ -20,6 +20,10 @@ import { Colors } from '../../constants/colors';
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../lib/supabase';
 import { getDocumentsByEmail, FOLDER_TABLES } from '../../db/documents';
+import {
+  REQUIRED_UPLOADS, itemsByService, reqKey, getFulfilledRequirements,
+  monthOf, formatMonthLabel,
+} from '../../db/requirements';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -263,6 +267,7 @@ export function DashboardScreen() {
   const [chartData, setChartData] = useState<ChartPoint[]>(last6Months());
   const [activity, setActivity] = useState<ActivityItem[]>([]);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [fulfilled, setFulfilled] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -287,14 +292,18 @@ export function DashboardScreen() {
     sixMonthsAgo.setDate(1);
 
     const userEmail = user.email;
-    const [docs, profileRes] = await Promise.all([
+    const [docs, profileRes, reqs] = await Promise.all([
       getDocumentsByEmail(userEmail),
       supabase.from('profiles').select('avatar_url').eq('id', user.id).single(),
+      getFulfilledRequirements(userEmail, monthOf()),
     ]);
 
     if (!mountedRef.current) return;
 
     if (profileRes.data?.avatar_url) setAvatarUrl(profileRes.data.avatar_url);
+
+    // Fulfilled required uploads this month (admin-accepted + tagged)
+    setFulfilled(new Set(reqs.map(r => reqKey(r.service, r.requirement_key))));
 
     // Stats
     const weekAgoTime = oneWeekAgo.getTime();
@@ -354,13 +363,25 @@ export function DashboardScreen() {
         .subscribe()
     );
 
+    // Watch requirement tags so the upload progress bar moves when admin accepts
+    channels.push(
+      supabase.channel(`dash:document_requirements:${email}`)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'document_requirements', filter: `client_email=eq.${email}` },
+          () => fetchData())
+        .subscribe()
+    );
+
     return () => { channels.forEach(ch => supabase.removeChannel(ch)); };
   }, [user?.email, fetchData]);
 
-  const viewedPct = stats.total > 0 ? (stats.viewed / stats.total) * 100 : 0;
+  // ── Required-upload progress (admin-accepted items only) ──
+  const reqDone   = REQUIRED_UPLOADS.filter(i => fulfilled.has(reqKey(i.service, i.key))).length;
+  const reqTotal  = REQUIRED_UPLOADS.length;
+  const reqPct    = reqTotal > 0 ? (reqDone / reqTotal) * 100 : 0;
+  const reqColor  = reqPct >= 100 ? Colors.viewed : reqPct >= 50 ? Colors.primary : Colors.accentGold;
+
   const firstName = user?.name?.split(' ')[0] ?? 'there';
   const userInitials = user?.name ? initials(user.name) : '?';
-  const progressColor = viewedPct >= 50 ? Colors.primary : Colors.accentGold;
 
   const headerPaddingTop = Platform.OS === 'web' ? 20 : insets.top + 20;
 
@@ -444,12 +465,15 @@ export function DashboardScreen() {
             />
           </View>
 
-          {/* ── DOCUMENT REVIEW PROGRESS ──────────────────────────────────── */}
+          {/* ── REQUIRED DOCUMENTS PROGRESS ───────────────────────────────── */}
           <View style={styles.card}>
             <View style={styles.cardRow}>
-              <Text style={styles.cardTitle}>Document Review Progress</Text>
-              <Text style={[styles.progressPct, { color: progressColor }]}>
-                {Math.round(viewedPct)}%
+              <View style={{ flex: 1 }}>
+                <Text style={styles.cardTitle}>Required Documents</Text>
+                <Text style={styles.cardSubtitle}>Accepted this month · {formatMonthLabel(monthOf())}</Text>
+              </View>
+              <Text style={[styles.progressPct, { color: reqColor }]}>
+                {Math.round(reqPct)}%
               </Text>
             </View>
 
@@ -458,23 +482,42 @@ export function DashboardScreen() {
               <View
                 style={[
                   styles.progressFill,
-                  { width: `${viewedPct}%` as any, backgroundColor: progressColor },
+                  { width: `${reqPct}%` as any, backgroundColor: reqColor },
                 ]}
               />
             </View>
 
-            {/* Legend */}
-            <View style={styles.progressLegend}>
-              <View style={styles.legendItem}>
-                <View style={[styles.legendDot, { backgroundColor: Colors.primary }]} />
-                <Text style={styles.legendText}>{stats.viewed} Viewed</Text>
-              </View>
-              <View style={styles.legendSep} />
-              <View style={styles.legendItem}>
-                <View style={[styles.legendDot, { backgroundColor: Colors.accentGold }]} />
-                <Text style={styles.legendText}>{stats.newThisWeek} New this week</Text>
-              </View>
-            </View>
+            {/* Count summary */}
+            <Text style={styles.reqSummary}>
+              {reqDone} of {reqTotal} required items accepted
+            </Text>
+
+            {/* Checklist grouped by service */}
+            {(['BK', 'CFO'] as const).map(svc => {
+              const items = itemsByService(svc);
+              if (items.length === 0) return null;
+              return (
+                <View key={svc} style={styles.reqGroup}>
+                  <Text style={styles.reqGroupLabel}>{svc === 'BK' ? 'Bookkeeping' : 'CFO'}</Text>
+                  {items.map(item => {
+                    const done = fulfilled.has(reqKey(item.service, item.key));
+                    return (
+                      <View key={item.key} style={styles.reqItemRow}>
+                        <Ionicons
+                          name={done ? 'checkmark-circle' : 'ellipse-outline'}
+                          size={17}
+                          color={done ? Colors.viewed : Colors.textMuted}
+                        />
+                        <Text style={[styles.reqItemText, done && { color: Colors.textPrimary, fontWeight: '600' }]} numberOfLines={1}>
+                          {item.label}
+                        </Text>
+                        {done && <Text style={styles.reqItemDone}>Accepted</Text>}
+                      </View>
+                    );
+                  })}
+                </View>
+              );
+            })}
           </View>
 
           {/* ── DOCUMENTS UPLOADED CHART ──────────────────────────────────── */}
@@ -665,6 +708,43 @@ const styles = StyleSheet.create({
     height: '100%',
     borderRadius: 4,
   },
+
+  // ── Required documents checklist ─────────────────────────────────────────
+  reqSummary: {
+    color: Colors.textMuted,
+    fontSize: 12,
+    fontWeight: '600',
+    marginBottom: 6,
+  },
+  reqGroup: {
+    marginTop: 8,
+  },
+  reqGroupLabel: {
+    color: Colors.textMuted,
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
+    marginBottom: 6,
+  },
+  reqItemRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 6,
+  },
+  reqItemText: {
+    flex: 1,
+    color: Colors.textSecondary,
+    fontSize: 13,
+  },
+  reqItemDone: {
+    color: Colors.viewed,
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.2,
+  },
+
   progressLegend: {
     flexDirection: 'row',
     alignItems: 'center',

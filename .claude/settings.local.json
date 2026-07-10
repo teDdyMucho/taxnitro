@@ -5,7 +5,12 @@
       "Bash(npm install *)",
       "Bash(del \"c:\\\\Users\\\\AKT\\\\Desktop\\\\Tax Nitro\\\\taxnitro\\\\database.sql\")",
       "Bash(eas --version)",
-      "Bash(cd \"/c/Users/AKT/Desktop/Tax Nitro/taxnitro\" && sed -i 's/useNativeDriver: true/useNativeDriver: nativeDriver/g' src/components/Button.tsx src/components/FileItem.tsx src/components/FolderItem.tsx src/components/SkeletonLoader.tsx src/screens/auth/LoginScreen.tsx src/screens/auth/RegisterScreen.tsx src/screens/main/DashboardScreen.tsx src/screens/main/UploadScreen.tsx)"
+      "Bash(cd \"/c/Users/AKT/Desktop/Tax Nitro/taxnitro\" && sed -i 's/useNativeDriver: true/useNativeDriver: nativeDriver/g' src/components/Button.tsx src/components/FileItem.tsx src/components/FolderItem.tsx src/components/SkeletonLoader.tsx src/screens/auth/LoginScreen.tsx src/screens/auth/RegisterScreen.tsx src/screens/main/DashboardScreen.tsx src/screens/main/UploadScreen.tsx)",
+      "PowerShell(npm audit)",
+      "PowerShell(npm audit fix)",
+      "PowerShell(npx expo config --type public 2>&1)",
+      "PowerShell(if \\($?\\) { \"---EXPO OK---\" })",
+      "Bash(node -e ' *)"
     ],
     "additionalDirectories": [
       "c:\\c\\Users\\AKT\\Desktop\\Tax Nitro\\taxnitro\\src\\components"
