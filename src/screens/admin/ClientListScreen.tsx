@@ -13,7 +13,8 @@ import {
   getAllClients, updateClientProfile, sendPasswordReset, Profile,
 } from '../../db/profiles';
 import {
-  getRequirementCountsForMonth, REQUIRED_TOTAL, monthOf, formatMonthLabel,
+  getRequirementCountsForMonth, getFulfilledRequirements, REQUIRED_UPLOADS,
+  REQUIRED_TOTAL, itemsByService, reqKey, monthOf, formatMonthLabel,
 } from '../../db/requirements';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -859,6 +860,141 @@ const mm = StyleSheet.create({
   pwdBtnText: { color: '#3A3131', fontWeight: '700', fontSize: 14 },
 });
 
+// ── Progress Detail Modal ─────────────────────────────────────────────────────
+// Phone-friendly bottom sheet: overall progress bar + per-item checklist for the
+// month, plus a shortcut to the client's full uploaded-documents list.
+
+function ProgressDetailModal({ client, onClose, onViewDocs }: {
+  client: Profile;
+  onClose: () => void;
+  onViewDocs: (client: Profile) => void;
+}) {
+  const [fulfilled, setFulfilled] = useState<Set<string>>(new Set());
+  const [loading, setLoading]     = useState(true);
+  const month = monthOf();
+
+  useEffect(() => {
+    let alive = true;
+    getFulfilledRequirements(client.email, month).then(reqs => {
+      if (!alive) return;
+      setFulfilled(new Set(reqs.map(r => reqKey(r.service, r.requirement_key))));
+      setLoading(false);
+    });
+    return () => { alive = false; };
+  }, [client.email]);
+
+  const done  = REQUIRED_UPLOADS.filter(i => fulfilled.has(reqKey(i.service, i.key))).length;
+  const pct   = REQUIRED_TOTAL > 0 ? (done / REQUIRED_TOTAL) * 100 : 0;
+  const color = pct >= 100 ? '#16A34A' : pct >= 50 ? '#E8B923' : '#B5905B';
+  const grad  = avatarGradient(client.full_name);
+
+  return (
+    <Modal visible transparent animationType="slide" onRequestClose={onClose}>
+      <Pressable style={pd.overlay} onPress={onClose}>
+        <Pressable style={pd.sheet} onPress={() => {}}>
+          <View style={pd.handle} />
+
+          {/* Header */}
+          <View style={pd.top}>
+            <LinearGradient colors={grad} style={pd.avatar} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
+              <Text style={pd.avatarText}>{mkInitials(client.full_name)}</Text>
+            </LinearGradient>
+            <View style={{ flex: 1 }}>
+              <Text style={pd.name} numberOfLines={1}>{client.full_name || 'Client'}</Text>
+              <Text style={pd.email} numberOfLines={1}>{client.email}</Text>
+            </View>
+          </View>
+
+          {/* Progress summary */}
+          <Text style={pd.monthLabel}>Required documents · {formatMonthLabel(month)}</Text>
+          <View style={pd.pctRow}>
+            <Text style={[pd.pct, { color }]}>{Math.round(pct)}%</Text>
+            <Text style={pd.count}>{done} of {REQUIRED_TOTAL} accepted</Text>
+          </View>
+          <View style={pd.track}>
+            <View style={[pd.fill, { width: `${pct}%` as any, backgroundColor: color }]} />
+          </View>
+
+          {/* Checklist */}
+          {loading ? (
+            <ActivityIndicator color={Colors.primary} style={{ marginVertical: 24 }} />
+          ) : (
+            <ScrollView style={{ maxHeight: 320 }} showsVerticalScrollIndicator={false}>
+              {(['BK', 'CFO'] as const).map(svc => (
+                <View key={svc} style={pd.group}>
+                  <Text style={pd.groupLabel}>{svc === 'BK' ? 'Bookkeeping' : 'CFO'}</Text>
+                  {itemsByService(svc).map(item => {
+                    const ok = fulfilled.has(reqKey(item.service, item.key));
+                    return (
+                      <View key={item.key} style={pd.itemRow}>
+                        <Ionicons
+                          name={ok ? 'checkmark-circle' : 'ellipse-outline'}
+                          size={18}
+                          color={ok ? '#16A34A' : Colors.textMuted}
+                        />
+                        <Text style={[pd.itemText, ok && { color: Colors.textPrimary, fontWeight: '700' }]} numberOfLines={1}>
+                          {item.label}
+                        </Text>
+                        {ok && <Text style={pd.accepted}>Accepted</Text>}
+                      </View>
+                    );
+                  })}
+                </View>
+              ))}
+            </ScrollView>
+          )}
+
+          {/* Footer actions */}
+          <TouchableOpacity style={pd.docsBtn} onPress={() => onViewDocs(client)} activeOpacity={0.85}>
+            <Ionicons name="folder-open-outline" size={16} color="#3A3131" />
+            <Text style={pd.docsBtnText}>View uploaded documents</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={pd.closeBtn} onPress={onClose} activeOpacity={0.8}>
+            <Text style={pd.closeText}>Close</Text>
+          </TouchableOpacity>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
+const pd = StyleSheet.create({
+  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
+  sheet: {
+    backgroundColor: Colors.bgCard, borderTopLeftRadius: 28, borderTopRightRadius: 28,
+    padding: 24, paddingBottom: Platform.OS === 'ios' ? 36 : 28, gap: 14,
+    shadowColor: '#000', shadowOffset: { width: 0, height: -6 }, shadowOpacity: 0.14, shadowRadius: 24, elevation: 18,
+  },
+  handle: { width: 40, height: 4, backgroundColor: Colors.border, borderRadius: 2, alignSelf: 'center' },
+  top: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+  avatar: { width: 52, height: 52, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
+  avatarText: { color: Colors.white, fontSize: 18, fontWeight: '800' },
+  name:  { color: Colors.textPrimary, fontSize: 17, fontWeight: '800' },
+  email: { color: Colors.textMuted, fontSize: 12, marginTop: 2 },
+
+  monthLabel: { color: Colors.textMuted, fontSize: 11, fontWeight: '700', letterSpacing: 0.8, textTransform: 'uppercase', marginTop: 4 },
+  pctRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' },
+  pct:   { fontSize: 30, fontWeight: '900', letterSpacing: -1 },
+  count: { color: Colors.textSecondary, fontSize: 13, fontWeight: '600' },
+  track: { height: 8, borderRadius: 4, backgroundColor: Colors.bgMid, overflow: 'hidden' },
+  fill:  { height: '100%', borderRadius: 4 },
+
+  group: { marginTop: 12 },
+  groupLabel: { color: Colors.textMuted, fontSize: 10, fontWeight: '800', letterSpacing: 0.6, textTransform: 'uppercase', marginBottom: 4 },
+  itemRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 7 },
+  itemText: { flex: 1, color: Colors.textSecondary, fontSize: 13 },
+  accepted: { color: '#16A34A', fontSize: 10, fontWeight: '800', letterSpacing: 0.2 },
+
+  docsBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    backgroundColor: '#E8B923', borderRadius: 14, paddingVertical: 14, marginTop: 6,
+    shadowColor: '#E8B923', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 10, elevation: 4,
+  },
+  docsBtnText: { color: '#3A3131', fontWeight: '800', fontSize: 14 },
+  closeBtn: { alignItems: 'center', paddingVertical: 10 },
+  closeText: { color: Colors.textMuted, fontSize: 14, fontWeight: '600' },
+});
+
 // ── Main Screen ───────────────────────────────────────────────────────────────
 
 interface Props {
@@ -876,6 +1012,7 @@ export function ClientListScreen({ onSelectClient }: Props) {
   const [loading, setLoading]       = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [managing, setManaging]     = useState<Profile | null>(null);
+  const [progressClient, setProgressClient] = useState<Profile | null>(null);
   const [addOpen, setAddOpen]       = useState(false);
   const [toastMsg, setToastMsg]     = useState('');
   const [toastVisible, setToastVisible] = useState(false);
@@ -960,6 +1097,13 @@ export function ClientListScreen({ onSelectClient }: Props) {
             </View>
             <Text style={[s.reqLabel, { color: reqColor }]}>{reqDone}/{REQUIRED_TOTAL}</Text>
           </View>
+
+          {/* Progress details + documents */}
+          <TouchableOpacity style={s.viewDocsBtn} onPress={() => setProgressClient(item)} activeOpacity={0.8}>
+            <Ionicons name="stats-chart-outline" size={14} color="#E8B923" />
+            <Text style={s.viewDocsText}>View progress & documents</Text>
+            <Ionicons name="chevron-forward" size={14} color="#B5905B" />
+          </TouchableOpacity>
         </View>
 
         {/* Right: icon action buttons */}
@@ -1096,6 +1240,15 @@ export function ClientListScreen({ onSelectClient }: Props) {
             showToast('Client updated');
           }}
           onViewDocs={c => { setManaging(null); onSelectClient(c); }}
+        />
+      )}
+
+      {/* ── Progress detail modal ── */}
+      {progressClient && (
+        <ProgressDetailModal
+          client={progressClient}
+          onClose={() => setProgressClient(null)}
+          onViewDocs={c => { setProgressClient(null); onSelectClient(c); }}
         />
       )}
 
@@ -1250,6 +1403,13 @@ const s = StyleSheet.create({
   reqTrack: { flex: 1, height: 5, borderRadius: 3, backgroundColor: Colors.bgMid, overflow: 'hidden' },
   reqFill:  { height: '100%', borderRadius: 3 },
   reqLabel: { fontSize: 11, fontWeight: '800', minWidth: 30, textAlign: 'right' },
+  viewDocsBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8,
+    alignSelf: 'flex-start', backgroundColor: 'rgba(232,185,35,0.10)',
+    borderWidth: 1, borderColor: 'rgba(232,185,35,0.3)',
+    borderRadius: 20, paddingHorizontal: 12, paddingVertical: 6,
+  },
+  viewDocsText: { color: '#B5905B', fontSize: 12, fontWeight: '700' },
 
   /* Plan chip */
   planChip: {
