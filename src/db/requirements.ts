@@ -57,6 +57,23 @@ export async function getFulfilledRequirements(email: string, month: string): Pr
   return (data ?? []) as FulfilledRequirement[];
 }
 
+/** Accepted-item counts per client for a month → { client_email: count }. Admin/staff only. */
+export async function getRequirementCountsForMonth(month: string): Promise<Record<string, number>> {
+  const { data, error } = await supabase
+    .from('document_requirements')
+    .select('client_email')
+    .eq('month', month);
+  if (error) { console.error('getRequirementCountsForMonth:', error.message); return {}; }
+  const counts: Record<string, number> = {};
+  for (const r of (data ?? []) as { client_email: string }[]) {
+    counts[r.client_email] = (counts[r.client_email] ?? 0) + 1;
+  }
+  return counts;
+}
+
+/** Total number of required items (the progress denominator). */
+export const REQUIRED_TOTAL = REQUIRED_UPLOADS.length;
+
 /** Tag an approved document as fulfilling a required item (admin only). */
 export async function tagDocumentRequirement(params: {
   clientEmail: string;

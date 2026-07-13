@@ -12,6 +12,9 @@ import { useAuth } from '../../context/AuthContext';
 import {
   getAllClients, updateClientProfile, sendPasswordReset, Profile,
 } from '../../db/profiles';
+import {
+  getRequirementCountsForMonth, REQUIRED_TOTAL, monthOf, formatMonthLabel,
+} from '../../db/requirements';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -868,6 +871,7 @@ export function ClientListScreen({ onSelectClient }: Props) {
   useEffect(() => () => { mountedRef.current = false; }, []);
 
   const [clients, setClients]       = useState<Profile[]>([]);
+  const [reqCounts, setReqCounts]   = useState<Record<string, number>>({});
   const [query, setQuery]           = useState('');
   const [loading, setLoading]       = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -891,8 +895,11 @@ export function ClientListScreen({ onSelectClient }: Props) {
       if (mountedRef.current) { setLoading(false); setRefreshing(false); }
     }, 8000);
     try {
-      const data = await getAllClients();
-      if (mountedRef.current) setClients(data);
+      const [data, counts] = await Promise.all([
+        getAllClients(),
+        getRequirementCountsForMonth(monthOf()),
+      ]);
+      if (mountedRef.current) { setClients(data); setReqCounts(counts); }
     }
     catch (e) { console.error(e); }
     finally { clearTimeout(safetyTimer); if (mountedRef.current) { setLoading(false); setRefreshing(false); } }
@@ -913,6 +920,10 @@ export function ClientListScreen({ onSelectClient }: Props) {
   const renderItem = ({ item }: { item: Profile }) => {
     const grad = avatarGradient(item.full_name);
     const pc   = PLAN_COLORS[item.plan] ?? PLAN_COLORS.Free;
+
+    const reqDone  = reqCounts[item.email] ?? 0;
+    const reqPct   = REQUIRED_TOTAL > 0 ? (reqDone / REQUIRED_TOTAL) * 100 : 0;
+    const reqColor = reqPct >= 100 ? '#16A34A' : reqPct >= 50 ? '#E8B923' : '#B5905B';
 
     return (
       <View style={s.card}>
@@ -940,6 +951,14 @@ export function ClientListScreen({ onSelectClient }: Props) {
                 <Text style={s.inactiveText}>Inactive</Text>
               </View>
             )}
+          </View>
+
+          {/* Required-docs progress (this month) */}
+          <View style={s.reqRow}>
+            <View style={s.reqTrack}>
+              <View style={[s.reqFill, { width: `${reqPct}%` as any, backgroundColor: reqColor }]} />
+            </View>
+            <Text style={[s.reqLabel, { color: reqColor }]}>{reqDone}/{REQUIRED_TOTAL}</Text>
           </View>
         </View>
 
@@ -1027,7 +1046,7 @@ export function ClientListScreen({ onSelectClient }: Props) {
         <Text style={s.sectionLabel}>
           {query
             ? `${filtered.length} result${filtered.length !== 1 ? 's' : ''}`
-            : 'All Clients'}
+            : `All Clients · required docs accepted (${formatMonthLabel(monthOf())})`}
         </Text>
       )}
 
@@ -1225,6 +1244,12 @@ const s = StyleSheet.create({
   name:  { color: Colors.textPrimary, fontSize: 15, fontWeight: '700' },
   email: { color: Colors.textMuted,  fontSize: 12 },
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 5 },
+
+  /* Required-docs mini progress */
+  reqRow:   { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8 },
+  reqTrack: { flex: 1, height: 5, borderRadius: 3, backgroundColor: Colors.bgMid, overflow: 'hidden' },
+  reqFill:  { height: '100%', borderRadius: 3 },
+  reqLabel: { fontSize: 11, fontWeight: '800', minWidth: 30, textAlign: 'right' },
 
   /* Plan chip */
   planChip: {

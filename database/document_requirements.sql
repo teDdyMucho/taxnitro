@@ -35,9 +35,10 @@ create policy "clients read own requirements"
   on public.document_requirements for select
   using (client_email = (select email from public.profiles where id = auth.uid()));
 
--- Admins can read/write everything
+-- Staff and admins can read/write everything (both work the Documents queue)
 drop policy if exists "admins manage requirements" on public.document_requirements;
-create policy "admins manage requirements"
+drop policy if exists "staff and admins manage requirements" on public.document_requirements;
+create policy "staff and admins manage requirements"
   on public.document_requirements for all
-  using     (exists (select 1 from public.profiles where id = auth.uid() and role = 'admin'))
-  with check (exists (select 1 from public.profiles where id = auth.uid() and role = 'admin'));
+  using     (exists (select 1 from public.profiles where id = auth.uid() and role in ('admin', 'staff')))
+  with check (exists (select 1 from public.profiles where id = auth.uid() and role in ('admin', 'staff')));
