@@ -34,6 +34,9 @@ import {
   REQUIRED_UPLOADS,
   RequiredItem,
   tagDocumentRequirement,
+  approveRequirementForDocument,
+  clearPendingRequirementForDocument,
+  getRequirementForDocument,
   monthOf,
   formatMonthLabel,
 } from '../../db/requirements';
@@ -161,9 +164,11 @@ const rj = StyleSheet.create({
   },
 });
 
-// ── Approve & Tag Modal ──────────────────────────────────────────────────────
-// Approving a client upload also lets the admin tag WHICH required monthly item
-// it fulfills. Tagging is what advances the client's upload progress bar.
+// ── Approve Modal ─────────────────────────────────────────────────────────────
+// The CLIENT tags which required item an upload is for at upload time. Here the
+// admin just SEES that tag (read-only) and approves — approval flips the client's
+// pending slot to accepted (yellow → green). For legacy/untagged uploads (no client
+// tag) the admin can still manually pick the item as a fallback.
 
 function ApproveTagModal({ visible, doc, onConfirm, onCancel }: {
   visible: boolean;
@@ -171,8 +176,32 @@ function ApproveTagModal({ visible, doc, onConfirm, onCancel }: {
   onConfirm: (item: RequiredItem | null) => void;
   onCancel: () => void;
 }) {
-  const [selected, setSelected] = useState<RequiredItem | null>(null);
-  useEffect(() => { if (visible) setSelected(null); }, [visible]);
+  const [selected, setSelected]     = useState<RequiredItem | null>(null); // manual pick (fallback only)
+  const [clientTag, setClientTag]   = useState<RequiredItem | null>(null); // what the client chose
+  const [loadingTag, setLoadingTag] = useState(false);
+  // The doc id the loaded clientTag belongs to — guards against showing a stale
+  // tag from the previously-approved doc while the new lookup is in flight.
+  const [tagDocId, setTagDocId]     = useState<string | null>(null);
+
+  // On open, look up the item the client tagged this upload with.
+  useEffect(() => {
+    let cancelled = false;
+    setSelected(null);
+    setClientTag(null);
+    setTagDocId(null);
+    if (visible && doc) {
+      setLoadingTag(true);
+      getRequirementForDocument(doc.id)
+        .then(item => { if (!cancelled) { setClientTag(item); setTagDocId(doc.id); } })
+        .finally(() => { if (!cancelled) setLoadingTag(false); });
+    }
+    return () => { cancelled = true; };
+  }, [visible, doc?.id]);
+
+  // Only trust the loaded tag if it matches the doc currently open (guards the
+  // one-frame flash of the previously-approved doc's tag while the lookup runs).
+  const tagReady = !!doc && tagDocId === doc.id;
+  const showTag  = tagReady && !!clientTag;
 
   const services: Array<RequiredItem['service']> = ['BK', 'CFO'];
 
@@ -188,49 +217,85 @@ function ApproveTagModal({ visible, doc, onConfirm, onCancel }: {
             <Text style={[dm.sub, { textAlign: 'center' }]} numberOfLines={2}>{doc?.name}</Text>
           </View>
 
-          <Text style={at.prompt}>
-            Tag which required item this fulfills for{' '}
-            <Text style={{ fontWeight: '800' }}>{formatMonthLabel(monthOf())}</Text>:
-          </Text>
-
-          <ScrollView style={{ maxHeight: 260 }} showsVerticalScrollIndicator={false}>
-            {services.map(svc => (
-              <View key={svc} style={{ marginBottom: 6 }}>
-                <Text style={at.groupLabel}>{svc === 'BK' ? 'Bookkeeping' : 'CFO'}</Text>
-                {REQUIRED_UPLOADS.filter(i => i.service === svc).map(item => {
-                  const active = selected?.key === item.key;
-                  return (
-                    <TouchableOpacity
-                      key={item.key}
-                      style={[at.itemRow, active && at.itemRowActive]}
-                      onPress={() => setSelected(active ? null : item)}
-                      activeOpacity={0.75}
-                    >
-                      <Ionicons
-                        name={active ? 'radio-button-on' : 'radio-button-off'}
-                        size={18}
-                        color={active ? '#065F46' : '#94A3B8'}
-                      />
-                      <Text style={[at.itemText, active && { color: '#065F46', fontWeight: '700' }]}>{item.label}</Text>
-                    </TouchableOpacity>
-                  );
-                })}
+          {loadingTag || !tagReady ? (
+            <View style={{ paddingVertical: 24, alignItems: 'center' }}>
+              <ActivityIndicator color="#059669" />
+            </View>
+          ) : showTag ? (
+            // ── Client already chose the item → read-only, no picker ──
+            <>
+              <Text style={at.prompt}>
+                The client uploaded this for{' '}
+                <Text style={{ fontWeight: '800' }}>{formatMonthLabel(monthOf())}</Text>:
+              </Text>
+              <View style={at.tagCard}>
+                <Ionicons name="checkmark-circle" size={20} color="#059669" />
+                <View style={{ flex: 1 }}>
+                  <Text style={at.tagLabel}>{clientTag.label}</Text>
+                  <Text style={at.tagService}>{clientTag.service === 'BK' ? 'Bookkeeping' : 'CFO'}</Text>
+                </View>
               </View>
-            ))}
-          </ScrollView>
 
-          <View style={dm.row}>
-            <TouchableOpacity style={dm.cancelBtn} onPress={() => { onCancel(); onConfirm(null); }}>
-              <Text style={dm.cancelText}>Approve only</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[dm.deleteBtn, { backgroundColor: selected ? '#059669' : '#A7F3D0' }]}
-              disabled={!selected}
-              onPress={() => { const s = selected; onCancel(); onConfirm(s); }}
-            >
-              <Text style={dm.deleteText}>Approve & Tag</Text>
-            </TouchableOpacity>
-          </View>
+              <View style={dm.row}>
+                <TouchableOpacity style={dm.cancelBtn} onPress={onCancel}>
+                  <Text style={dm.cancelText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[dm.deleteBtn, { backgroundColor: '#059669' }]}
+                  onPress={() => { onCancel(); onConfirm(clientTag); }}
+                >
+                  <Text style={dm.deleteText}>Approve</Text>
+                </TouchableOpacity>
+              </View>
+            </>
+          ) : (
+            // ── Untagged (legacy) upload → admin picks manually (fallback) ──
+            <>
+              <Text style={at.prompt}>
+                Tag which required item this fulfills for{' '}
+                <Text style={{ fontWeight: '800' }}>{formatMonthLabel(monthOf())}</Text>:
+              </Text>
+
+              <ScrollView style={{ maxHeight: 260 }} showsVerticalScrollIndicator={false}>
+                {services.map(svc => (
+                  <View key={svc} style={{ marginBottom: 6 }}>
+                    <Text style={at.groupLabel}>{svc === 'BK' ? 'Bookkeeping' : 'CFO'}</Text>
+                    {REQUIRED_UPLOADS.filter(i => i.service === svc).map(item => {
+                      const active = selected?.key === item.key;
+                      return (
+                        <TouchableOpacity
+                          key={item.key}
+                          style={[at.itemRow, active && at.itemRowActive]}
+                          onPress={() => setSelected(active ? null : item)}
+                          activeOpacity={0.75}
+                        >
+                          <Ionicons
+                            name={active ? 'radio-button-on' : 'radio-button-off'}
+                            size={18}
+                            color={active ? '#065F46' : '#94A3B8'}
+                          />
+                          <Text style={[at.itemText, active && { color: '#065F46', fontWeight: '700' }]}>{item.label}</Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                ))}
+              </ScrollView>
+
+              <View style={dm.row}>
+                <TouchableOpacity style={dm.cancelBtn} onPress={() => { onCancel(); onConfirm(null); }}>
+                  <Text style={dm.cancelText}>Approve only</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[dm.deleteBtn, { backgroundColor: selected ? '#059669' : '#A7F3D0' }]}
+                  disabled={!selected}
+                  onPress={() => { const s = selected; onCancel(); onConfirm(s); }}
+                >
+                  <Text style={dm.deleteText}>Approve & Tag</Text>
+                </TouchableOpacity>
+              </View>
+            </>
+          )}
         </Pressable>
       </Pressable>
     </Modal>
@@ -243,6 +308,9 @@ const at = StyleSheet.create({
   itemRow:      { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 9, paddingHorizontal: 10, borderRadius: 12, borderWidth: 1, borderColor: '#E5E7EB', marginBottom: 6, backgroundColor: '#FFFFFF' },
   itemRowActive:{ borderColor: '#059669', backgroundColor: '#ECFDF5' },
   itemText:     { color: '#374151', fontSize: 13, flex: 1 },
+  tagCard:    { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderRadius: 14, borderWidth: 1, borderColor: '#059669', backgroundColor: '#ECFDF5' },
+  tagLabel:   { color: '#065F46', fontSize: 15, fontWeight: '800' },
+  tagService: { color: '#059669', fontSize: 11, fontWeight: '600', marginTop: 2 },
 });
 
 // ── Config ─────────────────────────────────────────────────────────────────────
@@ -251,9 +319,11 @@ const FOLDERS = [
   { key: 'all',                    label: 'All',            color: '#2C2320' },
   { key: 'pending',                label: 'Pending',        color: '#F59E0B' },
   { key: 'tax_client_uploads',     label: 'Client Uploads', color: '#E8B923' },
+  { key: 'tax_required_documents', label: 'Required Docs',   color: '#E8B923' },
   { key: 'tax_contracts',          label: 'Tax Contracts',  color: '#B5905B' },
   { key: 'tax_invoices',           label: 'Tax Invoices',   color: '#E8B923' },
   { key: 'tax_return_information', label: 'Returns',        color: '#B5905B' },
+  { key: 'bk_required_documents',  label: 'Required Docs',  color: '#E8B923' },
   { key: 'bk_contracts',           label: 'BK Contracts',   color: '#2C2320' },
   { key: 'bk_invoices',            label: 'BK Invoices',    color: '#E8B923' },
   { key: 'bk_for_client_review',   label: 'Client Review',  color: '#B5905B' },
@@ -358,8 +428,11 @@ export function AdminDocumentsScreen() {
   };
 
   const handleDelete = async (doc: Document) => {
-    if (await deleteDocument(doc.id, doc.document_type ?? ''))
+    if (await deleteDocument(doc.id, doc.document_type ?? '')) {
+      // Drop any pending requirement slot this file was fulfilling → radio back to grey.
+      await clearPendingRequirementForDocument(doc.id);
       setDocuments(prev => prev.filter(d => d.id !== doc.id));
+    }
   };
 
   const handleApprove = async (doc: Document, requirement: RequiredItem | null) => {
@@ -369,8 +442,12 @@ export function AdminDocumentsScreen() {
     const approver = user?.email ?? 'admin';
     const ok = await approveDocument(doc.id, table, approver);
     if (ok) {
-      // Tag which required monthly item this upload fulfills → moves the client's progress bar
-      if (requirement && doc.email) {
+      // If the client already tagged this upload with a required item (Required
+      // Documents folders), flip that pending slot to approved (yellow → green).
+      const autoFlipped = await approveRequirementForDocument(doc.id, approver);
+
+      // Otherwise, use the admin's manual tag from the Approve modal (legacy folders).
+      if (!autoFlipped && requirement && doc.email) {
         await tagDocumentRequirement({
           clientEmail:    doc.email,
           documentId:     doc.id,
@@ -390,7 +467,11 @@ export function AdminDocumentsScreen() {
     if (actionBusy) return;
     setActionBusy(doc.id);
     const ok = await rejectDocument(doc.id, doc.document_type ?? '', user?.email ?? 'admin', note);
-    if (ok) setDocuments(prev => prev.map(d => d.id === doc.id ? { ...d, approval_status: 'rejected', approval_note: note || null } : d));
+    if (ok) {
+      // Rejecting removes the client's pending requirement slot → dashboard radio goes back to grey.
+      await clearPendingRequirementForDocument(doc.id);
+      setDocuments(prev => prev.map(d => d.id === doc.id ? { ...d, approval_status: 'rejected', approval_note: note || null } : d));
+    }
     setActionBusy(null);
   };
 

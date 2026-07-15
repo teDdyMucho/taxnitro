@@ -31,9 +31,11 @@ interface UnreadFile {
 
 const FOLDER_LABELS: Record<string, string> = {
   tax_client_uploads:     'Client Uploads',
+  tax_required_documents: 'Required Documents',
   tax_contracts:          'Tax Contracts',
   tax_invoices:           'Tax Invoices',
   tax_return_information: 'Tax Returns',
+  bk_required_documents:  'Required Documents',
   bk_contracts:           'BK Contracts',
   bk_invoices:            'BK Invoices',
   bk_for_client_review:   'Client Review',

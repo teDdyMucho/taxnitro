@@ -32,6 +32,7 @@ const CATEGORIES = [
     color: '#E8B923',
     folders: [
       { table: 'tax_client_uploads',     label: 'Client Uploads',    icon: 'cloud-upload-outline'       as const },
+      { table: 'tax_required_documents', label: 'Required Documents',icon: 'cloud-upload-outline'       as const },
       { table: 'tax_contracts',          label: 'Contracts',         icon: 'document-text-outline'      as const },
       { table: 'tax_invoices',           label: 'Invoices',          icon: 'receipt-outline'            as const },
       { table: 'tax_return_information', label: 'Return Information',icon: 'information-circle-outline' as const },
@@ -43,6 +44,7 @@ const CATEGORIES = [
     title: 'Bookkeeping & Financials',
     color: '#B5905B',
     folders: [
+      { table: 'bk_required_documents', label: 'Required Documents',  icon: 'cloud-upload-outline'  as const },
       { table: 'bk_contracts',         label: 'Contracts',           icon: 'document-text-outline' as const },
       { table: 'bk_invoices',          label: 'Invoices',            icon: 'receipt-outline'       as const },
       { table: 'bk_for_client_review', label: 'For Client Review',   icon: 'eye-outline'           as const },

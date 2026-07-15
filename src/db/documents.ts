@@ -21,12 +21,14 @@ export interface Document {
   updated_at?: string;
 }
 
-// All 8 folder tables — matches the subfolder keys in DocumentsScreen
+// All folder tables — matches the subfolder keys in DocumentsScreen
 export const FOLDER_TABLES = [
   'tax_client_uploads',
+  'tax_required_documents',
   'tax_contracts',
   'tax_invoices',
   'tax_return_information',
+  'bk_required_documents',
   'bk_contracts',
   'bk_invoices',
   'bk_for_client_review',

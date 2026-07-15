@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 import {
   View, Text, StyleSheet, Modal, TouchableOpacity,
   TextInput, FlatList, KeyboardAvoidingView,
-  Platform, ActivityIndicator,
+  Platform, ActivityIndicator, Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -128,7 +128,7 @@ export function FileConversationPanel({ visible, doc, fileOwnerId, onClose }: Pr
     setText('');
     setSending(true);
 
-    await supabase.from('file_conversations').insert({
+    const { error } = await supabase.from('file_conversations').insert({
       file_id:       doc.id,
       folder_table:  doc.document_type,
       file_owner_id: fileOwnerId,
@@ -140,6 +140,12 @@ export function FileConversationPanel({ visible, doc, fileOwnerId, onClose }: Pr
     });
 
     setSending(false);
+
+    if (error) {
+      console.error('file_conversations insert failed:', error);
+      setText(msg); // restore so the reply isn't lost
+      Alert.alert('Could not send', error.message || 'Something went wrong sending your reply.');
+    }
   };
 
   const docName = (doc.file_name || doc.name || 'Document') as string;

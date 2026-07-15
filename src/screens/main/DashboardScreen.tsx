@@ -267,7 +267,8 @@ export function DashboardScreen() {
   const [chartData, setChartData] = useState<ChartPoint[]>(last6Months());
   const [activity, setActivity] = useState<ActivityItem[]>([]);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
-  const [fulfilled, setFulfilled] = useState<Set<string>>(new Set());
+  const [fulfilled, setFulfilled] = useState<Set<string>>(new Set()); // admin-approved (green)
+  const [pending, setPending]     = useState<Set<string>>(new Set()); // client-uploaded, awaiting approval (yellow)
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -302,8 +303,11 @@ export function DashboardScreen() {
 
     if (profileRes.data?.avatar_url) setAvatarUrl(profileRes.data.avatar_url);
 
-    // Fulfilled required uploads this month (admin-accepted + tagged)
-    setFulfilled(new Set(reqs.map(r => reqKey(r.service, r.requirement_key))));
+    // Required uploads this month — split by status:
+    //   approved → green (admin accepted + tagged)
+    //   pending  → yellow (client uploaded, awaiting admin approval)
+    setFulfilled(new Set(reqs.filter(r => r.status === 'approved').map(r => reqKey(r.service, r.requirement_key))));
+    setPending(new Set(reqs.filter(r => r.status === 'pending').map(r => reqKey(r.service, r.requirement_key))));
 
     // Stats
     const weekAgoTime = oneWeekAgo.getTime();
@@ -500,18 +504,23 @@ export function DashboardScreen() {
                 <View key={svc} style={styles.reqGroup}>
                   <Text style={styles.reqGroupLabel}>{svc === 'BK' ? 'Bookkeeping' : 'CFO'}</Text>
                   {items.map(item => {
-                    const done = fulfilled.has(reqKey(item.service, item.key));
+                    const k          = reqKey(item.service, item.key);
+                    const isApproved = fulfilled.has(k);
+                    const isPending  = !isApproved && pending.has(k);
+                    // Radio: gray (not uploaded) → yellow (pending approval) → green (approved)
+                    const iconName   = isApproved ? 'checkmark-circle' : isPending ? 'time' : 'ellipse-outline';
+                    const iconColor  = isApproved ? Colors.viewed : isPending ? Colors.accentGold : Colors.textMuted;
                     return (
                       <View key={item.key} style={styles.reqItemRow}>
-                        <Ionicons
-                          name={done ? 'checkmark-circle' : 'ellipse-outline'}
-                          size={17}
-                          color={done ? Colors.viewed : Colors.textMuted}
-                        />
-                        <Text style={[styles.reqItemText, done && { color: Colors.textPrimary, fontWeight: '600' }]} numberOfLines={1}>
+                        <Ionicons name={iconName} size={17} color={iconColor} />
+                        <Text
+                          style={[styles.reqItemText, (isApproved || isPending) && { color: Colors.textPrimary, fontWeight: '600' }]}
+                          numberOfLines={1}
+                        >
                           {item.label}
                         </Text>
-                        {done && <Text style={styles.reqItemDone}>Accepted</Text>}
+                        {isApproved && <Text style={styles.reqItemDone}>Accepted</Text>}
+                        {isPending  && <Text style={[styles.reqItemDone, { color: Colors.accentGold }]}>Pending</Text>}
                       </View>
                     );
                   })}
