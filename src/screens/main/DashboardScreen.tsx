@@ -269,6 +269,7 @@ export function DashboardScreen() {
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [fulfilled, setFulfilled] = useState<Set<string>>(new Set()); // admin-approved (green)
   const [pending, setPending]     = useState<Set<string>>(new Set()); // client-uploaded, awaiting approval (yellow)
+  const [rejected, setRejected]   = useState<Set<string>>(new Set()); // admin-declined (red)
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -306,8 +307,10 @@ export function DashboardScreen() {
     // Required uploads this month — split by status:
     //   approved → green (admin accepted + tagged)
     //   pending  → yellow (client uploaded, awaiting admin approval)
+    //   rejected → red   (admin declined — "Declined")
     setFulfilled(new Set(reqs.filter(r => r.status === 'approved').map(r => reqKey(r.service, r.requirement_key))));
     setPending(new Set(reqs.filter(r => r.status === 'pending').map(r => reqKey(r.service, r.requirement_key))));
+    setRejected(new Set(reqs.filter(r => r.status === 'rejected').map(r => reqKey(r.service, r.requirement_key))));
 
     // Stats
     const weekAgoTime = oneWeekAgo.getTime();
@@ -506,20 +509,22 @@ export function DashboardScreen() {
                   {items.map(item => {
                     const k          = reqKey(item.service, item.key);
                     const isApproved = fulfilled.has(k);
-                    const isPending  = !isApproved && pending.has(k);
-                    // Radio: gray (not uploaded) → yellow (pending approval) → green (approved)
-                    const iconName   = isApproved ? 'checkmark-circle' : isPending ? 'time' : 'ellipse-outline';
-                    const iconColor  = isApproved ? Colors.viewed : isPending ? Colors.accentGold : Colors.textMuted;
+                    const isRejected = !isApproved && rejected.has(k);
+                    const isPending  = !isApproved && !isRejected && pending.has(k);
+                    // Radio: grey (not uploaded) → yellow (pending) → red (declined) → green (approved)
+                    const iconName   = isApproved ? 'checkmark-circle' : isRejected ? 'close-circle' : isPending ? 'time' : 'ellipse-outline';
+                    const iconColor  = isApproved ? Colors.viewed : isRejected ? Colors.error : isPending ? Colors.accentGold : Colors.textMuted;
                     return (
                       <View key={item.key} style={styles.reqItemRow}>
                         <Ionicons name={iconName} size={17} color={iconColor} />
                         <Text
-                          style={[styles.reqItemText, (isApproved || isPending) && { color: Colors.textPrimary, fontWeight: '600' }]}
+                          style={[styles.reqItemText, (isApproved || isPending || isRejected) && { color: Colors.textPrimary, fontWeight: '600' }]}
                           numberOfLines={1}
                         >
                           {item.label}
                         </Text>
                         {isApproved && <Text style={styles.reqItemDone}>Accepted</Text>}
+                        {isRejected && <Text style={[styles.reqItemDone, { color: Colors.error }]}>Declined</Text>}
                         {isPending  && <Text style={[styles.reqItemDone, { color: Colors.accentGold }]}>Pending</Text>}
                       </View>
                     );

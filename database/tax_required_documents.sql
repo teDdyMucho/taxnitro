@@ -58,6 +58,14 @@ create policy "Users can update own tax_required_documents"
     or email = (select email from public.profiles where id = auth.uid())
   );
 
+drop policy if exists "Users can delete own tax_required_documents" on public.tax_required_documents;
+create policy "Users can delete own tax_required_documents"
+  on public.tax_required_documents for delete
+  using (
+    auth.uid() = user_id
+    or email = (select email from public.profiles where id = auth.uid())
+  );
+
 -- Staff and admins manage everything (they work the Documents queue)
 drop policy if exists "staff and admins manage tax_required_documents" on public.tax_required_documents;
 create policy "staff and admins manage tax_required_documents"

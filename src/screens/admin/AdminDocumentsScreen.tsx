@@ -36,6 +36,7 @@ import {
   tagDocumentRequirement,
   approveRequirementForDocument,
   clearPendingRequirementForDocument,
+  rejectRequirementForDocument,
   getRequirementForDocument,
   monthOf,
   formatMonthLabel,
@@ -466,10 +467,11 @@ export function AdminDocumentsScreen() {
   const handleReject = async (doc: Document, note: string) => {
     if (actionBusy) return;
     setActionBusy(doc.id);
-    const ok = await rejectDocument(doc.id, doc.document_type ?? '', user?.email ?? 'admin', note);
+    const rejecter = user?.email ?? 'admin';
+    const ok = await rejectDocument(doc.id, doc.document_type ?? '', rejecter, note);
     if (ok) {
-      // Rejecting removes the client's pending requirement slot → dashboard radio goes back to grey.
-      await clearPendingRequirementForDocument(doc.id);
+      // Declining marks the client's requirement slot 'rejected' → dashboard radio turns RED ("Declined").
+      await rejectRequirementForDocument(doc.id, rejecter);
       setDocuments(prev => prev.map(d => d.id === doc.id ? { ...d, approval_status: 'rejected', approval_note: note || null } : d));
     }
     setActionBusy(null);

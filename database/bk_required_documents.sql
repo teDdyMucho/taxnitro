@@ -58,6 +58,14 @@ create policy "Users can update own bk_required_documents"
     or email = (select email from public.profiles where id = auth.uid())
   );
 
+drop policy if exists "Users can delete own bk_required_documents" on public.bk_required_documents;
+create policy "Users can delete own bk_required_documents"
+  on public.bk_required_documents for delete
+  using (
+    auth.uid() = user_id
+    or email = (select email from public.profiles where id = auth.uid())
+  );
+
 -- Staff and admins manage everything (they work the Documents queue)
 drop policy if exists "staff and admins manage bk_required_documents" on public.bk_required_documents;
 create policy "staff and admins manage bk_required_documents"

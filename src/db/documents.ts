@@ -223,8 +223,15 @@ export async function uploadDocumentToStorage(
 // ── Delete a document row from its table ─────────────────────────────────────
 
 export async function deleteDocument(documentId: string, table: string): Promise<boolean> {
-  const { error } = await supabase.from(table).delete().eq('id', documentId);
+  // Select the deleted rows back so we can tell a real delete from an RLS no-op.
+  // Under RLS a blocked delete matches 0 rows and returns NO error — without this
+  // check the caller would think it succeeded and the row reappears on refresh.
+  const { data, error } = await supabase.from(table).delete().eq('id', documentId).select('id');
   if (error) { console.error(`deleteDocument [${table}]:`, error.message); return false; }
+  if (!data || data.length === 0) {
+    console.error(`deleteDocument [${table}]: 0 rows deleted (blocked by RLS or already gone)`);
+    return false;
+  }
   return true;
 }
 

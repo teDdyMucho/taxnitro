@@ -52,7 +52,7 @@ export function reqKey(service: RequirementService, key: string): string {
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
-export type RequirementStatus = 'pending' | 'approved';
+export type RequirementStatus = 'pending' | 'approved' | 'rejected';
 
 export interface FulfilledRequirement {
   service: RequirementService;
@@ -125,8 +125,11 @@ export async function tagDocumentRequirement(params: {
 /**
  * Client-side: when a client uploads a file against a required item, record a
  * 'pending' slot so the dashboard radio turns yellow immediately (before admin
- * approval). Upsert on the same unique key — if a slot already exists we don't
- * downgrade an already-'approved' row back to pending.
+ * approval). Upsert on the same unique key.
+ *
+ * We do NOT overwrite a slot that is already 'approved' (green) or 'rejected'
+ * (red). A declined item stays red until an admin approves a new file for it —
+ * re-uploading alone must not clear the "Declined" state.
  */
 export async function createPendingRequirement(params: {
   clientEmail: string;
@@ -136,7 +139,6 @@ export async function createPendingRequirement(params: {
   requirementKey: string;
   month: string;
 }): Promise<boolean> {
-  // Don't overwrite an already-approved slot for this item/month.
   const { data: existing } = await supabase
     .from('document_requirements')
     .select('status')
@@ -145,8 +147,25 @@ export async function createPendingRequirement(params: {
     .eq('service', params.service)
     .eq('requirement_key', params.requirementKey)
     .maybeSingle();
+
+  // Already accepted (green) → nothing to do.
   if (existing?.status === 'approved') return true;
 
+  if (existing?.status === 'rejected') {
+    // Declined item: STAY red, but repoint the slot at the newly-uploaded file so
+    // the admin can approve this re-upload (which clears the red). No status change.
+    const { error } = await supabase
+      .from('document_requirements')
+      .update({ document_id: params.documentId, document_table: params.documentTable })
+      .eq('client_email', params.clientEmail)
+      .eq('month', params.month)
+      .eq('service', params.service)
+      .eq('requirement_key', params.requirementKey);
+    if (error) { console.error('createPendingRequirement (rejected repoint):', error.message); return false; }
+    return true;
+  }
+
+  // No slot yet (or a leftover pending) → (re)create as pending (yellow).
   const { error } = await supabase
     .from('document_requirements')
     .upsert({
@@ -163,18 +182,33 @@ export async function createPendingRequirement(params: {
 }
 
 /**
- * Admin-side: when a doc is REJECTED, drop the pending requirement slot the client
- * tagged it with so the dashboard radio goes yellow → grey again (not fulfilled).
- * Only removes 'pending' rows — never an already-approved slot.
+ * When a file is DELETED, drop the requirement slot it was fulfilling so the
+ * dashboard radio goes back to grey and the progress % drops — regardless of
+ * status (pending/yellow, rejected/red, or approved/green). No file → no credit.
  */
 export async function clearPendingRequirementForDocument(documentId: string): Promise<boolean> {
   const { error } = await supabase
     .from('document_requirements')
     .delete()
-    .eq('document_id', documentId)
-    .eq('status', 'pending');
+    .eq('document_id', documentId);
   if (error) { console.error('clearPendingRequirementForDocument:', error.message); return false; }
   return true;
+}
+
+/**
+ * Admin-side: when a doc is DECLINED (rejected), mark its requirement slot
+ * 'rejected' so the dashboard radio turns RED with a "Declined" label. Stays red
+ * until an admin approves a new file for the item. Returns true if a slot changed.
+ */
+export async function rejectRequirementForDocument(documentId: string, rejectedBy: string): Promise<boolean> {
+  const { data, error } = await supabase
+    .from('document_requirements')
+    .update({ status: 'rejected', tagged_by: rejectedBy })
+    .eq('document_id', documentId)
+    .in('status', ['pending', 'approved'])
+    .select('id');
+  if (error) { console.error('rejectRequirementForDocument:', error.message); return false; }
+  return (data?.length ?? 0) > 0;
 }
 
 /**
@@ -193,16 +227,17 @@ export async function getRequirementForDocument(documentId: string): Promise<Req
 }
 
 /**
- * Admin-side: when a doc is approved, flip any pending requirement slot the client
- * tagged it with to 'approved' (green). Returns true if a slot was updated — the
- * caller can skip the manual "tag which item" prompt when this succeeds.
+ * Admin-side: when a doc is approved, flip its requirement slot to 'approved'
+ * (green). Works whether the slot was 'pending' (yellow) or 'rejected' (red) —
+ * approving a re-uploaded file clears the "Declined" state. Returns true if a slot
+ * was updated — the caller can skip the manual "tag which item" prompt then.
  */
 export async function approveRequirementForDocument(documentId: string, approvedBy: string): Promise<boolean> {
   const { data, error } = await supabase
     .from('document_requirements')
     .update({ status: 'approved', tagged_by: approvedBy })
     .eq('document_id', documentId)
-    .eq('status', 'pending')
+    .in('status', ['pending', 'rejected'])
     .select('id');
   if (error) { console.error('approveRequirementForDocument:', error.message); return false; }
   return (data?.length ?? 0) > 0;

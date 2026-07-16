@@ -1244,7 +1244,7 @@ export function DocumentsScreen() {
                 setDocuments(prev => prev.filter(d => d.id !== docId));
                 setSelectedDoc(null);
               } else {
-                Alert.alert('Error', 'Could not delete the document.');
+                Alert.alert('Could not delete', 'The file could not be deleted. You may not have permission to delete it — please contact an admin.');
               }
             }}
             onRename={async (newName) => {
