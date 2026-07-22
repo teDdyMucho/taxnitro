@@ -45,6 +45,38 @@ export function itemsForFolder(folderKey: string): RequiredItem[] {
   return REQUIRED_UPLOADS.filter(i => services.includes(i.service));
 }
 
+// Requirement keys that are only needed when we DON'T already have QBO access.
+const QBO_DEPENDENT_KEYS = ['prior_month_bookkeeping'];
+
+/**
+ * The required items that actually apply to a given client, based on:
+ *   - services       → only items for services the client has (BK / CFO)
+ *   - hasQboAccess   → drop QBO-dependent items when we already have access
+ * This is the single source of truth for the client's checklist + progress total.
+ */
+export function itemsForClient(
+  services: RequirementService[] | undefined,
+  hasQboAccess: boolean | undefined,
+): RequiredItem[] {
+  const svc = (services && services.length > 0 ? services : ['BK']) as RequirementService[];
+  return REQUIRED_UPLOADS.filter(i =>
+    svc.includes(i.service) &&
+    !(hasQboAccess && QBO_DEPENDENT_KEYS.includes(i.key))
+  );
+}
+
+/** Items shown in a folder's picker, further narrowed to what applies to the client. */
+export function itemsForFolderAndClient(
+  folderKey: string,
+  services: RequirementService[] | undefined,
+  hasQboAccess: boolean | undefined,
+): RequiredItem[] {
+  const folderItems = itemsForFolder(folderKey);
+  const clientItems = itemsForClient(services, hasQboAccess);
+  const clientKeys = new Set(clientItems.map(i => `${i.service}:${i.key}`));
+  return folderItems.filter(i => clientKeys.has(`${i.service}:${i.key}`));
+}
+
 /** Stable set-key for a fulfilled requirement. */
 export function reqKey(service: RequirementService, key: string): string {
   return `${service}:${key}`;

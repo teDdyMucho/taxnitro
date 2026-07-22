@@ -21,9 +21,10 @@ import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../lib/supabase';
 import { getDocumentsByEmail, FOLDER_TABLES } from '../../db/documents';
 import {
-  REQUIRED_UPLOADS, itemsByService, reqKey, getFulfilledRequirements,
+  itemsForClient, reqKey, getFulfilledRequirements,
   monthOf, formatMonthLabel,
 } from '../../db/requirements';
+import { getCustomRequests, CustomRequest } from '../../db/customRequests';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -270,6 +271,7 @@ export function DashboardScreen() {
   const [fulfilled, setFulfilled] = useState<Set<string>>(new Set()); // admin-approved (green)
   const [pending, setPending]     = useState<Set<string>>(new Set()); // client-uploaded, awaiting approval (yellow)
   const [rejected, setRejected]   = useState<Set<string>>(new Set()); // admin-declined (red)
+  const [customReqs, setCustomReqs] = useState<CustomRequest[]>([]);  // one-off staff requests
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -294,15 +296,17 @@ export function DashboardScreen() {
     sixMonthsAgo.setDate(1);
 
     const userEmail = user.email;
-    const [docs, profileRes, reqs] = await Promise.all([
+    const [docs, profileRes, reqs, custom] = await Promise.all([
       getDocumentsByEmail(userEmail),
       supabase.from('profiles').select('avatar_url').eq('id', user.id).single(),
       getFulfilledRequirements(userEmail, monthOf()),
+      getCustomRequests(userEmail, monthOf()),
     ]);
 
     if (!mountedRef.current) return;
 
     if (profileRes.data?.avatar_url) setAvatarUrl(profileRes.data.avatar_url);
+    setCustomReqs(custom);
 
     // Required uploads this month — split by status:
     //   approved → green (admin accepted + tagged)
@@ -381,9 +385,11 @@ export function DashboardScreen() {
     return () => { channels.forEach(ch => supabase.removeChannel(ch)); };
   }, [user?.email, fetchData]);
 
-  // ── Required-upload progress (admin-accepted items only) ──
-  const reqDone   = REQUIRED_UPLOADS.filter(i => fulfilled.has(reqKey(i.service, i.key))).length;
-  const reqTotal  = REQUIRED_UPLOADS.length;
+  // ── Required-upload progress (only items that apply to THIS client) ──
+  // Scoped by the client's services (BK/CFO) and QBO access.
+  const clientItems = itemsForClient(user?.services, user?.hasQboAccess);
+  const reqDone   = clientItems.filter(i => fulfilled.has(reqKey(i.service, i.key))).length;
+  const reqTotal  = clientItems.length;
   const reqPct    = reqTotal > 0 ? (reqDone / reqTotal) * 100 : 0;
   const reqColor  = reqPct >= 100 ? Colors.viewed : reqPct >= 50 ? Colors.primary : Colors.accentGold;
 
@@ -499,9 +505,9 @@ export function DashboardScreen() {
               {reqDone} of {reqTotal} required items accepted
             </Text>
 
-            {/* Checklist grouped by service */}
+            {/* Checklist grouped by service — only the client's applicable items */}
             {(['BK', 'CFO'] as const).map(svc => {
-              const items = itemsByService(svc);
+              const items = clientItems.filter(i => i.service === svc);
               if (items.length === 0) return null;
               return (
                 <View key={svc} style={styles.reqGroup}>
@@ -532,6 +538,31 @@ export function DashboardScreen() {
                 </View>
               );
             })}
+
+            {/* Custom one-off requests from staff */}
+            {customReqs.length > 0 && (
+              <View style={styles.reqGroup}>
+                <Text style={styles.reqGroupLabel}>Special Requests</Text>
+                {customReqs.map(req => {
+                  const isApproved = req.status === 'approved';
+                  const isRejected = req.status === 'rejected';
+                  const isUploaded = req.status === 'uploaded';
+                  const iconName   = isApproved ? 'checkmark-circle' : isRejected ? 'close-circle' : isUploaded ? 'time' : 'ellipse-outline';
+                  const iconColor  = isApproved ? Colors.viewed : isRejected ? Colors.error : isUploaded ? Colors.accentGold : Colors.textMuted;
+                  return (
+                    <View key={req.id} style={styles.reqItemRow}>
+                      <Ionicons name={iconName} size={17} color={iconColor} />
+                      <Text style={[styles.reqItemText, req.status !== 'pending' && { color: Colors.textPrimary, fontWeight: '600' }]} numberOfLines={1}>
+                        {req.title}
+                      </Text>
+                      {isApproved && <Text style={styles.reqItemDone}>Accepted</Text>}
+                      {isRejected && <Text style={[styles.reqItemDone, { color: Colors.error }]}>Declined</Text>}
+                      {isUploaded && <Text style={[styles.reqItemDone, { color: Colors.accentGold }]}>In review</Text>}
+                    </View>
+                  );
+                })}
+              </View>
+            )}
           </View>
 
           {/* ── DOCUMENTS UPLOADED CHART ──────────────────────────────────── */}

@@ -59,6 +59,14 @@ alter table public.document_requirements
 create index if not exists doc_req_email_month_idx
   on public.document_requirements (client_email, month);
 
+-- ── Caller-role helper (SECURITY DEFINER → no profiles-policy recursion) ─────
+-- Idempotent; also defined in profiles_services.sql. Safe if run standalone.
+create or replace function public.is_staff_or_admin()
+returns boolean language sql security definer stable set search_path = public as $$
+  select exists (select 1 from public.profiles where id = auth.uid() and role in ('admin','staff'));
+$$;
+grant execute on function public.is_staff_or_admin() to authenticated, anon;
+
 -- ── RLS ─────────────────────────────────────────────────────
 alter table public.document_requirements enable row level security;
 
@@ -94,6 +102,7 @@ create policy "clients update own pending requirements"
 -- fulfilled it → dashboard radio returns to grey and progress drops. Any status
 -- (pending / rejected / approved) — deleting the file removes its credit.
 drop policy if exists "clients delete own pending requirements" on public.document_requirements;
+drop policy if exists "clients delete own requirements" on public.document_requirements;
 create policy "clients delete own requirements"
   on public.document_requirements for delete
   using (client_email = (select email from public.profiles where id = auth.uid()));
@@ -103,5 +112,5 @@ drop policy if exists "admins manage requirements" on public.document_requiremen
 drop policy if exists "staff and admins manage requirements" on public.document_requirements;
 create policy "staff and admins manage requirements"
   on public.document_requirements for all
-  using     (exists (select 1 from public.profiles where id = auth.uid() and role in ('admin', 'staff')))
-  with check (exists (select 1 from public.profiles where id = auth.uid() and role in ('admin', 'staff')));
+  using     (public.is_staff_or_admin())
+  with check (public.is_staff_or_admin());

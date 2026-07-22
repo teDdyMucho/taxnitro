@@ -50,6 +50,14 @@ end $$;
 create index if not exists file_conversations_file_idx  on public.file_conversations (file_id, folder_table);
 create index if not exists file_conversations_owner_idx  on public.file_conversations (file_owner_id);
 
+-- ── Caller-role helper (SECURITY DEFINER → no profiles-policy recursion) ─────
+-- Idempotent; also defined in profiles_services.sql. Safe if run standalone.
+create or replace function public.is_staff_or_admin()
+returns boolean language sql security definer stable set search_path = public as $$
+  select exists (select 1 from public.profiles where id = auth.uid() and role in ('admin','staff'));
+$$;
+grant execute on function public.is_staff_or_admin() to authenticated, anon;
+
 -- ── RLS ─────────────────────────────────────────────────────
 alter table public.file_conversations enable row level security;
 
@@ -59,7 +67,7 @@ create policy "read file conversations"
   on public.file_conversations for select
   using (
     file_owner_id = auth.uid()
-    or exists (select 1 from public.profiles where id = auth.uid() and role in ('admin', 'staff'))
+    or public.is_staff_or_admin()
   );
 
 -- Insert: you may only post AS yourself (sender_id = auth.uid()); the file owner
@@ -71,7 +79,7 @@ create policy "insert file conversations"
     sender_id = auth.uid()
     and (
       file_owner_id = auth.uid()
-      or exists (select 1 from public.profiles where id = auth.uid() and role in ('admin', 'staff'))
+      or public.is_staff_or_admin()
     )
   );
 
@@ -81,5 +89,5 @@ create policy "update file conversations read"
   on public.file_conversations for update
   using (
     file_owner_id = auth.uid()
-    or exists (select 1 from public.profiles where id = auth.uid() and role in ('admin', 'staff'))
+    or public.is_staff_or_admin()
   );

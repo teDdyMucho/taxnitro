@@ -389,7 +389,7 @@ const desk = StyleSheet.create({
     borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)',
   },
 
-  /* Content */
+  /* Content — fills the full remaining width next to the sidebar. */
   content: { flex: 1, backgroundColor: '#F8FAFC', overflow: 'hidden' as any },
 });
 

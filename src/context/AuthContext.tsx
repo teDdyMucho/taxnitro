@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useCallback, useEffect } fr
 import { supabase } from '../lib/supabase';
 
 export type UserRole = 'client' | 'staff' | 'admin';
+export type ClientService = 'BK' | 'CFO';
 
 export interface AuthUser {
   id: string;
@@ -10,6 +11,8 @@ export interface AuthUser {
   clientId?: string;
   plan?: string;
   role: UserRole;
+  services: ClientService[];    // which categories/requirements this client sees
+  hasQboAccess: boolean;        // true → hide "Prior Month Bookkeeping / QBO Access"
 }
 
 interface AuthContextValue {
@@ -28,7 +31,7 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 
 // Builds a minimal AuthUser immediately from the session — no DB call needed
 function sessionUser(userId: string, email: string): AuthUser {
-  return { id: userId, email, name: 'User', role: 'client' };
+  return { id: userId, email, name: 'User', role: 'client', services: ['BK'], hasQboAccess: false };
 }
 
 // Enriches AuthUser with profile data from DB (called in background)
@@ -36,7 +39,7 @@ async function fetchProfile(userId: string, email: string): Promise<AuthUser> {
   try {
     const { data } = await supabase
       .from('profiles')
-      .select('full_name, client_id, plan, role')
+      .select('full_name, client_id, plan, role, services, has_qbo_access')
       .eq('id', userId)
       .single();
 
@@ -47,6 +50,8 @@ async function fetchProfile(userId: string, email: string): Promise<AuthUser> {
       clientId: data?.client_id,
       plan: data?.plan ?? 'Free',
       role: (data?.role as UserRole) ?? 'client',
+      services: (Array.isArray(data?.services) && data.services.length > 0 ? data.services : ['BK']) as ClientService[],
+      hasQboAccess: data?.has_qbo_access ?? false,
     };
   } catch {
     return sessionUser(userId, email);

@@ -32,11 +32,13 @@ import {
   createDocumentRecord,
   deleteDocument,
   renameDocument,
+  approveDocument,
+  rejectDocument,
   Document,
   FOLDER_TABLES,
 } from '../../db/documents';
 import {
-  itemsForFolder,
+  itemsForFolderAndClient,
   createPendingRequirement,
   clearPendingRequirementForDocument,
   monthOf,
@@ -67,6 +69,7 @@ interface RootFolder {
   key: string;
   label: string;
   description: string;
+  service: 'BK' | 'CFO';   // which client service this category belongs to
   color: string;
   darkColor: string;
   gradient: [string, string, string];
@@ -76,8 +79,9 @@ interface RootFolder {
 const FOLDERS: RootFolder[] = [
   {
     key: 'TAX',
-    label: 'TAX',
-    description: 'Tax Documents & Returns',
+    label: 'CFO',
+    description: 'CFO',
+    service: 'CFO',
     color: '#00B16A',
     darkColor: '#008C5A',
     gradient: ['#2C2320', '#3A3131', '#4A3E3E'],
@@ -93,6 +97,7 @@ const FOLDERS: RootFolder[] = [
     key: 'BK',
     label: 'BK',
     description: 'Bookkeeping & Financials',
+    service: 'BK',
     color: '#008C5A',
     darkColor: '#006644',
     gradient: ['#3A3131', '#4A3E3E', '#2C2320'],
@@ -116,8 +121,8 @@ type FilterType = 'all' | 'new' | 'viewed';
 // LEVEL 1 — Root folder cards
 // ═════════════════════════════════════════════════════════════════════════════
 
-function RootView({ documents, loading, refreshing, onRefresh, onSelect, pb, pt }: {
-  documents: Document[]; loading: boolean; refreshing: boolean;
+function RootView({ folders, documents, loading, refreshing, onRefresh, onSelect, pb, pt }: {
+  folders: RootFolder[]; documents: Document[]; loading: boolean; refreshing: boolean;
   onRefresh: () => void; onSelect: (r: RootFolder) => void;
   pb: number; pt: number;
 }) {
@@ -150,7 +155,7 @@ function RootView({ documents, loading, refreshing, onRefresh, onSelect, pb, pt 
         </View>
         <View style={s.headerBadge}>
           <Ionicons name="folder" size={14} color="#2C2320" />
-          <Text style={s.headerBadgeText}>2 Categories</Text>
+          <Text style={s.headerBadgeText}>{folders.length} {folders.length === 1 ? 'Category' : 'Categories'}</Text>
         </View>
       </LinearGradient>
 
@@ -161,7 +166,7 @@ function RootView({ documents, loading, refreshing, onRefresh, onSelect, pb, pt 
       >
         <Text style={s.sectionLabel}>Select a category</Text>
 
-          {FOLDERS.map(root => {
+          {folders.map(root => {
             const { total: rTotal, unread: rUnread } = stats(root);
             return (
               <TouchableOpacity key={root.key} onPress={() => onSelect(root)} activeOpacity={0.88} style={s.rootCardWrap}>
@@ -530,6 +535,7 @@ function UploadModal({ visible, sf, root, userId, userEmail, onClose, onUploaded
   visible: boolean; sf: SubFolder; root: RootFolder; userId: string; userEmail: string;
   onClose: () => void; onUploaded: (d: Document) => void;
 }) {
+  const { user } = useAuth();
   const [picked, setPicked]   = useState<PickedFile | null>(null);
   const [busy, setBusy]       = useState(false);
   const [pct, setPct]         = useState(0);
@@ -683,8 +689,10 @@ function UploadModal({ visible, sf, root, userId, userEmail, onClose, onUploaded
                   <Text style={up.reqPickTitle}>What are you uploading?</Text>
                   <Text style={up.reqPickSub}>Choose the required item this file is for</Text>
                   {(['BK', 'CFO'] as RequirementService[]).map(svc => {
-                    // Only the items this specific folder collects (BK folder → BK items, Tax folder → CFO items)
-                    const items = itemsForFolder(sf.key).filter(i => i.service === svc);
+                    // Items this folder collects, narrowed to what applies to THIS client
+                    // (their services + QBO access → hides Prior Month Bookkeeping when we have QBO).
+                    const items = itemsForFolderAndClient(sf.key, user?.services, user?.hasQboAccess)
+                      .filter(i => i.service === svc);
                     if (items.length === 0) return null;
                     return (
                       <View key={svc} style={{ marginTop: 12 }}>
@@ -899,17 +907,41 @@ function RenameModal({ visible, current, onConfirm, onCancel }: {
 
 // ── Document detail — metadata page ──────────────────────────────────────────
 
-function DocDetailPage({ doc, sf, root, fileOwnerId, onClose, onMarkViewed, onDelete, onRename }: {
+function DocDetailPage({ doc, sf, root, fileOwnerId, userEmail, onClose, onMarkViewed, onDelete, onRename, onApprovalChange }: {
   doc: Document; sf: SubFolder; root: RootFolder;
-  fileOwnerId: string;
+  fileOwnerId: string; userEmail: string;
   onClose: () => void; onMarkViewed: () => void;
   onDelete: () => void; onRename: (newName: string) => void;
+  onApprovalChange: (status: 'approved' | 'rejected', note: string | null) => void;
 }) {
   const insets = useSafeAreaInsets();
   const [viewerOpen, setViewerOpen]           = useState(false);
   const [renameOpen, setRenameOpen]           = useState(false);
   const [deleteOpen, setDeleteOpen]           = useState(false);
   const [conversationOpen, setConversationOpen] = useState(false);
+  const [reviewBusy, setReviewBusy]           = useState(false);
+
+  // Client can approve/reject only files that STAFF delivered to them, while pending.
+  const isStaffFile = doc.uploaded_by_role === 'staff' || doc.uploaded_by_role === 'admin';
+  const awaitingClient = isStaffFile && (doc.approval_status ?? 'approved') === 'pending';
+
+  const clientApprove = async () => {
+    if (reviewBusy) return;
+    setReviewBusy(true);
+    const ok = await approveDocument(doc.id, doc.document_type ?? '', userEmail);
+    setReviewBusy(false);
+    if (ok) onApprovalChange('approved', null);
+    else Alert.alert('Error', 'Could not approve this file.');
+  };
+
+  const clientReject = async () => {
+    if (reviewBusy) return;
+    setReviewBusy(true);
+    const ok = await rejectDocument(doc.id, doc.document_type ?? '', userEmail, 'Rejected by client');
+    setReviewBusy(false);
+    if (ok) onApprovalChange('rejected', 'Rejected by client');
+    else Alert.alert('Error', 'Could not reject this file.');
+  };
 
   const hasValidUrl = !!doc.document_url && doc.document_url.startsWith('http');
   const ext = (displayName(doc).split('.').pop() ?? '').toUpperCase().slice(0, 4);
@@ -997,6 +1029,25 @@ function DocDetailPage({ doc, sf, root, fileOwnerId, onClose, onMarkViewed, onDe
                 <Ionicons name="chatbubble-outline" size={15} color="#2C2320" />
                 <Text style={dp.replyBtnText}>Reply to Feedback</Text>
               </TouchableOpacity>
+            </View>
+          </View>
+        )}
+
+        {/* ── Client review of a staff-delivered file ── */}
+        {awaitingClient && (
+          <View style={dp.section}>
+            <Text style={dp.sectionLabel}>Review This File</Text>
+            <View style={dp.reviewCard}>
+              <Text style={dp.reviewText}>Our team sent you this document. Please approve it, or reject it if something's wrong.</Text>
+              <View style={dp.reviewRow}>
+                <TouchableOpacity style={[dp.rejectBtn, reviewBusy && { opacity: 0.5 }]} onPress={clientReject} disabled={reviewBusy} activeOpacity={0.85}>
+                  <Ionicons name="close-circle-outline" size={17} color="#DC2626" />
+                  <Text style={dp.rejectText}>Reject</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[dp.approveBtn, reviewBusy && { opacity: 0.5 }]} onPress={clientApprove} disabled={reviewBusy} activeOpacity={0.85}>
+                  {reviewBusy ? <ActivityIndicator size="small" color={Colors.white} /> : <><Ionicons name="checkmark-circle-outline" size={17} color={Colors.white} /><Text style={dp.approveText}>Approve</Text></>}
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
         )}
@@ -1206,10 +1257,16 @@ export function DocumentsScreen() {
     [documents, activeSub],
   );
 
+  // Only show the categories for the services this client has (BK / CFO / both).
+  const visibleFolders = useMemo(() => {
+    const svc = user?.services && user.services.length > 0 ? user.services : ['BK'];
+    return FOLDERS.filter(f => svc.includes(f.service));
+  }, [user?.services]);
+
   return (
     <>
       {nav === 'root' && (
-        <RootView documents={documents} loading={loading} refreshing={refreshing} onRefresh={onRefresh}
+        <RootView folders={visibleFolders} documents={documents} loading={loading} refreshing={refreshing} onRefresh={onRefresh}
           onSelect={r => { setActiveRoot(r); setNav('sub'); }} pb={pb} pt={pt} />
       )}
       {nav === 'sub' && !!activeRoot && (
@@ -1231,8 +1288,14 @@ export function DocumentsScreen() {
             sf={activeSub}
             root={activeRoot}
             fileOwnerId={user?.id ?? ''}
+            userEmail={user?.email ?? ''}
             onClose={() => setSelectedDoc(null)}
             onMarkViewed={() => markViewed(selectedDoc)}
+            onApprovalChange={(status, note) => {
+              const updated = { ...selectedDoc, approval_status: status, approval_note: note } as Document;
+              setDocuments(prev => prev.map(d => d.id === selectedDoc.id ? updated : d));
+              setSelectedDoc(updated);
+            }}
             onDelete={async () => {
               const table = selectedDoc.document_type ?? '';
               const docId = selectedDoc.id;
@@ -1478,6 +1541,13 @@ const dp = StyleSheet.create({
   feedbackNote:     { fontSize: 13, lineHeight: 19 },
   replyBtn:         { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: '#E8B923', paddingVertical: 10, borderRadius: 12, marginTop: 4 },
   replyBtnText:     { color: '#2C2320', fontSize: 13, fontWeight: '800' },
+  reviewCard:       { backgroundColor: Colors.bgCard, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: Colors.border, gap: 12 },
+  reviewText:       { color: Colors.textSecondary, fontSize: 13, lineHeight: 19 },
+  reviewRow:        { flexDirection: 'row', gap: 10 },
+  rejectBtn:        { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 12, borderRadius: 12, borderWidth: 1, borderColor: '#DC2626', backgroundColor: 'rgba(220,38,38,0.08)' },
+  rejectText:       { color: '#DC2626', fontSize: 14, fontWeight: '700' },
+  approveBtn:       { flex: 2, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 12, borderRadius: 12, backgroundColor: '#16A34A' },
+  approveText:      { color: Colors.white, fontSize: 14, fontWeight: '700' },
 });
 
 // ── Viewer modal styles ───────────────────────────────────────────────────────

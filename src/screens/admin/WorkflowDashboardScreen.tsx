@@ -7,6 +7,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../context/AuthContext';
+import { useSheetStyles } from '../../hooks/useSheetStyles';
 import { getAllClients, getAllStaff, Profile } from '../../db/profiles';
 import {
   WorkflowInstance, WorkflowStatus, AccountingSoftware,
@@ -43,6 +44,7 @@ const PIPELINE_STEPS: WorkflowStatus[] = ['processor', 'reviewer', 'reprocessor'
 export function WorkflowDashboardScreen() {
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
+  const sheet = useSheetStyles('md');
   const isAdmin = user?.role === 'admin';
 
   const [month, setMonth] = useState(currentMonth());
@@ -182,8 +184,8 @@ export function WorkflowDashboardScreen() {
 
       {/* ── Create Modal ── */}
       <Modal visible={showCreate} transparent animationType="slide" onRequestClose={() => setShowCreate(false)}>
-        <View style={s.modalOverlay}>
-          <View style={s.modalCard}>
+        <View style={[s.modalOverlay, sheet.overlay]}>
+          <View style={[s.modalCard, sheet.sheet]}>
             <View style={s.modalHeader}>
               <Text style={s.modalTitle}>New Workflow</Text>
               <TouchableOpacity onPress={() => setShowCreate(false)}><Ionicons name="close" size={22} color="#374151" /></TouchableOpacity>

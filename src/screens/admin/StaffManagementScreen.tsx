@@ -17,6 +17,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors } from '../../constants/colors';
 import { useAuth } from '../../context/AuthContext';
+import { useSheetStyles } from '../../hooks/useSheetStyles';
 import { getAllStaff, updateStaffRole, setStaffActive, Profile, UserRole } from '../../db/profiles';
 import { supabase } from '../../lib/supabase';
 
@@ -87,6 +88,7 @@ function AddStaffModal({
   onClose: () => void;
   onSuccess: () => void;
 }) {
+  const sheet = useSheetStyles('md');
   const [email, setEmail]           = useState('');
   const [role, setRole]             = useState<'admin' | 'staff'>('staff');
   const [loading, setLoading]       = useState(false);
@@ -150,8 +152,8 @@ function AddStaffModal({
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={handleClose}>
-      <Pressable style={im.overlay} onPress={handleClose}>
-        <Pressable style={im.sheet} onPress={() => {}}>
+      <Pressable style={[im.overlay, sheet.overlay]} onPress={handleClose}>
+        <Pressable style={[im.sheet, sheet.sheet]} onPress={() => {}}>
 
           {/* Handle bar */}
           <View style={im.handle} />

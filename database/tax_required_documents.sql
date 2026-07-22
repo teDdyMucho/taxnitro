@@ -30,6 +30,13 @@ create index if not exists tax_required_documents_email_idx   on public.tax_requ
 create index if not exists tax_required_documents_user_id_idx on public.tax_required_documents (user_id);
 create index if not exists tax_required_documents_status_idx  on public.tax_required_documents (approval_status);
 
+-- ── Caller-role helper (SECURITY DEFINER → no profiles-policy recursion) ─────
+create or replace function public.is_staff_or_admin()
+returns boolean language sql security definer stable set search_path = public as $$
+  select exists (select 1 from public.profiles where id = auth.uid() and role in ('admin','staff'));
+$$;
+grant execute on function public.is_staff_or_admin() to authenticated, anon;
+
 -- ── RLS ─────────────────────────────────────────────────────
 alter table public.tax_required_documents enable row level security;
 
@@ -70,8 +77,8 @@ create policy "Users can delete own tax_required_documents"
 drop policy if exists "staff and admins manage tax_required_documents" on public.tax_required_documents;
 create policy "staff and admins manage tax_required_documents"
   on public.tax_required_documents for all
-  using      (exists (select 1 from public.profiles where id = auth.uid() and role in ('admin', 'staff')))
-  with check (exists (select 1 from public.profiles where id = auth.uid() and role in ('admin', 'staff')));
+  using      (public.is_staff_or_admin())
+  with check (public.is_staff_or_admin());
 
 -- ── Auto-update updated_at ──────────────────────────────────
 drop trigger if exists on_tax_required_documents_updated on public.tax_required_documents;

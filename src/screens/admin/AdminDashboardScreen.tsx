@@ -8,6 +8,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors } from '../../constants/colors';
 import { useAuth } from '../../context/AuthContext';
+import { useSheetStyles } from '../../hooks/useSheetStyles';
 import { supabase } from '../../lib/supabase';
 import { FOLDER_TABLES } from '../../db/documents';
 
@@ -111,6 +112,7 @@ function getPeriodStart(period: TimePeriod): string {
 
 export function AdminDashboardScreen({ onViewAllDocuments }: { onViewAllDocuments?: () => void }) {
   const { user, isLoading: authLoading } = useAuth();
+  const sheet      = useSheetStyles('sm');
   const insets     = useSafeAreaInsets();
   const mountedRef = useRef(true);
   useEffect(() => () => { mountedRef.current = false; }, []);
@@ -424,8 +426,8 @@ export function AdminDashboardScreen({ onViewAllDocuments }: { onViewAllDocument
 
       {/* ── Document action menu ── */}
       <Modal visible={!!menuDoc} transparent animationType="slide" onRequestClose={() => setMenuDoc(null)}>
-        <Pressable style={s.menuOverlay} onPress={() => setMenuDoc(null)}>
-          <Pressable style={s.menuSheet} onPress={() => {}}>
+        <Pressable style={[s.menuOverlay, sheet.overlay]} onPress={() => setMenuDoc(null)}>
+          <Pressable style={[s.menuSheet, sheet.sheet]} onPress={() => {}}>
             <View style={s.menuHandle} />
             <Text style={s.menuFileName} numberOfLines={1}>{menuDoc?.name}</Text>
             <Text style={s.menuEmail}>{menuDoc?.email}</Text>

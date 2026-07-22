@@ -9,12 +9,13 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors } from '../../constants/colors';
 import { useAuth } from '../../context/AuthContext';
+import { useSheetStyles } from '../../hooks/useSheetStyles';
 import {
-  getAllClients, updateClientProfile, sendPasswordReset, Profile,
+  getAllClients, updateClientProfile, sendPasswordReset, Profile, ClientService,
 } from '../../db/profiles';
 import {
-  getRequirementCountsForMonth, getFulfilledRequirements, REQUIRED_UPLOADS,
-  REQUIRED_TOTAL, itemsByService, reqKey, monthOf, formatMonthLabel,
+  getRequirementCountsForMonth, getFulfilledRequirements,
+  itemsForClient, reqKey, monthOf, formatMonthLabel,
 } from '../../db/requirements';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -105,17 +106,27 @@ function AddClientModal({
   onClose: () => void;
   onDone: () => void;
 }) {
+  const sheet = useSheetStyles('md');
   const [fullName, setFullName]     = useState('');
   const [email, setEmail]           = useState('');
   const [password, setPassword]     = useState('');
   const [showPass, setShowPass]     = useState(false);
   const [plan, setPlan]             = useState<string>('Free');
+  const [services, setServices]     = useState<ClientService[]>(['BK']);   // BK / CFO / both
+  const [hasQbo, setHasQbo]         = useState(false);                      // already have QBO access?
   const [step, setStep]             = useState<'form' | 'success' | 'error'>('form');
   const [loading, setLoading]       = useState(false);
   const [errorMsg, setErrorMsg]     = useState('');
 
+  const toggleService = (svc: ClientService) => {
+    setServices(prev =>
+      prev.includes(svc) ? prev.filter(s => s !== svc) : [...prev, svc]
+    );
+  };
+
   const reset = () => {
     setFullName(''); setEmail(''); setPassword(''); setPlan('Free');
+    setServices(['BK']); setHasQbo(false);
     setStep('form'); setErrorMsg(''); setShowPass(false);
   };
 
@@ -123,7 +134,7 @@ function AddClientModal({
   const handleDone  = () => { reset(); onDone(); };
 
   const handleSubmit = async () => {
-    if (!fullName.trim() || !email.trim() || password.length < 8) return;
+    if (!fullName.trim() || !email.trim() || password.length < 8 || services.length === 0) return;
     setLoading(true);
     setErrorMsg('');
     try {
@@ -174,6 +185,8 @@ function AddClientModal({
             plan,
             role: 'client',
             is_active: true,
+            services,                    // BK / CFO / both — drives what they see
+            has_qbo_access: hasQbo,      // hides "Prior Month Bookkeeping / QBO Access" when true
           }),
         });
         if (!profileRes.ok) {
@@ -192,8 +205,8 @@ function AddClientModal({
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={handleClose}>
-      <Pressable style={ac.overlay} onPress={handleClose}>
-        <Pressable style={ac.sheet} onPress={() => {}}>
+      <Pressable style={[ac.overlay, sheet.overlay]} onPress={handleClose}>
+        <Pressable style={[ac.sheet, sheet.sheet]} onPress={() => {}}>
           {/* Handle bar */}
           <View style={ac.handle} />
 
@@ -287,6 +300,60 @@ function AddClientModal({
                 </View>
               </View>
 
+              {/* Services (BK / CFO / both) */}
+              <View style={ac.fieldGroup}>
+                <Text style={ac.label}>Client Type</Text>
+                <Text style={ac.helpText}>Which services does this client have? Select one or both.</Text>
+                <View style={ac.planRow}>
+                  {(['BK', 'CFO'] as ClientService[]).map(svc => {
+                    const active = services.includes(svc);
+                    return (
+                      <TouchableOpacity
+                        key={svc}
+                        style={[ac.svcBtn, active && ac.svcBtnActive]}
+                        onPress={() => toggleService(svc)}
+                        activeOpacity={0.75}
+                      >
+                        <Ionicons
+                          name={active ? 'checkbox' : 'square-outline'}
+                          size={16}
+                          color={active ? '#E8B923' : Colors.textMuted}
+                        />
+                        <Text style={[ac.svcBtnText, active && { color: '#3A3131', fontWeight: '700' }]}>
+                          {svc === 'BK' ? 'Bookkeeping' : 'CFO'}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+
+              {/* QBO access (only relevant when CFO is selected) */}
+              {services.includes('CFO') && (
+                <View style={ac.fieldGroup}>
+                  <Text style={ac.label}>Do we already have QBO access?</Text>
+                  <Text style={ac.helpText}>If yes, "Prior Month Bookkeeping / QBO Access" won't be requested.</Text>
+                  <View style={ac.planRow}>
+                    <TouchableOpacity
+                      style={[ac.svcBtn, hasQbo && ac.svcBtnActive]}
+                      onPress={() => setHasQbo(true)}
+                      activeOpacity={0.75}
+                    >
+                      <Ionicons name={hasQbo ? 'radio-button-on' : 'radio-button-off'} size={16} color={hasQbo ? '#E8B923' : Colors.textMuted} />
+                      <Text style={[ac.svcBtnText, hasQbo && { color: '#3A3131', fontWeight: '700' }]}>Yes, we have it</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[ac.svcBtn, !hasQbo && ac.svcBtnActive]}
+                      onPress={() => setHasQbo(false)}
+                      activeOpacity={0.75}
+                    >
+                      <Ionicons name={!hasQbo ? 'radio-button-on' : 'radio-button-off'} size={16} color={!hasQbo ? '#E8B923' : Colors.textMuted} />
+                      <Text style={[ac.svcBtnText, !hasQbo && { color: '#3A3131', fontWeight: '700' }]}>No, request it</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              )}
+
               {/* Error */}
               {!!errorMsg && (
                 <View style={ac.errorBox}>
@@ -301,9 +368,9 @@ function AddClientModal({
                   <Text style={ac.cancelText}>Cancel</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  style={[ac.primaryBtn, { flex: 2 }, (!fullName.trim() || !email.trim() || password.length < 8 || loading) && ac.primaryBtnDisabled]}
+                  style={[ac.primaryBtn, { flex: 2 }, (!fullName.trim() || !email.trim() || password.length < 8 || services.length === 0 || loading) && ac.primaryBtnDisabled]}
                   onPress={handleSubmit}
-                  disabled={!fullName.trim() || !email.trim() || password.length < 8 || loading}
+                  disabled={!fullName.trim() || !email.trim() || password.length < 8 || services.length === 0 || loading}
                   activeOpacity={0.85}
                 >
                   {loading
@@ -422,6 +489,14 @@ const ac = StyleSheet.create({
     borderColor: Colors.border,
   },
   planBtnText: { color: Colors.textMuted, fontSize: 11, fontWeight: '600' },
+  helpText: { color: Colors.textMuted, fontSize: 11, lineHeight: 15, marginTop: -2, marginBottom: 2 },
+  svcBtn: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7,
+    paddingVertical: 12, borderRadius: 10, backgroundColor: Colors.bgMid,
+    borderWidth: 1, borderColor: Colors.border,
+  },
+  svcBtnActive: { backgroundColor: 'rgba(232,185,35,0.12)', borderColor: 'rgba(232,185,35,0.5)' },
+  svcBtnText: { color: Colors.textMuted, fontSize: 12, fontWeight: '600' },
   actionRow: { flexDirection: 'row', gap: 10, marginTop: 4 },
   cancelBtn: {
     flex: 1,
@@ -479,10 +554,19 @@ function ManageModal({
   onSave: (updated: Profile) => void;
   onViewDocs: (client: Profile) => void;
 }) {
+  const sheet = useSheetStyles('md');
   const [name, setName]           = useState(client.full_name ?? '');
   const [plan, setPlan]           = useState(client.plan ?? 'Free');
   const [active, setActive]       = useState(client.is_active ?? true);
+  const [services, setServices]   = useState<ClientService[]>(
+    Array.isArray(client.services) && client.services.length > 0 ? client.services : ['BK']
+  );
+  const [hasQbo, setHasQbo]       = useState(client.has_qbo_access ?? false);
   const [saving, setSaving]       = useState(false);
+
+  const toggleService = (svc: ClientService) => {
+    setServices(prev => prev.includes(svc) ? prev.filter(s => s !== svc) : [...prev, svc]);
+  };
   const [newPassword, setNewPassword]   = useState('');
   const [showNewPass, setShowNewPass]   = useState(false);
   const [pwdSaving, setPwdSaving]       = useState(false);
@@ -496,12 +580,15 @@ function ManageModal({
   };
 
   const handleSave = async () => {
+    if (services.length === 0) { showToast('Select at least one service (BK or CFO)'); return; }
     setSaving(true);
-    const ok = await updateClientProfile(client.id, { full_name: name, plan, is_active: active });
+    const ok = await updateClientProfile(client.id, {
+      full_name: name, plan, is_active: active, services, has_qbo_access: hasQbo,
+    });
     setSaving(false);
     if (ok) {
       showToast('Client updated successfully');
-      onSave({ ...client, full_name: name, plan, is_active: active });
+      onSave({ ...client, full_name: name, plan, is_active: active, services, has_qbo_access: hasQbo });
     } else {
       showToast('Failed to update client');
     }
@@ -530,8 +617,8 @@ function ManageModal({
 
   return (
     <Modal visible animationType="slide" transparent onRequestClose={onClose}>
-      <Pressable style={mm.overlay} onPress={onClose}>
-        <Pressable style={mm.sheet} onPress={() => {}}>
+      <Pressable style={[mm.overlay, sheet.overlay]} onPress={onClose}>
+        <Pressable style={[mm.sheet, sheet.sheet]} onPress={() => {}}>
           {/* Handle bar */}
           <View style={mm.handle} />
 
@@ -593,6 +680,47 @@ function ManageModal({
                 })}
               </View>
             </View>
+
+            {/* Client Type (services) */}
+            <View style={mm.field}>
+              <Text style={mm.label}>Client Type</Text>
+              <View style={mm.planRow}>
+                {(['BK', 'CFO'] as ClientService[]).map(svc => {
+                  const isOn = services.includes(svc);
+                  return (
+                    <TouchableOpacity
+                      key={svc}
+                      style={[mm.svcBtn, isOn && mm.svcBtnActive]}
+                      onPress={() => toggleService(svc)}
+                      activeOpacity={0.75}
+                    >
+                      <Ionicons name={isOn ? 'checkbox' : 'square-outline'} size={16} color={isOn ? '#E8B923' : Colors.textMuted} />
+                      <Text style={[mm.svcText, isOn && { color: Colors.textPrimary, fontWeight: '700' }]}>
+                        {svc === 'BK' ? 'Bookkeeping' : 'CFO'}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
+
+            {/* QBO access — only relevant when CFO is on */}
+            {services.includes('CFO') && (
+              <View style={mm.field}>
+                <Text style={mm.label}>QBO Access</Text>
+                <View style={mm.toggleRow}>
+                  <TouchableOpacity style={[mm.toggleBtn, hasQbo && mm.toggleBtnActive]} onPress={() => setHasQbo(true)} activeOpacity={0.75}>
+                    <Ionicons name={hasQbo ? 'radio-button-on' : 'radio-button-off'} size={16} color={hasQbo ? '#22C55E' : Colors.textMuted} />
+                    <Text style={[mm.toggleText, hasQbo && { color: '#22C55E' }]}>We have it</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={[mm.toggleBtn, !hasQbo && mm.toggleBtnActive]} onPress={() => setHasQbo(false)} activeOpacity={0.75}>
+                    <Ionicons name={!hasQbo ? 'radio-button-on' : 'radio-button-off'} size={16} color={!hasQbo ? '#22C55E' : Colors.textMuted} />
+                    <Text style={[mm.toggleText, !hasQbo && { color: '#22C55E' }]}>Request it</Text>
+                  </TouchableOpacity>
+                </View>
+                <Text style={mm.qboHint}>When "We have it" is set, the "Prior Month Bookkeeping / QBO Access" item is not requested.</Text>
+              </View>
+            )}
 
             {/* Status */}
             <View style={mm.field}>
@@ -777,6 +905,14 @@ const mm = StyleSheet.create({
     borderColor: Colors.border,
   },
   planText: { color: Colors.textMuted, fontSize: 11, fontWeight: '600' },
+  svcBtn: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7,
+    paddingVertical: 12, borderRadius: 10, backgroundColor: Colors.bgMid,
+    borderWidth: 1, borderColor: Colors.border,
+  },
+  svcBtnActive: { backgroundColor: 'rgba(232,185,35,0.12)', borderColor: 'rgba(232,185,35,0.5)' },
+  svcText: { color: Colors.textMuted, fontSize: 12, fontWeight: '600' },
+  qboHint: { color: Colors.textMuted, fontSize: 11, lineHeight: 15, marginTop: 2 },
   toggleRow: { flexDirection: 'row', gap: 10 },
   toggleBtn: {
     flex: 1,
@@ -869,6 +1005,7 @@ function ProgressDetailModal({ client, onClose, onViewDocs }: {
   onClose: () => void;
   onViewDocs: (client: Profile) => void;
 }) {
+  const sheet = useSheetStyles('lg');
   const [fulfilled, setFulfilled] = useState<Set<string>>(new Set());
   const [loading, setLoading]     = useState(true);
   const month = monthOf();
@@ -883,15 +1020,18 @@ function ProgressDetailModal({ client, onClose, onViewDocs }: {
     return () => { alive = false; };
   }, [client.email]);
 
-  const done  = REQUIRED_UPLOADS.filter(i => fulfilled.has(reqKey(i.service, i.key))).length;
-  const pct   = REQUIRED_TOTAL > 0 ? (done / REQUIRED_TOTAL) * 100 : 0;
+  // Only the items that apply to THIS client (their services + QBO access).
+  const clientItems = itemsForClient(client.services, client.has_qbo_access);
+  const total = clientItems.length;
+  const done  = clientItems.filter(i => fulfilled.has(reqKey(i.service, i.key))).length;
+  const pct   = total > 0 ? (done / total) * 100 : 0;
   const color = pct >= 100 ? '#16A34A' : pct >= 50 ? '#E8B923' : '#B5905B';
   const grad  = avatarGradient(client.full_name);
 
   return (
     <Modal visible transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable style={pd.overlay} onPress={onClose}>
-        <Pressable style={pd.sheet} onPress={() => {}}>
+      <Pressable style={[pd.overlay, sheet.overlay]} onPress={onClose}>
+        <Pressable style={[pd.sheet, sheet.sheet]} onPress={() => {}}>
           <View style={pd.handle} />
 
           {/* Header */}
@@ -909,7 +1049,7 @@ function ProgressDetailModal({ client, onClose, onViewDocs }: {
           <Text style={pd.monthLabel}>Required documents · {formatMonthLabel(month)}</Text>
           <View style={pd.pctRow}>
             <Text style={[pd.pct, { color }]}>{Math.round(pct)}%</Text>
-            <Text style={pd.count}>{done} of {REQUIRED_TOTAL} accepted</Text>
+            <Text style={pd.count}>{done} of {total} accepted</Text>
           </View>
           <View style={pd.track}>
             <View style={[pd.fill, { width: `${pct}%` as any, backgroundColor: color }]} />
@@ -920,10 +1060,13 @@ function ProgressDetailModal({ client, onClose, onViewDocs }: {
             <ActivityIndicator color={Colors.primary} style={{ marginVertical: 24 }} />
           ) : (
             <ScrollView style={{ maxHeight: 320 }} showsVerticalScrollIndicator={false}>
-              {(['BK', 'CFO'] as const).map(svc => (
+              {(['BK', 'CFO'] as const).map(svc => {
+                const svcItems = clientItems.filter(i => i.service === svc);
+                if (svcItems.length === 0) return null;
+                return (
                 <View key={svc} style={pd.group}>
                   <Text style={pd.groupLabel}>{svc === 'BK' ? 'Bookkeeping' : 'CFO'}</Text>
-                  {itemsByService(svc).map(item => {
+                  {svcItems.map(item => {
                     const ok = fulfilled.has(reqKey(item.service, item.key));
                     return (
                       <View key={item.key} style={pd.itemRow}>
@@ -940,7 +1083,8 @@ function ProgressDetailModal({ client, onClose, onViewDocs }: {
                     );
                   })}
                 </View>
-              ))}
+                );
+              })}
             </ScrollView>
           )}
 
@@ -1059,7 +1203,8 @@ export function ClientListScreen({ onSelectClient }: Props) {
     const pc   = PLAN_COLORS[item.plan] ?? PLAN_COLORS.Free;
 
     const reqDone  = reqCounts[item.email] ?? 0;
-    const reqPct   = REQUIRED_TOTAL > 0 ? (reqDone / REQUIRED_TOTAL) * 100 : 0;
+    const reqTotal = itemsForClient(item.services, item.has_qbo_access).length;
+    const reqPct   = reqTotal > 0 ? (reqDone / reqTotal) * 100 : 0;
     const reqColor = reqPct >= 100 ? '#16A34A' : reqPct >= 50 ? '#E8B923' : '#B5905B';
 
     return (
@@ -1095,7 +1240,7 @@ export function ClientListScreen({ onSelectClient }: Props) {
             <View style={s.reqTrack}>
               <View style={[s.reqFill, { width: `${reqPct}%` as any, backgroundColor: reqColor }]} />
             </View>
-            <Text style={[s.reqLabel, { color: reqColor }]}>{reqDone}/{REQUIRED_TOTAL}</Text>
+            <Text style={[s.reqLabel, { color: reqColor }]}>{reqDone}/{reqTotal}</Text>
           </View>
 
           {/* Progress details + documents */}

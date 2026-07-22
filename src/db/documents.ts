@@ -17,6 +17,8 @@ export interface Document {
   approval_note: string | null;
   approved_by: string | null;
   approved_at: string | null;
+  uploaded_by_role?: 'client' | 'staff' | 'admin';   // who placed this file
+  uploaded_by?: string | null;
   created_at: string;
   updated_at?: string;
 }
@@ -254,18 +256,27 @@ export async function createDocumentRecord(params: {
   name: string;
   documentUrl: string;
   documentType: string;
+  uploadedByRole?: 'client' | 'staff' | 'admin';  // default 'client'
+  uploadedBy?: string;                              // uploader id/email
 }): Promise<Document | null> {
+  const role = params.uploadedByRole ?? 'client';
+  // Client uploads await ADMIN approval. Staff-delivered files await CLIENT approval,
+  // so they enter as 'pending' too — the client is the approver in that case.
+  const row: Record<string, any> = {
+    user_id: params.userId,
+    email: params.email,
+    name: params.name,
+    file_name: params.name,
+    document_url: params.documentUrl,
+    status: 'new',
+    approval_status: 'pending',
+    uploaded_by_role: role,
+    uploaded_by: params.uploadedBy ?? null,
+  };
+
   const { data, error } = await supabase
     .from(params.documentType)
-    .insert({
-      user_id: params.userId,
-      email: params.email,
-      name: params.name,
-      file_name: params.name,
-      document_url: params.documentUrl,
-      status: 'new',
-      approval_status: 'pending',
-    })
+    .insert(row)
     .select()
     .single();
 

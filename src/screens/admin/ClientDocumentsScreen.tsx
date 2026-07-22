@@ -11,26 +11,47 @@ import {
   Pressable,
   TextInput,
   Platform,
+  ScrollView,
+  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import WebView from 'react-native-webview';
+import * as DocumentPicker from 'expo-document-picker';
 import { Colors } from '../../constants/colors';
 import { StatusBadge } from '../../components/StatusBadge';
 import { Profile } from '../../db/profiles';
+import { useAuth } from '../../context/AuthContext';
+import { useSheetStyles } from '../../hooks/useSheetStyles';
 import {
   getDocumentsByEmail,
   deleteDocument,
   renameDocument,
   updateDocumentStatus,
+  uploadDocumentToStorage,
+  createDocumentRecord,
   Document,
 } from '../../db/documents';
+import { createCustomRequest } from '../../db/customRequests';
+import { monthOf } from '../../db/requirements';
 
 interface Props {
   client: Profile;
   onBack: () => void;
 }
+
+// Folders staff can deliver files into, per the client's services.
+// (Only staff-deliverable folders — not the client-upload / required-docs ones.)
+const STAFF_UPLOAD_FOLDERS: { key: string; label: string; service: 'BK' | 'CFO' }[] = [
+  { key: 'bk_for_client_review', label: 'For Client Review',          service: 'BK'  },
+  { key: 'bk_final_pnl',         label: 'Final PNL & Balance Sheets',  service: 'BK'  },
+  { key: 'bk_contracts',         label: 'Contracts (BK)',              service: 'BK'  },
+  { key: 'bk_invoices',          label: 'Invoices (BK)',               service: 'BK'  },
+  { key: 'tax_return_information', label: 'Return Information',        service: 'CFO' },
+  { key: 'tax_contracts',        label: 'Contracts (CFO)',             service: 'CFO' },
+  { key: 'tax_invoices',         label: 'Invoices (CFO)',              service: 'CFO' },
+];
 
 // ── Viewer Modal ──────────────────────────────────────────────────────────────
 
@@ -164,6 +185,197 @@ const dm = StyleSheet.create({
   deleteText: { color: Colors.white, fontWeight: '700', fontSize: 14 },
 });
 
+// ── Staff Upload-to-Client Modal ──────────────────────────────────────────────
+// Staff delivers a file into one of the client's folders. It enters as
+// 'pending' + uploaded_by_role='staff', so the CLIENT approves/rejects it.
+
+function StaffUploadModal({ client, visible, onClose, onUploaded }: {
+  client: Profile; visible: boolean; onClose: () => void; onUploaded: (d: Document) => void;
+}) {
+  const { user } = useAuth();
+  const sheet = useSheetStyles('lg');
+  const [folderKey, setFolderKey] = useState<string | null>(null);
+  const [picked, setPicked] = useState<{ uri: string; name: string; mimeType: string } | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const services = Array.isArray(client.services) && client.services.length > 0 ? client.services : ['BK'];
+  const folders = STAFF_UPLOAD_FOLDERS.filter(f => services.includes(f.service));
+
+  const reset = () => { setFolderKey(null); setPicked(null); setBusy(false); };
+  const close = () => { reset(); onClose(); };
+
+  const pick = async () => {
+    try {
+      const r = await DocumentPicker.getDocumentAsync({ type: '*/*', copyToCacheDirectory: true, multiple: false });
+      if (r.canceled) return;
+      const a = r.assets[0];
+      setPicked({ uri: a.uri, name: a.name, mimeType: a.mimeType ?? 'application/octet-stream' });
+    } catch { Alert.alert('Error', 'Could not pick a file.'); }
+  };
+
+  const upload = async () => {
+    if (!folderKey || !picked) return;
+    setBusy(true);
+    try {
+      const url = await uploadDocumentToStorage(client.id, folderKey, picked.uri, picked.name, picked.mimeType);
+      if (!url) { setBusy(false); Alert.alert('Upload failed', 'Could not save file to storage.'); return; }
+      const doc = await createDocumentRecord({
+        userId: client.id,
+        email: client.email,
+        name: picked.name,
+        documentUrl: url,
+        documentType: folderKey,
+        uploadedByRole: (user?.role === 'admin' ? 'admin' : 'staff'),
+        uploadedBy: user?.email ?? 'staff',
+      });
+      setBusy(false);
+      if (!doc) { Alert.alert('Partial success', 'File saved but record creation failed.'); return; }
+      onUploaded(doc);
+      close();
+    } catch (e: any) {
+      setBusy(false);
+      Alert.alert('Upload failed', e?.message ?? 'Something went wrong.');
+    }
+  };
+
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={close}>
+      <Pressable style={[su.overlay, sheet.overlay]} onPress={close}>
+        <Pressable style={[su.sheet, sheet.sheet]} onPress={() => {}}>
+          <View style={su.handle} />
+          <Text style={su.title}>Send a File to {client.full_name?.split(' ')[0] || 'Client'}</Text>
+          <Text style={su.sub}>The client will be asked to approve or reject it.</Text>
+
+          <Text style={su.label}>Folder</Text>
+          <ScrollView style={{ maxHeight: 200 }} showsVerticalScrollIndicator={false}>
+            {folders.map(f => {
+              const active = folderKey === f.key;
+              return (
+                <TouchableOpacity key={f.key} style={[su.folderRow, active && su.folderRowActive]} onPress={() => setFolderKey(f.key)} activeOpacity={0.75}>
+                  <Ionicons name={active ? 'radio-button-on' : 'radio-button-off'} size={18} color={active ? '#E8B923' : Colors.textMuted} />
+                  <Text style={[su.folderText, active && { color: Colors.textPrimary, fontWeight: '700' }]}>{f.label}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+
+          <Text style={su.label}>File</Text>
+          <TouchableOpacity style={su.pickBtn} onPress={pick} activeOpacity={0.8}>
+            <Ionicons name={picked ? 'document-text' : 'cloud-upload-outline'} size={18} color="#E8B923" />
+            <Text style={su.pickText} numberOfLines={1}>{picked ? picked.name : 'Choose a file…'}</Text>
+          </TouchableOpacity>
+
+          <View style={su.row}>
+            <TouchableOpacity style={su.cancelBtn} onPress={close}>
+              <Text style={su.cancelText}>Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[su.sendBtn, (!folderKey || !picked || busy) && { opacity: 0.5 }]}
+              onPress={upload}
+              disabled={!folderKey || !picked || busy}
+            >
+              {busy ? <ActivityIndicator color="#3A3131" size="small" /> : <Text style={su.sendText}>Send to Client</Text>}
+            </TouchableOpacity>
+          </View>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
+const su = StyleSheet.create({
+  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
+  sheet: { backgroundColor: Colors.bgCard, borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 24, paddingBottom: Platform.OS === 'ios' ? 36 : 28, gap: 10, maxHeight: '88%' },
+  handle: { width: 40, height: 4, backgroundColor: Colors.border, borderRadius: 2, alignSelf: 'center', marginBottom: 8 },
+  title: { color: Colors.textPrimary, fontSize: 18, fontWeight: '800' },
+  sub: { color: Colors.textMuted, fontSize: 13, marginBottom: 4 },
+  label: { color: Colors.textMuted, fontSize: 11, fontWeight: '700', letterSpacing: 1, textTransform: 'uppercase', marginTop: 8 },
+  folderRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 11, paddingHorizontal: 12, borderRadius: 12, borderWidth: 1, borderColor: Colors.border, marginBottom: 6, backgroundColor: Colors.bgMid },
+  folderRowActive: { borderColor: 'rgba(232,185,35,0.5)', backgroundColor: 'rgba(232,185,35,0.1)' },
+  folderText: { color: Colors.textSecondary, fontSize: 14 },
+  pickBtn: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 14, paddingHorizontal: 14, borderRadius: 12, borderWidth: 1, borderColor: 'rgba(232,185,35,0.4)', backgroundColor: 'rgba(232,185,35,0.08)' },
+  pickText: { color: Colors.textPrimary, fontSize: 14, fontWeight: '600', flex: 1 },
+  row: { flexDirection: 'row', gap: 10, marginTop: 14 },
+  cancelBtn: { flex: 1, backgroundColor: Colors.bgMid, borderRadius: 14, paddingVertical: 14, alignItems: 'center', borderWidth: 1, borderColor: Colors.border },
+  cancelText: { color: Colors.textSecondary, fontWeight: '600', fontSize: 14 },
+  sendBtn: { flex: 2, backgroundColor: '#E8B923', borderRadius: 14, paddingVertical: 14, alignItems: 'center' },
+  sendText: { color: '#3A3131', fontWeight: '700', fontSize: 14 },
+});
+
+// ── Request-a-Document Modal (staff → client custom request) ──────────────────
+
+function RequestDocModal({ client, visible, onClose, onCreated }: {
+  client: Profile; visible: boolean; onClose: () => void; onCreated: () => void;
+}) {
+  const { user } = useAuth();
+  const sheet = useSheetStyles('md');
+  const [title, setTitle] = useState('');
+  const [note, setNote]   = useState('');
+  const [busy, setBusy]   = useState(false);
+
+  const reset = () => { setTitle(''); setNote(''); setBusy(false); };
+  const close = () => { reset(); onClose(); };
+
+  const submit = async () => {
+    if (!title.trim()) return;
+    setBusy(true);
+    const ok = await createCustomRequest({
+      clientEmail: client.email,
+      title: title.trim(),
+      note: note.trim() || undefined,
+      month: monthOf(),
+      requestedBy: user?.email ?? 'staff',
+    });
+    setBusy(false);
+    if (ok) { onCreated(); close(); }
+    else Alert.alert('Error', 'Could not create the request.');
+  };
+
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={close}>
+      <Pressable style={[su.overlay, sheet.overlay]} onPress={close}>
+        <Pressable style={[su.sheet, sheet.sheet]} onPress={() => {}}>
+          <View style={su.handle} />
+          <Text style={su.title}>Request a Document</Text>
+          <Text style={su.sub}>Ask {client.full_name?.split(' ')[0] || 'the client'} for a one-off document this month. It appears in their Required Documents list.</Text>
+
+          <Text style={su.label}>What do you need?</Text>
+          <TextInput
+            style={rq.input}
+            value={title}
+            onChangeText={setTitle}
+            placeholder="e.g. August bank reconciliation"
+            placeholderTextColor={Colors.textMuted}
+          />
+
+          <Text style={su.label}>Note (optional)</Text>
+          <TextInput
+            style={[rq.input, { minHeight: 70, textAlignVertical: 'top' }]}
+            value={note}
+            onChangeText={setNote}
+            placeholder="Any instructions for the client…"
+            placeholderTextColor={Colors.textMuted}
+            multiline
+          />
+
+          <View style={su.row}>
+            <TouchableOpacity style={su.cancelBtn} onPress={close}>
+              <Text style={su.cancelText}>Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[su.sendBtn, (!title.trim() || busy) && { opacity: 0.5 }]} onPress={submit} disabled={!title.trim() || busy}>
+              {busy ? <ActivityIndicator color="#3A3131" size="small" /> : <Text style={su.sendText}>Send Request</Text>}
+            </TouchableOpacity>
+          </View>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
+const rq = StyleSheet.create({
+  input: { backgroundColor: Colors.white, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, color: Colors.textPrimary, fontSize: 14, borderWidth: 1, borderColor: Colors.border },
+});
+
 // ── Main Screen ───────────────────────────────────────────────────────────────
 
 export function ClientDocumentsScreen({ client, onBack }: Props) {
@@ -174,6 +386,8 @@ export function ClientDocumentsScreen({ client, onBack }: Props) {
   const [viewerUrl, setViewerUrl] = useState<string | null>(null);
   const [renameDoc, setRenameDoc] = useState<Document | null>(null);
   const [deleteDoc, setDeleteDoc] = useState<Document | null>(null);
+  const [uploadOpen, setUploadOpen] = useState(false);
+  const [requestOpen, setRequestOpen] = useState(false);
 
   const load = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true); else setLoading(true);
@@ -260,7 +474,16 @@ export function ClientDocumentsScreen({ client, onBack }: Props) {
           <Text style={s.clientName}>{client.full_name || 'Client'}</Text>
           <Text style={s.clientEmail}>{client.email}</Text>
         </View>
-        <Text style={s.docCount}>{documents.length} docs</Text>
+        <View style={{ gap: 6 }}>
+          <TouchableOpacity style={s.sendFileBtn} onPress={() => setUploadOpen(true)} activeOpacity={0.85}>
+            <Ionicons name="cloud-upload-outline" size={15} color="#3A3131" />
+            <Text style={s.sendFileText}>Send File</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={s.requestBtn} onPress={() => setRequestOpen(true)} activeOpacity={0.85}>
+            <Ionicons name="clipboard-outline" size={14} color="#E8B923" />
+            <Text style={s.requestText}>Request Doc</Text>
+          </TouchableOpacity>
+        </View>
       </LinearGradient>
 
       {loading ? (
@@ -293,6 +516,20 @@ export function ClientDocumentsScreen({ client, onBack }: Props) {
         name={deleteDoc?.name ?? ''}
         onConfirm={() => { if (deleteDoc) { handleDelete(deleteDoc); setDeleteDoc(null); } }}
         onCancel={() => setDeleteDoc(null)}
+      />
+
+      <StaffUploadModal
+        client={client}
+        visible={uploadOpen}
+        onClose={() => setUploadOpen(false)}
+        onUploaded={d => setDocuments(prev => [d, ...prev])}
+      />
+
+      <RequestDocModal
+        client={client}
+        visible={requestOpen}
+        onClose={() => setRequestOpen(false)}
+        onCreated={() => {}}
       />
     </View>
   );
@@ -333,6 +570,10 @@ const s = StyleSheet.create({
   clientName: { color: Colors.textPrimary, fontSize: 16, fontWeight: '700' },
   clientEmail: { color: Colors.textMuted, fontSize: 12, marginTop: 2 },
   docCount: { color: Colors.textMuted, fontSize: 13 },
+  sendFileBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: '#E8B923', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 8 },
+  sendFileText: { color: '#3A3131', fontSize: 12, fontWeight: '700' },
+  requestBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 7, borderWidth: 1, borderColor: 'rgba(232,185,35,0.5)' },
+  requestText: { color: '#E8B923', fontSize: 12, fontWeight: '700' },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   docRow: {
     flexDirection: 'row',

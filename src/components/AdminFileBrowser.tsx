@@ -27,8 +27,8 @@ import { FileConversationPanel } from './FileConversationPanel';
 const CATEGORIES = [
   {
     key: 'tax' as const,
-    abbr: 'TAX',
-    title: 'Tax Documents & Returns',
+    abbr: 'CFO',
+    title: 'CFO Documents & Returns',
     color: '#E8B923',
     folders: [
       { table: 'tax_client_uploads',     label: 'Client Uploads',    icon: 'cloud-upload-outline'       as const },
