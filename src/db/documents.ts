@@ -35,6 +35,14 @@ export const FOLDER_TABLES = [
   'bk_invoices',
   'bk_for_client_review',
   'bk_final_pnl',
+  // ── CFO Advisory ──
+  'cfo_contracts',
+  'cfo_invoices',
+  'cfo_additional_docs',
+  // Monthly Reporting (nested)
+  'cfo_mr_required_info',
+  'cfo_mr_client_review',
+  'cfo_mr_final_statements',
 ] as const;
 
 export type FolderTable = typeof FOLDER_TABLES[number];

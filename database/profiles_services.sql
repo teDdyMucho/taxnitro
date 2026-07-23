@@ -16,21 +16,15 @@ alter table public.profiles
   add column if not exists services       text[]  not null default '{BK}',
   add column if not exists has_qbo_access  boolean not null default false;
 
--- Guard: services may only contain BK / CFO (and must be non-empty).
-do $$
-begin
-  if not exists (
-    select 1 from pg_constraint
-    where conname = 'profiles_services_valid'
-  ) then
-    alter table public.profiles
-      add constraint profiles_services_valid
-      check (
-        array_length(services, 1) >= 1
-        and services <@ array['BK','CFO']::text[]
-      );
-  end if;
-end $$;
+-- Guard: services may only contain BK / TAX / CFO (and must be non-empty).
+-- Drop-and-recreate so re-runs pick up new allowed values.
+alter table public.profiles drop constraint if exists profiles_services_valid;
+alter table public.profiles
+  add constraint profiles_services_valid
+  check (
+    array_length(services, 1) >= 1
+    and services <@ array['BK','TAX','CFO']::text[]
+  );
 
 -- ── RLS: let staff/admins read + update client profiles ──────
 --

@@ -22,6 +22,14 @@ import {
 
 const PLANS = ['Free', 'Basic', 'Pro', 'Enterprise'] as const;
 
+// The three client-type services and their display labels.
+const ALL_SERVICES: ClientService[] = ['BK', 'TAX', 'CFO'];
+const SERVICE_LABEL: Record<ClientService, string> = {
+  BK:  'Bookkeeping',
+  TAX: 'TAX',
+  CFO: 'CFO',
+};
+
 const PLAN_COLORS: Record<string, { bg: string; text: string; border: string }> = {
   Free:       { bg: '#F3F4F6', text: '#6B7280',  border: '#E5E7EB' },
   Basic:      { bg: '#EFF6FF', text: '#2563EB',  border: '#BFDBFE' },
@@ -300,12 +308,12 @@ function AddClientModal({
                 </View>
               </View>
 
-              {/* Services (BK / CFO / both) */}
+              {/* Services (BK / TAX / CFO — any combination) */}
               <View style={ac.fieldGroup}>
                 <Text style={ac.label}>Client Type</Text>
-                <Text style={ac.helpText}>Which services does this client have? Select one or both.</Text>
+                <Text style={ac.helpText}>Which services does this client have? Select one or more.</Text>
                 <View style={ac.planRow}>
-                  {(['BK', 'CFO'] as ClientService[]).map(svc => {
+                  {ALL_SERVICES.map(svc => {
                     const active = services.includes(svc);
                     return (
                       <TouchableOpacity
@@ -320,7 +328,7 @@ function AddClientModal({
                           color={active ? '#E8B923' : Colors.textMuted}
                         />
                         <Text style={[ac.svcBtnText, active && { color: '#3A3131', fontWeight: '700' }]}>
-                          {svc === 'BK' ? 'Bookkeeping' : 'CFO'}
+                          {SERVICE_LABEL[svc]}
                         </Text>
                       </TouchableOpacity>
                     );
@@ -580,7 +588,7 @@ function ManageModal({
   };
 
   const handleSave = async () => {
-    if (services.length === 0) { showToast('Select at least one service (BK or CFO)'); return; }
+    if (services.length === 0) { showToast('Select at least one service (BK or TAX)'); return; }
     setSaving(true);
     const ok = await updateClientProfile(client.id, {
       full_name: name, plan, is_active: active, services, has_qbo_access: hasQbo,
@@ -685,7 +693,7 @@ function ManageModal({
             <View style={mm.field}>
               <Text style={mm.label}>Client Type</Text>
               <View style={mm.planRow}>
-                {(['BK', 'CFO'] as ClientService[]).map(svc => {
+                {ALL_SERVICES.map(svc => {
                   const isOn = services.includes(svc);
                   return (
                     <TouchableOpacity
@@ -696,7 +704,7 @@ function ManageModal({
                     >
                       <Ionicons name={isOn ? 'checkbox' : 'square-outline'} size={16} color={isOn ? '#E8B923' : Colors.textMuted} />
                       <Text style={[mm.svcText, isOn && { color: Colors.textPrimary, fontWeight: '700' }]}>
-                        {svc === 'BK' ? 'Bookkeeping' : 'CFO'}
+                        {SERVICE_LABEL[svc]}
                       </Text>
                     </TouchableOpacity>
                   );
@@ -1065,7 +1073,7 @@ function ProgressDetailModal({ client, onClose, onViewDocs }: {
                 if (svcItems.length === 0) return null;
                 return (
                 <View key={svc} style={pd.group}>
-                  <Text style={pd.groupLabel}>{svc === 'BK' ? 'Bookkeeping' : 'CFO'}</Text>
+                  <Text style={pd.groupLabel}>{svc === 'BK' ? 'Bookkeeping' : 'TAX'}</Text>
                   {svcItems.map(item => {
                     const ok = fulfilled.has(reqKey(item.service, item.key));
                     return (

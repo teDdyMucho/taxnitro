@@ -43,14 +43,19 @@ interface Props {
 
 // Folders staff can deliver files into, per the client's services.
 // (Only staff-deliverable folders — not the client-upload / required-docs ones.)
-const STAFF_UPLOAD_FOLDERS: { key: string; label: string; service: 'BK' | 'CFO' }[] = [
+const STAFF_UPLOAD_FOLDERS: { key: string; label: string; service: 'BK' | 'TAX' | 'CFO' }[] = [
   { key: 'bk_for_client_review', label: 'For Client Review',          service: 'BK'  },
   { key: 'bk_final_pnl',         label: 'Final PNL & Balance Sheets',  service: 'BK'  },
   { key: 'bk_contracts',         label: 'Contracts (BK)',              service: 'BK'  },
   { key: 'bk_invoices',          label: 'Invoices (BK)',               service: 'BK'  },
-  { key: 'tax_return_information', label: 'Return Information',        service: 'CFO' },
-  { key: 'tax_contracts',        label: 'Contracts (CFO)',             service: 'CFO' },
-  { key: 'tax_invoices',         label: 'Invoices (CFO)',              service: 'CFO' },
+  { key: 'tax_return_information', label: 'Return Information',        service: 'TAX' },
+  { key: 'tax_contracts',        label: 'Contracts (TAX)',             service: 'TAX' },
+  { key: 'tax_invoices',         label: 'Invoices (TAX)',              service: 'TAX' },
+  { key: 'cfo_mr_client_review',  label: 'MR · For Client Review',     service: 'CFO' },
+  { key: 'cfo_mr_final_statements', label: 'MR · Final Statements',    service: 'CFO' },
+  { key: 'cfo_contracts',        label: 'Contracts (CFO)',             service: 'CFO' },
+  { key: 'cfo_invoices',         label: 'Invoices (CFO)',              service: 'CFO' },
+  { key: 'cfo_additional_docs',  label: 'Additional CFO Docs',         service: 'CFO' },
 ];
 
 // ── Viewer Modal ──────────────────────────────────────────────────────────────

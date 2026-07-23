@@ -1,7 +1,7 @@
 import { supabase } from '../lib/supabase';
 
 export type UserRole = 'client' | 'staff' | 'admin';
-export type ClientService = 'BK' | 'CFO';
+export type ClientService = 'BK' | 'TAX' | 'CFO';
 
 export interface Profile {
   id: string;

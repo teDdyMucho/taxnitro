@@ -7,7 +7,7 @@ import { supabase } from '../lib/supabase';
 //
 // To add / remove a required item, just edit this list. `key` must be unique.
 
-export type RequirementService = 'BK' | 'CFO';
+export type RequirementService = 'BK' | 'TAX' | 'CFO';
 
 export interface RequiredItem {
   key: string;

@@ -233,7 +233,7 @@ function ApproveTagModal({ visible, doc, onConfirm, onCancel }: {
                 <Ionicons name="checkmark-circle" size={20} color="#059669" />
                 <View style={{ flex: 1 }}>
                   <Text style={at.tagLabel}>{clientTag.label}</Text>
-                  <Text style={at.tagService}>{clientTag.service === 'BK' ? 'Bookkeeping' : 'CFO'}</Text>
+                  <Text style={at.tagService}>{clientTag.service === 'BK' ? 'Bookkeeping' : 'TAX'}</Text>
                 </View>
               </View>
 
@@ -260,7 +260,7 @@ function ApproveTagModal({ visible, doc, onConfirm, onCancel }: {
               <ScrollView style={{ maxHeight: 260 }} showsVerticalScrollIndicator={false}>
                 {services.map(svc => (
                   <View key={svc} style={{ marginBottom: 6 }}>
-                    <Text style={at.groupLabel}>{svc === 'BK' ? 'Bookkeeping' : 'CFO'}</Text>
+                    <Text style={at.groupLabel}>{svc === 'BK' ? 'Bookkeeping' : 'TAX'}</Text>
                     {REQUIRED_UPLOADS.filter(i => i.service === svc).map(item => {
                       const active = selected?.key === item.key;
                       return (
@@ -329,6 +329,12 @@ const FOLDERS = [
   { key: 'bk_invoices',            label: 'BK Invoices',    color: '#E8B923' },
   { key: 'bk_for_client_review',   label: 'Client Review',  color: '#B5905B' },
   { key: 'bk_final_pnl',           label: 'Final P&L',      color: '#2C2320' },
+  { key: 'cfo_contracts',          label: 'CFO Contracts',  color: '#B5905B' },
+  { key: 'cfo_invoices',           label: 'CFO Invoices',   color: '#E8B923' },
+  { key: 'cfo_additional_docs',    label: 'CFO Docs',       color: '#B5905B' },
+  { key: 'cfo_mr_required_info',   label: 'MR Required',    color: '#E8B923' },
+  { key: 'cfo_mr_client_review',   label: 'MR Review',      color: '#B5905B' },
+  { key: 'cfo_mr_final_statements', label: 'MR Final',      color: '#E8B923' },
 ];
 
 const EXT_COLOR: Record<string, string> = {
@@ -378,6 +384,22 @@ export function AdminDocumentsScreen() {
   const insets = useSafeAreaInsets();
   const mountedRef = useRef(true);
   useEffect(() => () => { mountedRef.current = false; }, []);
+
+  // On web, translate vertical mouse-wheel into horizontal scroll for the filter
+  // chip row so a normal mouse can reach the off-screen chips.
+  const filterScrollRef = useRef<ScrollView>(null);
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    const node: any = (filterScrollRef.current as any)?.getScrollableNode?.();
+    if (!node) return;
+    const onWheel = (e: WheelEvent) => {
+      if (e.deltaY === 0) return;
+      node.scrollLeft += e.deltaY;
+      e.preventDefault();
+    };
+    node.addEventListener('wheel', onWheel, { passive: false });
+    return () => node.removeEventListener('wheel', onWheel);
+  }, []);
 
   const { user, isLoading: authLoading } = useAuth();
 
@@ -636,9 +658,15 @@ export function AdminDocumentsScreen() {
         </View>
       </View>
 
-      {/* ── Filter Chips ── */}
+      {/* ── Filter Chips (horizontally scrollable) ── */}
       <View style={s.filterWrap}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.filterScroll}>
+        <ScrollView
+          ref={filterScrollRef}
+          horizontal
+          showsHorizontalScrollIndicator={Platform.OS === 'web'}
+          contentContainerStyle={s.filterScroll}
+          style={s.filterScrollView}
+        >
           {FOLDERS.map(f => {
             const active = filter === f.key;
             const isPendingChip = f.key === 'pending';
@@ -777,8 +805,9 @@ const s = StyleSheet.create({
   },
   searchInput: { flex: 1, color: '#111827', fontSize: 14, fontWeight: '500' },
 
-  filterWrap:   { height: 60, backgroundColor: '#FFFFFF', borderBottomWidth: 1, borderBottomColor: '#E5E7EB' },
-  filterScroll: { paddingHorizontal: 16, paddingVertical: 12, alignItems: 'center', gap: 8, flexDirection: 'row' },
+  filterWrap:   { backgroundColor: '#FFFFFF', borderBottomWidth: 1, borderBottomColor: '#E5E7EB' },
+  filterScrollView: { width: '100%' },
+  filterScroll: { paddingHorizontal: 16, paddingVertical: 12, alignItems: 'center', gap: 8, flexDirection: 'row', flexGrow: 0 },
   chip: {
     height: 36, borderRadius: 18, borderWidth: 1.5, paddingHorizontal: 14,
     flexDirection: 'row', alignItems: 'center', gap: 6,

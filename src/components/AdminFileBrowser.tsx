@@ -27,8 +27,8 @@ import { FileConversationPanel } from './FileConversationPanel';
 const CATEGORIES = [
   {
     key: 'tax' as const,
-    abbr: 'CFO',
-    title: 'CFO Documents & Returns',
+    abbr: 'TAX',
+    title: 'Tax Documents & Returns',
     color: '#E8B923',
     folders: [
       { table: 'tax_client_uploads',     label: 'Client Uploads',    icon: 'cloud-upload-outline'       as const },
@@ -49,6 +49,20 @@ const CATEGORIES = [
       { table: 'bk_invoices',          label: 'Invoices',            icon: 'receipt-outline'       as const },
       { table: 'bk_for_client_review', label: 'For Client Review',   icon: 'eye-outline'           as const },
       { table: 'bk_final_pnl',         label: 'Final P&L & Balance', icon: 'bar-chart-outline'     as const },
+    ],
+  },
+  {
+    key: 'cfo' as const,
+    abbr: 'CFO',
+    title: 'CFO Advisory',
+    color: '#8B6914',
+    folders: [
+      { table: 'cfo_contracts',        label: 'CFO Contracts',        icon: 'document-text-outline' as const },
+      { table: 'cfo_invoices',         label: 'CFO Invoices',         icon: 'receipt-outline'       as const },
+      { table: 'cfo_additional_docs',  label: 'Additional CFO Docs',  icon: 'folder-outline'        as const },
+      { table: 'cfo_mr_required_info', label: 'MR · Required Info',   icon: 'cloud-upload-outline'  as const },
+      { table: 'cfo_mr_client_review', label: 'MR · For Client Review', icon: 'eye-outline'         as const },
+      { table: 'cfo_mr_final_statements', label: 'MR · Final Statements', icon: 'ribbon-outline'    as const },
     ],
   },
 ];

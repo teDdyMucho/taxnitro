@@ -24,7 +24,25 @@ const FOLDER_META: Record<string, { label: string; color: string; icon: string }
   bk_invoices:            { label: 'BK Invoices',     color: '#E8B923', icon: 'receipt-outline'            },
   bk_for_client_review:   { label: 'Client Review',   color: '#B5905B', icon: 'eye-outline'               },
   bk_final_pnl:           { label: 'Final P&L',       color: '#2C2320', icon: 'bar-chart-outline'         },
+  cfo_contracts:          { label: 'CFO Contracts',   color: '#B5905B', icon: 'document-text-outline'     },
+  cfo_invoices:           { label: 'CFO Invoices',    color: '#E8B923', icon: 'receipt-outline'           },
+  cfo_additional_docs:    { label: 'Additional CFO Docs', color: '#B5905B', icon: 'folder-outline'        },
+  cfo_mr_required_info:   { label: 'MR · Required Info', color: '#E8B923', icon: 'cloud-upload-outline'   },
+  cfo_mr_client_review:   { label: 'MR · Client Review', color: '#B5905B', icon: 'eye-outline'            },
+  cfo_mr_final_statements:{ label: 'MR · Final Statements', color: '#E8B923', icon: 'ribbon-outline'      },
 };
+
+// Group folder tables into the three categories for the segregated breakdown.
+type CategoryKey = 'TAX' | 'BK' | 'CFO';
+const CATEGORIES: { key: CategoryKey; title: string; color: string; icon: string; match: (t: string) => boolean }[] = [
+  { key: 'TAX', title: 'Tax Documents & Returns', color: '#00B16A', icon: 'reader-outline',   match: t => t.startsWith('tax_') },
+  { key: 'BK',  title: 'Bookkeeping & Financials', color: '#008C5A', icon: 'calculator-outline', match: t => t.startsWith('bk_') },
+  { key: 'CFO', title: 'CFO Advisory',             color: '#B5905B', icon: 'trending-up-outline', match: t => t.startsWith('cfo_') },
+];
+
+function categoryOf(table: string): CategoryKey {
+  return (CATEGORIES.find(c => c.match(table))?.key ?? 'TAX');
+}
 
 // File extension colors (FTG palette)
 const EXT_COLORS: Record<string, string> = {
@@ -166,6 +184,15 @@ export function AdminDashboardScreen({ onViewAllDocuments }: { onViewAllDocument
   [stats, periodStart]);
 
   const maxFolder = Math.max(...filteredFolderCounts.map(f => f.count), 1);
+
+  // Segregate folders by category (TAX / BK / CFO) for the grouped breakdown.
+  const groupedFolders = useMemo(() =>
+    CATEGORIES.map(cat => {
+      const folders = filteredFolderCounts.filter(f => categoryOf(f.table) === cat.key);
+      const total   = folders.reduce((acc, f) => acc + f.count, 0);
+      return { ...cat, folders, total };
+    }).filter(g => g.folders.length > 0),
+  [filteredFolderCounts]);
 
   // ── Overview cards (3 cards per spec) ───────────────────────────────────
   const overviewCards = [
@@ -316,44 +343,49 @@ export function AdminDashboardScreen({ onViewAllDocuments }: { onViewAllDocument
             </Pressable>
           </Modal>
 
-          {/* ── Folder breakdown card ── */}
-          <View style={s.card}>
-            {filteredFolderCounts.map((f, idx) => {
-              const meta = FOLDER_META[f.table];
-              const pct  = Math.round((f.count / maxFolder) * 100);
-              const isLast = idx === filteredFolderCounts.length - 1;
-              return (
-                <View key={f.table}>
-                  <View style={s.folderRow}>
-                    {/* Colored icon circle */}
-                    <View style={[s.folderIconCircle, { backgroundColor: meta.color + '18' }]}>
-                      <Ionicons name={meta.icon as any} size={14} color={meta.color} />
-                    </View>
-
-                    {/* Folder name */}
-                    <Text style={s.folderLabel} numberOfLines={1}>{meta.label}</Text>
-
-                    {/* Progress bar */}
-                    <View style={s.barTrack}>
-                      <View
-                        style={[
-                          s.barFill,
-                          {
-                            width: `${Math.max(pct, f.count > 0 ? 6 : 0)}%` as any,
-                            backgroundColor: meta.color,
-                          },
-                        ]}
-                      />
-                    </View>
-
-                    {/* Count */}
-                    <Text style={[s.folderCount, { color: meta.color }]}>{f.count}</Text>
-                  </View>
-                  {!isLast && <View style={s.divider} />}
+          {/* ── Folder breakdown — one card per category (TAX / BK / CFO) ── */}
+          {groupedFolders.map(group => (
+            <View key={group.key} style={s.catCard}>
+              {/* Category header */}
+              <View style={s.catHeader}>
+                <View style={[s.catBadge, { backgroundColor: group.color + '18' }]}>
+                  <Ionicons name={group.icon as any} size={15} color={group.color} />
                 </View>
-              );
-            })}
-          </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={s.catTitle}>{group.title}</Text>
+                  <Text style={s.catSub}>{group.folders.length} folder{group.folders.length !== 1 ? 's' : ''}</Text>
+                </View>
+                <View style={[s.catTotalPill, { backgroundColor: group.color + '14', borderColor: group.color + '40' }]}>
+                  <Text style={[s.catTotalNum, { color: group.color }]}>{group.total}</Text>
+                  <Text style={[s.catTotalLabel, { color: group.color }]}>docs</Text>
+                </View>
+              </View>
+
+              <View style={s.catDivider} />
+
+              {/* Folder rows within this category */}
+              {group.folders.map((f, idx) => {
+                const meta = FOLDER_META[f.table] ?? { label: f.table, color: group.color, icon: 'folder-outline' };
+                const pct  = Math.round((f.count / maxFolder) * 100);
+                const isLast = idx === group.folders.length - 1;
+                return (
+                  <View key={f.table}>
+                    <View style={s.folderRow}>
+                      <View style={[s.folderIconCircle, { backgroundColor: meta.color + '18' }]}>
+                        <Ionicons name={meta.icon as any} size={14} color={meta.color} />
+                      </View>
+                      <Text style={s.folderLabel} numberOfLines={1}>{meta.label}</Text>
+                      <View style={s.barTrack}>
+                        <View style={[s.barFill, { width: `${Math.max(pct, f.count > 0 ? 6 : 0)}%` as any, backgroundColor: meta.color }]} />
+                      </View>
+                      <Text style={[s.folderCount, { color: meta.color }]}>{f.count}</Text>
+                    </View>
+                    {!isLast && <View style={s.divider} />}
+                  </View>
+                );
+              })}
+            </View>
+          ))}
 
           {/* ── Section label: RECENT UPLOADS ── */}
           <View style={s.sectionHeaderRow}>
@@ -695,6 +727,43 @@ const s = StyleSheet.create({
     elevation: 3,
     overflow: 'hidden',
   },
+
+  // ── Category card (segregated folder breakdown) ───────
+  catCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    paddingVertical: 4,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    elevation: 3,
+    overflow: 'hidden',
+  },
+  catHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 12,
+  },
+  catBadge: {
+    width: 36, height: 36, borderRadius: 12,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  catTitle: { color: '#111827', fontSize: 14, fontWeight: '800', letterSpacing: -0.2 },
+  catSub:   { color: '#94A3B8', fontSize: 11, fontWeight: '600', marginTop: 1 },
+  catTotalPill: {
+    flexDirection: 'row', alignItems: 'baseline', gap: 3,
+    paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20, borderWidth: 1,
+  },
+  catTotalNum:   { fontSize: 15, fontWeight: '800' },
+  catTotalLabel: { fontSize: 10, fontWeight: '700' },
+  catDivider: { height: 1, backgroundColor: '#F1F5F9' },
 
   // ── Shared divider ────────────────────────────────────
   divider: {

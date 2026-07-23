@@ -40,6 +40,12 @@ const FOLDER_LABELS: Record<string, string> = {
   bk_invoices:            'BK Invoices',
   bk_for_client_review:   'Client Review',
   bk_final_pnl:           'Final P&L',
+  cfo_contracts:          'CFO Contracts',
+  cfo_invoices:           'CFO Invoices',
+  cfo_additional_docs:    'Additional CFO Docs',
+  cfo_mr_required_info:   'MR · Required Info',
+  cfo_mr_client_review:   'MR · Client Review',
+  cfo_mr_final_statements:'MR · Final Statements',
 };
 
 function fmtRelative(iso: string) {

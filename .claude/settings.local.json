@@ -10,7 +10,8 @@
       "PowerShell(npm audit fix)",
       "PowerShell(npx expo config --type public 2>&1)",
       "PowerShell(if \\($?\\) { \"---EXPO OK---\" })",
-      "Bash(node -e ' *)"
+      "Bash(node -e ' *)",
+      "Bash(echo \"exit:$?\")"
     ],
     "additionalDirectories": [
       "c:\\c\\Users\\AKT\\Desktop\\Tax Nitro\\taxnitro\\src\\components"

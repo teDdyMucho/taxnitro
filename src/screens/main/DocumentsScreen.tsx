@@ -63,13 +63,16 @@ interface SubFolder {
   icon: keyof typeof Ionicons.glyphMap;
   color: string;
   bg: string;
+  // If present, this is a GROUP folder — tapping it opens a nested list of these
+  // children instead of a document list (3rd navigation level).
+  children?: SubFolder[];
 }
 
 interface RootFolder {
   key: string;
   label: string;
   description: string;
-  service: 'BK' | 'CFO';   // which client service this category belongs to
+  service: 'BK' | 'TAX' | 'CFO';   // which client service this category belongs to
   color: string;
   darkColor: string;
   gradient: [string, string, string];
@@ -79,9 +82,9 @@ interface RootFolder {
 const FOLDERS: RootFolder[] = [
   {
     key: 'TAX',
-    label: 'CFO',
-    description: 'CFO',
-    service: 'CFO',
+    label: 'TAX',
+    description: 'Tax Documents & Returns',
+    service: 'TAX',
     color: '#00B16A',
     darkColor: '#008C5A',
     gradient: ['#2C2320', '#3A3131', '#4A3E3E'],
@@ -107,6 +110,28 @@ const FOLDERS: RootFolder[] = [
       { key: 'bk_invoices',          label: 'Invoices',                   icon: 'receipt-outline',       color: '#B5905B', bg: 'rgba(181,144,91,0.15)'  },
       { key: 'bk_for_client_review', label: 'For Client Review',          icon: 'eye-outline',           color: '#E8B923', bg: 'rgba(232,185,35,0.15)'   },
       { key: 'bk_final_pnl',         label: 'Final PNL & Balance Sheets', icon: 'bar-chart-outline',     color: '#B5905B', bg: 'rgba(181,144,91,0.15)'  },
+    ],
+  },
+  {
+    key: 'CFO',
+    label: 'CFO',
+    description: 'CFO Advisory',
+    service: 'CFO',
+    color: '#B5905B',
+    darkColor: '#8B6914',
+    gradient: ['#2C2320', '#4A3E3E', '#3A3131'],
+    subFolders: [
+      { key: 'cfo_contracts',       label: 'CFO Contracts',      icon: 'document-text-outline', color: '#E8B923', bg: 'rgba(232,185,35,0.15)' },
+      { key: 'cfo_invoices',        label: 'CFO Invoices',       icon: 'receipt-outline',       color: '#B5905B', bg: 'rgba(181,144,91,0.15)' },
+      { key: 'cfo_additional_docs', label: 'Additional CFO Docs', icon: 'folder-outline',        color: '#E8B923', bg: 'rgba(232,185,35,0.15)' },
+      {
+        key: 'cfo_monthly_reporting', label: 'Monthly Reporting', icon: 'bar-chart-outline', color: '#B5905B', bg: 'rgba(181,144,91,0.15)',
+        children: [
+          { key: 'cfo_mr_required_info',      label: 'Required Info',                 icon: 'cloud-upload-outline',      color: '#E8B923', bg: 'rgba(232,185,35,0.15)' },
+          { key: 'cfo_mr_client_review',      label: 'For Client Review',             icon: 'eye-outline',               color: '#B5905B', bg: 'rgba(181,144,91,0.15)' },
+          { key: 'cfo_mr_final_statements',   label: 'Final Statements & Insights',   icon: 'ribbon-outline',            color: '#E8B923', bg: 'rgba(232,185,35,0.15)' },
+        ],
+      },
     ],
   },
 ];
@@ -238,17 +263,27 @@ function RootView({ folders, documents, loading, refreshing, onRefresh, onSelect
 // LEVEL 2 — Subfolder list
 // ═════════════════════════════════════════════════════════════════════════════
 
-function SubFolderView({ root, documents, refreshing, onRefresh, onBack, onSelect, pb, pt }: {
-  root: RootFolder; documents: Document[]; refreshing: boolean;
+function SubFolderView({ root, folders, title, documents, refreshing, onRefresh, onBack, onSelect, pb, pt }: {
+  root: RootFolder; folders?: SubFolder[]; title?: string; documents: Document[]; refreshing: boolean;
   onRefresh: () => void; onBack: () => void;
   onSelect: (sf: SubFolder) => void; pb: number; pt: number;
 }) {
-  const countFor = (sf: SubFolder) => {
+  // `folders` lets us reuse this view for a nested group's children (3rd level).
+  const list = folders ?? root.subFolders;
+
+  // Count documents for a folder — a GROUP folder sums its children's docs.
+  const countFor = (sf: SubFolder): { total: number; unread: number } => {
+    if (sf.children) {
+      return sf.children.reduce((acc, c) => {
+        const cc = countFor(c);
+        return { total: acc.total + cc.total, unread: acc.unread + cc.unread };
+      }, { total: 0, unread: 0 });
+    }
     const docs = documents.filter(d => d.document_type === sf.key);
     return { total: docs.length, unread: docs.filter(d => d.status !== 'viewed').length };
   };
 
-  const rootTotal = root.subFolders.reduce((acc, sf) => acc + countFor(sf).total, 0);
+  const rootTotal = list.reduce((acc, sf) => acc + countFor(sf).total, 0);
 
   return (
     <View style={s.screen}>
@@ -262,13 +297,13 @@ function SubFolderView({ root, documents, refreshing, onRefresh, onBack, onSelec
             <View style={s.subRootBadge}>
               <Text style={s.subRootBadgeText}>{root.label}</Text>
             </View>
-            <Text style={s.subHeaderTitle}>{root.description}</Text>
+            <Text style={s.subHeaderTitle}>{title ?? root.description}</Text>
           </View>
         </View>
         <View style={s.subHeaderMeta}>
           <View style={s.metaPill}>
             <Ionicons name="folder-outline" size={11} color="rgba(255,255,255,0.6)" />
-            <Text style={s.metaPillText}>{root.subFolders.length} folders</Text>
+            <Text style={s.metaPillText}>{list.length} folders</Text>
           </View>
           <View style={s.metaPill}>
             <Ionicons name="document-outline" size={11} color="rgba(255,255,255,0.6)" />
@@ -284,7 +319,7 @@ function SubFolderView({ root, documents, refreshing, onRefresh, onBack, onSelec
       >
         <Text style={s.sectionLabel}>Folders</Text>
 
-        {root.subFolders.map((sf, idx) => {
+        {list.map((sf, idx) => {
           const { total, unread } = countFor(sf);
           const pct = rootTotal > 0 ? (total / rootTotal) * 100 : 0;
           return (
@@ -696,7 +731,7 @@ function UploadModal({ visible, sf, root, userId, userEmail, onClose, onUploaded
                     if (items.length === 0) return null;
                     return (
                       <View key={svc} style={{ marginTop: 12 }}>
-                        <Text style={up.reqGroupLabel}>{svc === 'BK' ? 'Bookkeeping' : 'CFO'}</Text>
+                        <Text style={up.reqGroupLabel}>{svc === 'BK' ? 'Bookkeeping' : 'TAX'}</Text>
                         {items.map(item => (
                           <TouchableOpacity
                             key={item.key}
@@ -1156,7 +1191,7 @@ function DetailRow({ icon, label, value, color }: {
 // Root screen (state machine)
 // ═════════════════════════════════════════════════════════════════════════════
 
-type Nav = 'root' | 'sub' | 'docs';
+type Nav = 'root' | 'sub' | 'group' | 'docs';
 
 export function DocumentsScreen() {
   const { user, isLoading: authLoading } = useAuth();
@@ -1172,6 +1207,7 @@ export function DocumentsScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [nav,        setNav]       = useState<Nav>('root');
   const [activeRoot, setActiveRoot] = useState<RootFolder | null>(null);
+  const [activeGroup, setActiveGroup] = useState<SubFolder | null>(null);   // nested group (Monthly Reporting)
   const [activeSub,  setActiveSub]  = useState<SubFolder | null>(null);
   const [selectedDoc, setSelectedDoc] = useState<Document | null>(null);
 
@@ -1267,16 +1303,26 @@ export function DocumentsScreen() {
     <>
       {nav === 'root' && (
         <RootView folders={visibleFolders} documents={documents} loading={loading} refreshing={refreshing} onRefresh={onRefresh}
-          onSelect={r => { setActiveRoot(r); setNav('sub'); }} pb={pb} pt={pt} />
+          onSelect={r => { setActiveRoot(r); setActiveGroup(null); setNav('sub'); }} pb={pb} pt={pt} />
       )}
       {nav === 'sub' && !!activeRoot && (
         <SubFolderView root={activeRoot} documents={documents} refreshing={refreshing} onRefresh={onRefresh}
-          onBack={() => setNav('root')} onSelect={sf => { setActiveSub(sf); setNav('docs'); }} pb={pb} pt={pt} />
+          onBack={() => setNav('root')}
+          onSelect={sf => {
+            if (sf.children) { setActiveGroup(sf); setNav('group'); }   // open nested group
+            else { setActiveGroup(null); setActiveSub(sf); setNav('docs'); }
+          }}
+          pb={pb} pt={pt} />
+      )}
+      {nav === 'group' && !!activeRoot && !!activeGroup && (
+        <SubFolderView root={activeRoot} folders={activeGroup.children} title={activeGroup.label}
+          documents={documents} refreshing={refreshing} onRefresh={onRefresh}
+          onBack={() => setNav('sub')} onSelect={sf => { setActiveSub(sf); setNav('docs'); }} pb={pb} pt={pt} />
       )}
       {nav === 'docs' && !!activeSub && !!activeRoot && (
         <DocListView sf={activeSub} root={activeRoot} rootColor={activeRoot.color} documents={subDocs}
           refreshing={refreshing} onRefresh={onRefresh}
-          onBack={() => setNav('sub')} onDocPress={setSelectedDoc}
+          onBack={() => setNav(activeGroup ? 'group' : 'sub')} onDocPress={setSelectedDoc}
           onUploadDone={d => setDocuments(prev => prev.find(x => x.id === d.id) ? prev : [d, ...prev])}
           userId={user?.id ?? ''} userEmail={user?.email ?? ''} pb={pb} pt={pt} />
       )}

@@ -511,7 +511,7 @@ export function DashboardScreen() {
               if (items.length === 0) return null;
               return (
                 <View key={svc} style={styles.reqGroup}>
-                  <Text style={styles.reqGroupLabel}>{svc === 'BK' ? 'Bookkeeping' : 'CFO'}</Text>
+                  <Text style={styles.reqGroupLabel}>{svc === 'BK' ? 'Bookkeeping' : 'TAX'}</Text>
                   {items.map(item => {
                     const k          = reqKey(item.service, item.key);
                     const isApproved = fulfilled.has(k);
