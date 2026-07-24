@@ -11,7 +11,8 @@
       "PowerShell(npx expo config --type public 2>&1)",
       "PowerShell(if \\($?\\) { \"---EXPO OK---\" })",
       "Bash(node -e ' *)",
-      "Bash(echo \"exit:$?\")"
+      "Bash(echo \"exit:$?\")",
+      "Bash(grep -oE '<h[1-3][^>]*>[^<]{1,60}' report/FTG_Financial_Report_App_v5.html)"
     ],
     "additionalDirectories": [
       "c:\\c\\Users\\AKT\\Desktop\\Tax Nitro\\taxnitro\\src\\components"
