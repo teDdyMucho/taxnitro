@@ -25,6 +25,7 @@ import { Colors } from '../../constants/colors';
 import { StatusBadge } from '../../components/StatusBadge';
 import { FileConversationPanel } from '../../components/FileConversationPanel';
 import { useAuth } from '../../context/AuthContext';
+import { useResponsive } from '../../hooks/useResponsive';
 import {
   getDocumentsByEmail,
   updateDocumentStatus,
@@ -94,6 +95,7 @@ const FOLDERS: RootFolder[] = [
       { key: 'tax_contracts',          label: 'Contracts',          icon: 'document-text-outline',      color: '#E8B923', bg: 'rgba(232,185,35,0.15)' },
       { key: 'tax_invoices',           label: 'Invoices',           icon: 'receipt-outline',            color: '#B5905B', bg: 'rgba(181,144,91,0.15)' },
       { key: 'tax_return_information', label: 'Return Information', icon: 'information-circle-outline', color: '#B5905B', bg: 'rgba(181,144,91,0.15)' },
+      { key: 'tax_additional_docs',    label: 'Additional Tax Docs', icon: 'folder-outline',           color: '#E8B923', bg: 'rgba(232,185,35,0.15)' },
     ],
   },
   {
@@ -110,6 +112,9 @@ const FOLDERS: RootFolder[] = [
       { key: 'bk_invoices',          label: 'Invoices',                   icon: 'receipt-outline',       color: '#B5905B', bg: 'rgba(181,144,91,0.15)'  },
       { key: 'bk_for_client_review', label: 'For Client Review',          icon: 'eye-outline',           color: '#E8B923', bg: 'rgba(232,185,35,0.15)'   },
       { key: 'bk_final_pnl',         label: 'Final PNL & Balance Sheets', icon: 'bar-chart-outline',     color: '#B5905B', bg: 'rgba(181,144,91,0.15)'  },
+      { key: 'bk_mr_required_info',  label: 'Monthly Reporting (Required Info)',     icon: 'cloud-upload-outline', color: '#E8B923', bg: 'rgba(232,185,35,0.15)' },
+      { key: 'bk_mr_client_review',  label: 'Monthly Reporting (For Client Review)', icon: 'eye-outline',          color: '#B5905B', bg: 'rgba(181,144,91,0.15)' },
+      { key: 'bk_mr_final_statements', label: 'Monthly Reporting (Final Statements)', icon: 'ribbon-outline',      color: '#E8B923', bg: 'rgba(232,185,35,0.15)' },
     ],
   },
   {
@@ -124,14 +129,9 @@ const FOLDERS: RootFolder[] = [
       { key: 'cfo_contracts',       label: 'CFO Contracts',      icon: 'document-text-outline', color: '#E8B923', bg: 'rgba(232,185,35,0.15)' },
       { key: 'cfo_invoices',        label: 'CFO Invoices',       icon: 'receipt-outline',       color: '#B5905B', bg: 'rgba(181,144,91,0.15)' },
       { key: 'cfo_additional_docs', label: 'Additional CFO Docs', icon: 'folder-outline',        color: '#E8B923', bg: 'rgba(232,185,35,0.15)' },
-      {
-        key: 'cfo_monthly_reporting', label: 'Monthly Reporting', icon: 'bar-chart-outline', color: '#B5905B', bg: 'rgba(181,144,91,0.15)',
-        children: [
-          { key: 'cfo_mr_required_info',      label: 'Required Info',                 icon: 'cloud-upload-outline',      color: '#E8B923', bg: 'rgba(232,185,35,0.15)' },
-          { key: 'cfo_mr_client_review',      label: 'For Client Review',             icon: 'eye-outline',               color: '#B5905B', bg: 'rgba(181,144,91,0.15)' },
-          { key: 'cfo_mr_final_statements',   label: 'Final Statements & Insights',   icon: 'ribbon-outline',            color: '#E8B923', bg: 'rgba(232,185,35,0.15)' },
-        ],
-      },
+      { key: 'cfo_mr_required_info',    label: 'Monthly Reporting (Required Info)',     icon: 'cloud-upload-outline', color: '#E8B923', bg: 'rgba(232,185,35,0.15)' },
+      { key: 'cfo_mr_client_review',    label: 'Monthly Reporting (For Client Review)', icon: 'eye-outline',          color: '#B5905B', bg: 'rgba(181,144,91,0.15)' },
+      { key: 'cfo_mr_final_statements', label: 'Monthly Reporting (Final Statements)',  icon: 'ribbon-outline',       color: '#E8B923', bg: 'rgba(232,185,35,0.15)' },
     ],
   },
 ];
@@ -151,6 +151,7 @@ function RootView({ folders, documents, loading, refreshing, onRefresh, onSelect
   onRefresh: () => void; onSelect: (r: RootFolder) => void;
   pb: number; pt: number;
 }) {
+  const { isDesktop } = useResponsive();   // 3-column category grid on desktop
   const total  = documents.length;
   const unread = documents.filter(d => d.status !== 'viewed').length;
 
@@ -191,10 +192,11 @@ function RootView({ folders, documents, loading, refreshing, onRefresh, onSelect
       >
         <Text style={s.sectionLabel}>Select a category</Text>
 
+          <View style={isDesktop ? s.catGridDesktop : undefined}>
           {folders.map(root => {
             const { total: rTotal, unread: rUnread } = stats(root);
             return (
-              <TouchableOpacity key={root.key} onPress={() => onSelect(root)} activeOpacity={0.88} style={s.rootCardWrap}>
+              <TouchableOpacity key={root.key} onPress={() => onSelect(root)} activeOpacity={0.88} style={[s.rootCardWrap, isDesktop && s.rootCardWrapDesktop]}>
                 <LinearGradient colors={root.gradient} style={s.rootCard} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
 
                   {/* Top row */}
@@ -246,6 +248,7 @@ function RootView({ folders, documents, loading, refreshing, onRefresh, onSelect
               </TouchableOpacity>
             );
           })}
+          </View>
 
           {/* Info card */}
           <View style={s.infoCard}>
@@ -1397,6 +1400,9 @@ const s = StyleSheet.create({
   // root cards
   rootScroll:    { paddingBottom: 20 },
   rootCardWrap:  { marginHorizontal: 16, marginBottom: 14, borderRadius: 22, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.35, shadowRadius: 12, elevation: 8 },
+  // Desktop: lay the category cards out as a 3-column grid.
+  catGridDesktop:      { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 8 },
+  rootCardWrapDesktop: { flexBasis: '31%', flexGrow: 1, marginHorizontal: 8 },
   rootCard:      { padding: 22 },
   rootCardTop:   { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 },
   rootIconBox:   { width: 54, height: 54, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.15)', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)' },

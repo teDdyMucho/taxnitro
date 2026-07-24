@@ -36,6 +36,7 @@ const CATEGORIES = [
       { table: 'tax_contracts',          label: 'Contracts',         icon: 'document-text-outline'      as const },
       { table: 'tax_invoices',           label: 'Invoices',          icon: 'receipt-outline'            as const },
       { table: 'tax_return_information', label: 'Return Information',icon: 'information-circle-outline' as const },
+      { table: 'tax_additional_docs',   label: 'Additional Tax Docs', icon: 'folder-outline'          as const },
     ],
   },
   {
@@ -49,6 +50,9 @@ const CATEGORIES = [
       { table: 'bk_invoices',          label: 'Invoices',            icon: 'receipt-outline'       as const },
       { table: 'bk_for_client_review', label: 'For Client Review',   icon: 'eye-outline'           as const },
       { table: 'bk_final_pnl',         label: 'Final P&L & Balance', icon: 'bar-chart-outline'     as const },
+      { table: 'bk_mr_required_info',  label: 'Monthly Reporting (Required Info)',     icon: 'cloud-upload-outline' as const },
+      { table: 'bk_mr_client_review',  label: 'Monthly Reporting (For Client Review)', icon: 'eye-outline'          as const },
+      { table: 'bk_mr_final_statements', label: 'Monthly Reporting (Final Statements)', icon: 'ribbon-outline'      as const },
     ],
   },
   {
@@ -60,9 +64,9 @@ const CATEGORIES = [
       { table: 'cfo_contracts',        label: 'CFO Contracts',        icon: 'document-text-outline' as const },
       { table: 'cfo_invoices',         label: 'CFO Invoices',         icon: 'receipt-outline'       as const },
       { table: 'cfo_additional_docs',  label: 'Additional CFO Docs',  icon: 'folder-outline'        as const },
-      { table: 'cfo_mr_required_info', label: 'MR · Required Info',   icon: 'cloud-upload-outline'  as const },
-      { table: 'cfo_mr_client_review', label: 'MR · For Client Review', icon: 'eye-outline'         as const },
-      { table: 'cfo_mr_final_statements', label: 'MR · Final Statements', icon: 'ribbon-outline'    as const },
+      { table: 'cfo_mr_required_info', label: 'Monthly Reporting (Required Info)',     icon: 'cloud-upload-outline' as const },
+      { table: 'cfo_mr_client_review', label: 'Monthly Reporting (For Client Review)', icon: 'eye-outline'          as const },
+      { table: 'cfo_mr_final_statements', label: 'Monthly Reporting (Final Statements)', icon: 'ribbon-outline'     as const },
     ],
   },
 ];

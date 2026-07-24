@@ -107,15 +107,9 @@ export function AdminNavigator({ onLogout }: { onLogout: () => void }) {
           { paddingTop: insets.top + 20, paddingBottom: insets.bottom + 20 },
         ]}>
 
-          {/* Logo / branding */}
+          {/* Logo / branding (centered, enlarged) */}
           <View style={desk.logoArea}>
-            <Image source={require('../../assets/main-logo.png')} style={{ width: 140, height: 56 }} resizeMode="contain" />
-          </View>
-
-          {/* Role badge */}
-          <View style={desk.roleBadge}>
-            <Ionicons name="shield-checkmark" size={11} color="#E8B923" />
-            <Text style={desk.roleText}>{isAdmin ? 'Admin Portal' : 'Staff Portal'}</Text>
+            <Image source={require('../../assets/main-logo.png')} style={{ width: 200, height: 88 }} resizeMode="contain" />
           </View>
 
           {/* Divider */}
@@ -304,10 +298,10 @@ const desk = StyleSheet.create({
     flexDirection: 'column',
   },
 
-  /* Logo */
+  /* Logo (centered) */
   logoArea: {
-    flexDirection: 'row', alignItems: 'center', gap: 12,
-    marginBottom: 14, paddingHorizontal: 4,
+    alignItems: 'center', justifyContent: 'center',
+    marginBottom: 16, marginTop: 4,
   },
   logoIcon: {
     width: 44, height: 44, borderRadius: 14,
@@ -317,16 +311,6 @@ const desk = StyleSheet.create({
   },
   logoName: { color: '#FFFFFF', fontSize: 15, fontWeight: '800', lineHeight: 19 },
   logoSub:  { color: 'rgba(16,185,129,0.6)', fontSize: 11, fontWeight: '500', marginTop: 1 },
-
-  /* Role badge */
-  roleBadge: {
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-    backgroundColor: 'rgba(232,185,35,0.12)',
-    paddingHorizontal: 10, paddingVertical: 5,
-    borderRadius: 20, borderWidth: 1, borderColor: '#E8B923',
-    alignSelf: 'flex-start', marginLeft: 4, marginBottom: 4,
-  },
-  roleText: { color: '#E8B923', fontSize: 11, fontWeight: '800' },
 
   /* Divider */
   divider: {

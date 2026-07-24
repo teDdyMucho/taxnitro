@@ -22,6 +22,7 @@ import { StatusBadge } from '../../components/StatusBadge';
 import { AdminReplyBell } from '../../components/AdminReplyBell';
 import { AdminFileBrowser } from '../../components/AdminFileBrowser';
 import { useAuth } from '../../context/AuthContext';
+import { useSheetStyles } from '../../hooks/useSheetStyles';
 import {
   getAllDocuments,
   deleteDocument,
@@ -324,17 +325,29 @@ const FOLDERS = [
   { key: 'tax_contracts',          label: 'Tax Contracts',  color: '#B5905B' },
   { key: 'tax_invoices',           label: 'Tax Invoices',   color: '#E8B923' },
   { key: 'tax_return_information', label: 'Returns',        color: '#B5905B' },
+  { key: 'tax_additional_docs',    label: 'Additional Tax Docs', color: '#E8B923' },
   { key: 'bk_required_documents',  label: 'Required Docs',  color: '#E8B923' },
   { key: 'bk_contracts',           label: 'BK Contracts',   color: '#2C2320' },
   { key: 'bk_invoices',            label: 'BK Invoices',    color: '#E8B923' },
   { key: 'bk_for_client_review',   label: 'Client Review',  color: '#B5905B' },
   { key: 'bk_final_pnl',           label: 'Final P&L',      color: '#2C2320' },
+  { key: 'bk_mr_required_info',    label: 'Monthly Reporting (Required Info)',     color: '#E8B923' },
+  { key: 'bk_mr_client_review',    label: 'Monthly Reporting (For Client Review)', color: '#B5905B' },
+  { key: 'bk_mr_final_statements', label: 'Monthly Reporting (Final Statements)',  color: '#E8B923' },
   { key: 'cfo_contracts',          label: 'CFO Contracts',  color: '#B5905B' },
   { key: 'cfo_invoices',           label: 'CFO Invoices',   color: '#E8B923' },
-  { key: 'cfo_additional_docs',    label: 'CFO Docs',       color: '#B5905B' },
-  { key: 'cfo_mr_required_info',   label: 'MR Required',    color: '#E8B923' },
-  { key: 'cfo_mr_client_review',   label: 'MR Review',      color: '#B5905B' },
-  { key: 'cfo_mr_final_statements', label: 'MR Final',      color: '#E8B923' },
+  { key: 'cfo_additional_docs',    label: 'Additional CFO Docs', color: '#B5905B' },
+  { key: 'cfo_mr_required_info',   label: 'Monthly Reporting (Required Info)',     color: '#E8B923' },
+  { key: 'cfo_mr_client_review',   label: 'Monthly Reporting (For Client Review)', color: '#B5905B' },
+  { key: 'cfo_mr_final_statements', label: 'Monthly Reporting (Final Statements)', color: '#E8B923' },
+];
+
+// Filter dropdown grouped by category for a clean per-folder picker.
+const FILTER_GROUPS: { title: string; keys: string[] }[] = [
+  { title: 'Quick',                     keys: ['all', 'pending'] },
+  { title: 'Tax Documents & Returns',   keys: ['tax_client_uploads', 'tax_required_documents', 'tax_contracts', 'tax_invoices', 'tax_return_information', 'tax_additional_docs'] },
+  { title: 'Bookkeeping & Financials',  keys: ['bk_required_documents', 'bk_contracts', 'bk_invoices', 'bk_for_client_review', 'bk_final_pnl', 'bk_mr_required_info', 'bk_mr_client_review', 'bk_mr_final_statements'] },
+  { title: 'CFO Advisory',              keys: ['cfo_contracts', 'cfo_invoices', 'cfo_additional_docs', 'cfo_mr_required_info', 'cfo_mr_client_review', 'cfo_mr_final_statements'] },
 ];
 
 const EXT_COLOR: Record<string, string> = {
@@ -378,6 +391,20 @@ const ap = StyleSheet.create({
   text: { fontSize: 9, fontWeight: '700', letterSpacing: 0.2 },
 });
 
+// ── Filter dropdown (grouped by folder) ──────────────────────────────────────
+const fd = StyleSheet.create({
+  overlay: { flex: 1, backgroundColor: 'rgba(28,23,19,0.55)', justifyContent: 'flex-end' },
+  sheet:   { backgroundColor: '#FFFFFF', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 18, paddingTop: 10, paddingBottom: 24, gap: 6 },
+  handle:  { width: 40, height: 4, borderRadius: 2, backgroundColor: '#E5E7EB', alignSelf: 'center', marginBottom: 8 },
+  title:   { fontSize: 16, fontWeight: '800', color: '#111827', marginBottom: 4 },
+  groupLabel: { color: '#94A3B8', fontSize: 10, fontWeight: '800', letterSpacing: 0.6, textTransform: 'uppercase', marginTop: 10, marginBottom: 4 },
+  row:     { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 11, paddingHorizontal: 12, borderRadius: 12, borderWidth: 1, borderColor: 'transparent' },
+  rowActive: { backgroundColor: '#FEFCE8', borderColor: 'rgba(232,185,35,0.5)' },
+  dot:     { width: 8, height: 8, borderRadius: 4 },
+  rowText: { flex: 1, color: '#374151', fontSize: 14 },
+  rowCount:{ color: '#94A3B8', fontSize: 12, fontWeight: '700' },
+});
+
 // ── Main ───────────────────────────────────────────────────────────────────────
 
 export function AdminDocumentsScreen() {
@@ -385,21 +412,6 @@ export function AdminDocumentsScreen() {
   const mountedRef = useRef(true);
   useEffect(() => () => { mountedRef.current = false; }, []);
 
-  // On web, translate vertical mouse-wheel into horizontal scroll for the filter
-  // chip row so a normal mouse can reach the off-screen chips.
-  const filterScrollRef = useRef<ScrollView>(null);
-  useEffect(() => {
-    if (Platform.OS !== 'web') return;
-    const node: any = (filterScrollRef.current as any)?.getScrollableNode?.();
-    if (!node) return;
-    const onWheel = (e: WheelEvent) => {
-      if (e.deltaY === 0) return;
-      node.scrollLeft += e.deltaY;
-      e.preventDefault();
-    };
-    node.addEventListener('wheel', onWheel, { passive: false });
-    return () => node.removeEventListener('wheel', onWheel);
-  }, []);
 
   const { user, isLoading: authLoading } = useAuth();
 
@@ -408,6 +420,8 @@ export function AdminDocumentsScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [query, setQuery]           = useState('');
   const [filter, setFilter]         = useState('pending'); // default: show pending first
+  const [filterOpen, setFilterOpen] = useState(false);     // per-folder dropdown
+  const filterSheet = useSheetStyles('sm');
   const [viewerDoc, setViewerDoc]   = useState<Document | null>(null);
   const [deleteDoc, setDeleteDoc]   = useState<Document | null>(null);
   const [rejectDoc, setRejectDoc]   = useState<Document | null>(null);
@@ -658,54 +672,62 @@ export function AdminDocumentsScreen() {
         </View>
       </View>
 
-      {/* ── Filter Chips (horizontally scrollable) ── */}
+      {/* ── Filter dropdown (per-folder, grouped) ── */}
       <View style={s.filterWrap}>
-        <ScrollView
-          ref={filterScrollRef}
-          horizontal
-          showsHorizontalScrollIndicator={Platform.OS === 'web'}
-          contentContainerStyle={s.filterScroll}
-          style={s.filterScrollView}
-        >
-          {FOLDERS.map(f => {
-            const active = filter === f.key;
-            const isPendingChip = f.key === 'pending';
-            const cnt = isPendingChip
-              ? pendingCount
-              : f.key === 'all'
-              ? documents.length
-              : documents.filter(d => d.document_type === f.key).length;
-
-            return (
-              <TouchableOpacity
-                key={f.key}
-                onPress={() => setFilter(f.key)}
-                activeOpacity={0.75}
-                style={[
-                  s.chip,
-                  active
-                    ? { backgroundColor: isPendingChip ? '#F59E0B' : '#E8B923', borderColor: isPendingChip ? '#F59E0B' : '#E8B923' }
-                    : { backgroundColor: '#FFFFFF', borderColor: '#E8E0D0' },
-                ]}
-              >
-                {isPendingChip && (
-                  <Ionicons name="time-outline" size={12} color={active ? '#FFFFFF' : '#92400E'} />
-                )}
-                <Text style={[s.chipText, active ? { color: '#1C1713' } : { color: '#6B5E52' }]}>
-                  {f.label}
-                </Text>
-                {cnt > 0 && (
-                  <View style={[s.chipCount, active ? { backgroundColor: 'rgba(255,255,255,0.25)' } : { backgroundColor: '#F1F5F9' }]}>
-                    <Text style={[s.chipCountText, active ? { color: '#FFFFFF' } : { color: '#94A3B8' }]}>
-                      {cnt}
-                    </Text>
-                  </View>
-                )}
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
+        <TouchableOpacity style={s.filterBtn} onPress={() => setFilterOpen(true)} activeOpacity={0.8}>
+          <Ionicons name="funnel-outline" size={15} color="#B5905B" />
+          <Text style={s.filterBtnText} numberOfLines={1}>
+            {FOLDERS.find(f => f.key === filter)?.label ?? 'All'}
+          </Text>
+          {(() => {
+            const cnt = filter === 'pending' ? pendingCount
+              : filter === 'all' ? documents.length
+              : documents.filter(d => d.document_type === filter).length;
+            return cnt > 0 ? (
+              <View style={s.filterBtnCount}><Text style={s.filterBtnCountText}>{cnt}</Text></View>
+            ) : null;
+          })()}
+          <Ionicons name="chevron-down" size={16} color="#94A3B8" style={{ marginLeft: 'auto' }} />
+        </TouchableOpacity>
       </View>
+
+      {/* Filter dropdown modal — grouped by category */}
+      <Modal visible={filterOpen} transparent animationType="fade" onRequestClose={() => setFilterOpen(false)}>
+        <Pressable style={[fd.overlay, filterSheet.overlay]} onPress={() => setFilterOpen(false)}>
+          <Pressable style={[fd.sheet, filterSheet.sheet]} onPress={() => {}}>
+            <View style={fd.handle} />
+            <Text style={fd.title}>Filter by folder</Text>
+            <ScrollView style={{ maxHeight: 460 }} showsVerticalScrollIndicator={false}>
+              {FILTER_GROUPS.map(group => (
+                <View key={group.title} style={{ marginBottom: 6 }}>
+                  <Text style={fd.groupLabel}>{group.title}</Text>
+                  {group.keys.map(key => {
+                    const f = FOLDERS.find(x => x.key === key);
+                    if (!f) return null;
+                    const active = filter === key;
+                    const cnt = key === 'pending' ? pendingCount
+                      : key === 'all' ? documents.length
+                      : documents.filter(d => d.document_type === key).length;
+                    return (
+                      <TouchableOpacity
+                        key={key}
+                        style={[fd.row, active && fd.rowActive]}
+                        onPress={() => { setFilter(key); setFilterOpen(false); }}
+                        activeOpacity={0.7}
+                      >
+                        <View style={[fd.dot, { backgroundColor: f.color }]} />
+                        <Text style={[fd.rowText, active && { color: '#1C1713', fontWeight: '700' }]} numberOfLines={1}>{f.label}</Text>
+                        {cnt > 0 && <Text style={[fd.rowCount, active && { color: '#B5905B' }]}>{cnt}</Text>}
+                        {active && <Ionicons name="checkmark" size={16} color="#E8B923" style={{ marginLeft: 6 }} />}
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              ))}
+            </ScrollView>
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       {/* ── Pending notice banner ── */}
       {filter === 'pending' && pendingCount > 0 && (
@@ -805,16 +827,15 @@ const s = StyleSheet.create({
   },
   searchInput: { flex: 1, color: '#111827', fontSize: 14, fontWeight: '500' },
 
-  filterWrap:   { backgroundColor: '#FFFFFF', borderBottomWidth: 1, borderBottomColor: '#E5E7EB' },
-  filterScrollView: { width: '100%' },
-  filterScroll: { paddingHorizontal: 16, paddingVertical: 12, alignItems: 'center', gap: 8, flexDirection: 'row', flexGrow: 0 },
-  chip: {
-    height: 36, borderRadius: 18, borderWidth: 1.5, paddingHorizontal: 14,
-    flexDirection: 'row', alignItems: 'center', gap: 6,
+  filterWrap:   { backgroundColor: '#FFFFFF', borderBottomWidth: 1, borderBottomColor: '#E5E7EB', paddingHorizontal: 16, paddingVertical: 10 },
+  filterBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: '#FAFAF8', borderWidth: 1, borderColor: '#E8E0D0',
+    borderRadius: 12, paddingHorizontal: 14, paddingVertical: 11,
   },
-  chipText:      { fontSize: 13, fontWeight: '600', letterSpacing: -0.1 },
-  chipCount:     { minWidth: 20, height: 20, borderRadius: 10, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 5 },
-  chipCountText: { fontSize: 11, fontWeight: '700' },
+  filterBtnText:  { fontSize: 14, fontWeight: '700', color: '#1C1713', maxWidth: 260 },
+  filterBtnCount: { minWidth: 22, height: 20, borderRadius: 10, backgroundColor: '#E8B923', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6 },
+  filterBtnCountText: { fontSize: 11, fontWeight: '800', color: '#1C1713' },
 
   pendingBanner: {
     flexDirection: 'row', alignItems: 'center', gap: 8,

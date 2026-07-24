@@ -9,6 +9,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors } from '../../constants/colors';
 import { useAuth } from '../../context/AuthContext';
 import { useSheetStyles } from '../../hooks/useSheetStyles';
+import { useResponsive } from '../../hooks/useResponsive';
 import { supabase } from '../../lib/supabase';
 import { FOLDER_TABLES } from '../../db/documents';
 
@@ -19,17 +20,21 @@ const FOLDER_META: Record<string, { label: string; color: string; icon: string }
   tax_contracts:          { label: 'Tax Contracts',   color: '#B5905B', icon: 'document-text-outline'     },
   tax_invoices:           { label: 'Tax Invoices',    color: '#E8B923', icon: 'receipt-outline'            },
   tax_return_information: { label: 'Returns',         color: '#B5905B', icon: 'information-circle-outline' },
+  tax_additional_docs:    { label: 'Additional Tax Docs', color: '#E8B923', icon: 'folder-outline'        },
   bk_required_documents:  { label: 'Required Documents', color: '#E8B923', icon: 'cloud-upload-outline'   },
   bk_contracts:           { label: 'BK Contracts',    color: '#2C2320', icon: 'document-text-outline'     },
   bk_invoices:            { label: 'BK Invoices',     color: '#E8B923', icon: 'receipt-outline'            },
   bk_for_client_review:   { label: 'Client Review',   color: '#B5905B', icon: 'eye-outline'               },
   bk_final_pnl:           { label: 'Final P&L',       color: '#2C2320', icon: 'bar-chart-outline'         },
+  bk_mr_required_info:    { label: 'Monthly Reporting (Required Info)',     color: '#E8B923', icon: 'cloud-upload-outline' },
+  bk_mr_client_review:    { label: 'Monthly Reporting (For Client Review)', color: '#B5905B', icon: 'eye-outline'          },
+  bk_mr_final_statements: { label: 'Monthly Reporting (Final Statements)',  color: '#E8B923', icon: 'ribbon-outline'       },
   cfo_contracts:          { label: 'CFO Contracts',   color: '#B5905B', icon: 'document-text-outline'     },
   cfo_invoices:           { label: 'CFO Invoices',    color: '#E8B923', icon: 'receipt-outline'           },
   cfo_additional_docs:    { label: 'Additional CFO Docs', color: '#B5905B', icon: 'folder-outline'        },
-  cfo_mr_required_info:   { label: 'MR · Required Info', color: '#E8B923', icon: 'cloud-upload-outline'   },
-  cfo_mr_client_review:   { label: 'MR · Client Review', color: '#B5905B', icon: 'eye-outline'            },
-  cfo_mr_final_statements:{ label: 'MR · Final Statements', color: '#E8B923', icon: 'ribbon-outline'      },
+  cfo_mr_required_info:   { label: 'Monthly Reporting (Required Info)',     color: '#E8B923', icon: 'cloud-upload-outline' },
+  cfo_mr_client_review:   { label: 'Monthly Reporting (For Client Review)', color: '#B5905B', icon: 'eye-outline'          },
+  cfo_mr_final_statements:{ label: 'Monthly Reporting (Final Statements)',  color: '#E8B923', icon: 'ribbon-outline'       },
 };
 
 // Group folder tables into the three categories for the segregated breakdown.
@@ -131,6 +136,7 @@ function getPeriodStart(period: TimePeriod): string {
 export function AdminDashboardScreen({ onViewAllDocuments }: { onViewAllDocuments?: () => void }) {
   const { user, isLoading: authLoading } = useAuth();
   const sheet      = useSheetStyles('sm');
+  const { isDesktop } = useResponsive();   // 3-column category grid on desktop
   const insets     = useSafeAreaInsets();
   const mountedRef = useRef(true);
   useEffect(() => () => { mountedRef.current = false; }, []);
@@ -344,8 +350,9 @@ export function AdminDashboardScreen({ onViewAllDocuments }: { onViewAllDocument
           </Modal>
 
           {/* ── Folder breakdown — one card per category (TAX / BK / CFO) ── */}
+          <View style={isDesktop ? s.catGrid : undefined}>
           {groupedFolders.map(group => (
-            <View key={group.key} style={s.catCard}>
+            <View key={group.key} style={[s.catCard, isDesktop && s.catCardDesktop]}>
               {/* Category header */}
               <View style={s.catHeader}>
                 <View style={[s.catBadge, { backgroundColor: group.color + '18' }]}>
@@ -374,7 +381,7 @@ export function AdminDashboardScreen({ onViewAllDocuments }: { onViewAllDocument
                       <View style={[s.folderIconCircle, { backgroundColor: meta.color + '18' }]}>
                         <Ionicons name={meta.icon as any} size={14} color={meta.color} />
                       </View>
-                      <Text style={s.folderLabel} numberOfLines={1}>{meta.label}</Text>
+                      <Text style={s.folderLabel} numberOfLines={2}>{meta.label}</Text>
                       <View style={s.barTrack}>
                         <View style={[s.barFill, { width: `${Math.max(pct, f.count > 0 ? 6 : 0)}%` as any, backgroundColor: meta.color }]} />
                       </View>
@@ -386,6 +393,7 @@ export function AdminDashboardScreen({ onViewAllDocuments }: { onViewAllDocument
               })}
             </View>
           ))}
+          </View>
 
           {/* ── Section label: RECENT UPLOADS ── */}
           <View style={s.sectionHeaderRow}>
@@ -743,6 +751,9 @@ const s = StyleSheet.create({
     elevation: 3,
     overflow: 'hidden',
   },
+  // Desktop: lay the category cards out as a 3-column grid.
+  catGrid:        { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-start' },
+  catCardDesktop: { flexBasis: '31.5%', flexGrow: 1, marginHorizontal: 6 },
   catHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -791,10 +802,11 @@ const s = StyleSheet.create({
     color: '#111827',
     fontSize: 13,
     fontWeight: '500',
-    width: 106,
+    flex: 1,          // take available width; full label shows (wraps if long)
+    flexShrink: 1,
   },
   barTrack: {
-    flex: 1,
+    width: 90,        // fixed-width bar so the label gets the flexible space
     height: 5,
     backgroundColor: '#F1F5F9',
     borderRadius: 10,
