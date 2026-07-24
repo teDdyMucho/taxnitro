@@ -135,6 +135,7 @@ function getPeriodStart(period: TimePeriod): string {
 
 export function AdminDashboardScreen({ onViewAllDocuments }: { onViewAllDocuments?: () => void }) {
   const { user, isLoading: authLoading } = useAuth();
+  const isAdmin    = user?.role === 'admin';
   const sheet      = useSheetStyles('sm');
   const { isDesktop } = useResponsive();   // 3-column category grid on desktop
   const insets     = useSafeAreaInsets();
@@ -242,13 +243,15 @@ export function AdminDashboardScreen({ onViewAllDocuments }: { onViewAllDocument
         <View style={s.headerOverlay} pointerEvents="none" />
 
         <View style={s.headerContent}>
-          {/* Left — greeting */}
+          {/* Left — greeting (name + role-aware subtitle) */}
           <View style={{ flex: 1 }}>
             <Text style={s.greeting}>Welcome back,</Text>
-            <Text style={s.adminName}>Admin</Text>
+            <Text style={s.adminName}>{user?.name?.split(' ')[0] || (isAdmin ? 'Admin' : 'Team')}</Text>
             <View style={s.statusRow}>
               <PulsingDot />
-              <Text style={s.statusText}>All systems operational</Text>
+              <Text style={s.statusText}>
+                {isAdmin ? 'All systems operational' : 'Staff Portal · Finance Therapy Group'}
+              </Text>
             </View>
           </View>
 
