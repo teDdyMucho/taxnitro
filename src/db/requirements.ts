@@ -21,28 +21,32 @@ export const REQUIRED_UPLOADS: RequiredItem[] = [
   { service: 'BK',  key: 'credit_card_statements', label: 'Credit Card Statements' },
   { service: 'BK',  key: 'loan_statements',        label: 'Loan Statements' },
   { service: 'BK',  key: 'payroll_reports',        label: 'Payroll Reports' },
-  // ── CFO ──
-  { service: 'CFO', key: 'prior_month_bookkeeping', label: 'Prior Month Bookkeeping / QBO Access' },
-  { service: 'CFO', key: 'ar_ap_aging',             label: 'AR / AP Aging' },
+  // ── Tax ──
+  { service: 'TAX', key: 'prior_month_bookkeeping', label: 'Prior Month Bookkeeping / QBO Access' },
+  { service: 'TAX', key: 'ar_ap_aging',             label: 'AR / AP Aging' },
 ];
 
 export function itemsByService(service: RequirementService): RequiredItem[] {
   return REQUIRED_UPLOADS.filter(i => i.service === service);
 }
 
-// Which required-item services each "Required Documents" folder collects.
-//   Bookkeeping folder → the 4 Bookkeeping (BK) items
-//   Tax folder         → the 2 CFO items (Prior Month Bookkeeping / QBO Access, AR / AP Aging)
-const FOLDER_REQUIREMENT_SERVICES: Record<string, RequirementService[]> = {
-  bk_required_documents:  ['BK'],
-  tax_required_documents: ['CFO'],
+// Each required item now has its OWN folder table. This maps a folder table →
+// the requirement it fulfills, so a plain upload into that folder auto-tags the
+// requirement (no picker needed — the folder IS the item).
+export const REQUIREMENT_FOR_FOLDER: Record<string, { service: RequirementService; key: string }> = {
+  bk_bank_statements:          { service: 'BK',  key: 'bank_statements' },
+  bk_credit_card_statements:   { service: 'BK',  key: 'credit_card_statements' },
+  bk_loan_statements:          { service: 'BK',  key: 'loan_statements' },
+  bk_payroll_reports:          { service: 'BK',  key: 'payroll_reports' },
+  tax_prior_month_bookkeeping: { service: 'TAX', key: 'prior_month_bookkeeping' },
+  tax_ar_ap_aging:             { service: 'TAX', key: 'ar_ap_aging' },
 };
 
-/** Required items shown in a folder's upload picker (empty = not a required-docs folder). */
-export function itemsForFolder(folderKey: string): RequiredItem[] {
-  const services = FOLDER_REQUIREMENT_SERVICES[folderKey];
-  if (!services) return [];
-  return REQUIRED_UPLOADS.filter(i => services.includes(i.service));
+/** The required item a folder fulfills, or null if the folder isn't a requirement folder. */
+export function requirementForFolder(folderKey: string): RequiredItem | null {
+  const m = REQUIREMENT_FOR_FOLDER[folderKey];
+  if (!m) return null;
+  return REQUIRED_UPLOADS.find(i => i.service === m.service && i.key === m.key) ?? null;
 }
 
 // Requirement keys that are only needed when we DON'T already have QBO access.
@@ -65,16 +69,16 @@ export function itemsForClient(
   );
 }
 
-/** Items shown in a folder's picker, further narrowed to what applies to the client. */
-export function itemsForFolderAndClient(
+/** Is this folder visible to the client, given their services + QBO access? */
+export function requirementFolderVisible(
   folderKey: string,
   services: RequirementService[] | undefined,
   hasQboAccess: boolean | undefined,
-): RequiredItem[] {
-  const folderItems = itemsForFolder(folderKey);
-  const clientItems = itemsForClient(services, hasQboAccess);
-  const clientKeys = new Set(clientItems.map(i => `${i.service}:${i.key}`));
-  return folderItems.filter(i => clientKeys.has(`${i.service}:${i.key}`));
+): boolean {
+  const req = REQUIREMENT_FOR_FOLDER[folderKey];
+  if (!req) return true;  // not a requirement folder → always visible
+  const applicable = itemsForClient(services, hasQboAccess);
+  return applicable.some(i => i.service === req.service && i.key === req.key);
 }
 
 /** Stable set-key for a fulfilled requirement. */

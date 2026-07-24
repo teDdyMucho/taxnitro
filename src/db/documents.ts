@@ -26,12 +26,12 @@ export interface Document {
 // All folder tables — matches the subfolder keys in DocumentsScreen
 export const FOLDER_TABLES = [
   'tax_client_uploads',
-  'tax_required_documents',
   'tax_contracts',
   'tax_invoices',
   'tax_return_information',
   'tax_additional_docs',
-  'bk_required_documents',
+  'tax_prior_month_bookkeeping',
+  'tax_ar_ap_aging',
   'bk_contracts',
   'bk_invoices',
   'bk_for_client_review',
@@ -39,6 +39,10 @@ export const FOLDER_TABLES = [
   'bk_mr_required_info',
   'bk_mr_client_review',
   'bk_mr_final_statements',
+  'bk_bank_statements',
+  'bk_credit_card_statements',
+  'bk_loan_statements',
+  'bk_payroll_reports',
   // ── CFO Advisory ──
   'cfo_contracts',
   'cfo_invoices',

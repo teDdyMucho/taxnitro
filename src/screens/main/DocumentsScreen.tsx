@@ -39,17 +39,14 @@ import {
   FOLDER_TABLES,
 } from '../../db/documents';
 import {
-  itemsForFolderAndClient,
+  requirementForFolder,
+  requirementFolderVisible,
   createPendingRequirement,
   clearPendingRequirementForDocument,
   monthOf,
   RequiredItem,
   RequirementService,
 } from '../../db/requirements';
-
-// Folders that require the client to first pick WHICH required item they're uploading.
-const REQUIRED_DOC_FOLDERS = ['tax_required_documents', 'bk_required_documents'];
-const isRequiredDocFolder = (key: string) => REQUIRED_DOC_FOLDERS.includes(key);
 
 const WEBHOOK_URL = 'https://primary-production-6722.up.railway.app/webhook/fileupload-mobileapp-ghl-ftg';
 import { supabase } from '../../lib/supabase';
@@ -91,11 +88,13 @@ const FOLDERS: RootFolder[] = [
     gradient: ['#2C2320', '#3A3131', '#4A3E3E'],
     subFolders: [
       { key: 'tax_client_uploads',    label: 'Client Uploads',    icon: 'cloud-upload-outline',       color: '#E8B923', bg: 'rgba(232,185,35,0.15)'  },
-      { key: 'tax_required_documents', label: 'Required Documents', icon: 'cloud-upload-outline',       color: '#E8B923', bg: 'rgba(232,185,35,0.15)' },
-      { key: 'tax_contracts',          label: 'Contracts',          icon: 'document-text-outline',      color: '#E8B923', bg: 'rgba(232,185,35,0.15)' },
-      { key: 'tax_invoices',           label: 'Invoices',           icon: 'receipt-outline',            color: '#B5905B', bg: 'rgba(181,144,91,0.15)' },
-      { key: 'tax_return_information', label: 'Return Information', icon: 'information-circle-outline', color: '#B5905B', bg: 'rgba(181,144,91,0.15)' },
       { key: 'tax_additional_docs',    label: 'Additional Tax Docs', icon: 'folder-outline',           color: '#E8B923', bg: 'rgba(232,185,35,0.15)' },
+      { key: 'tax_contracts',          label: 'Tax Contracts',      icon: 'document-text-outline',      color: '#E8B923', bg: 'rgba(232,185,35,0.15)' },
+      { key: 'tax_invoices',           label: 'Tax Invoices',       icon: 'receipt-outline',            color: '#B5905B', bg: 'rgba(181,144,91,0.15)' },
+      { key: 'tax_return_information', label: 'Tax Returns',        icon: 'information-circle-outline', color: '#B5905B', bg: 'rgba(181,144,91,0.15)' },
+      // Required items (moved out of the old "Required Documents" folder) — at the end.
+      { key: 'tax_prior_month_bookkeeping', label: 'Prior Month Bookkeeping / QBO Access', icon: 'cloud-upload-outline', color: '#E8B923', bg: 'rgba(232,185,35,0.15)' },
+      { key: 'tax_ar_ap_aging',        label: 'AR / AP Aging',      icon: 'cloud-upload-outline',       color: '#B5905B', bg: 'rgba(181,144,91,0.15)' },
     ],
   },
   {
@@ -107,14 +106,18 @@ const FOLDERS: RootFolder[] = [
     darkColor: '#006644',
     gradient: ['#3A3131', '#4A3E3E', '#2C2320'],
     subFolders: [
-      { key: 'bk_required_documents', label: 'Required Documents',        icon: 'cloud-upload-outline',  color: '#E8B923', bg: 'rgba(232,185,35,0.15)'  },
-      { key: 'bk_contracts',         label: 'Contracts',                  icon: 'document-text-outline', color: '#E8B923', bg: 'rgba(232,185,35,0.15)'  },
-      { key: 'bk_invoices',          label: 'Invoices',                   icon: 'receipt-outline',       color: '#B5905B', bg: 'rgba(181,144,91,0.15)'  },
-      { key: 'bk_for_client_review', label: 'For Client Review',          icon: 'eye-outline',           color: '#E8B923', bg: 'rgba(232,185,35,0.15)'   },
-      { key: 'bk_final_pnl',         label: 'Final PNL & Balance Sheets', icon: 'bar-chart-outline',     color: '#B5905B', bg: 'rgba(181,144,91,0.15)'  },
+      { key: 'bk_contracts',         label: 'BK Contracts',               icon: 'document-text-outline', color: '#E8B923', bg: 'rgba(232,185,35,0.15)'  },
+      { key: 'bk_invoices',          label: 'BK Invoices',                icon: 'receipt-outline',       color: '#B5905B', bg: 'rgba(181,144,91,0.15)'  },
+      { key: 'bk_final_pnl',         label: 'Additional BK Docs',         icon: 'folder-outline',        color: '#B5905B', bg: 'rgba(181,144,91,0.15)'  },
       { key: 'bk_mr_required_info',  label: 'Monthly Reporting (Required Info)',     icon: 'cloud-upload-outline', color: '#E8B923', bg: 'rgba(232,185,35,0.15)' },
       { key: 'bk_mr_client_review',  label: 'Monthly Reporting (For Client Review)', icon: 'eye-outline',          color: '#B5905B', bg: 'rgba(181,144,91,0.15)' },
       { key: 'bk_mr_final_statements', label: 'Monthly Reporting (Final Statements)', icon: 'ribbon-outline',      color: '#E8B923', bg: 'rgba(232,185,35,0.15)' },
+      { key: 'bk_for_client_review', label: 'For Client Review',          icon: 'eye-outline',           color: '#E8B923', bg: 'rgba(232,185,35,0.15)'   },
+      // Required items (moved out of the old "Required Documents" folder) — at the end.
+      { key: 'bk_bank_statements',        label: 'Bank Statements (all accounts)', icon: 'cloud-upload-outline', color: '#E8B923', bg: 'rgba(232,185,35,0.15)' },
+      { key: 'bk_credit_card_statements', label: 'Credit Card Statements',         icon: 'cloud-upload-outline', color: '#E8B923', bg: 'rgba(232,185,35,0.15)' },
+      { key: 'bk_loan_statements',        label: 'Loan Statements',                icon: 'cloud-upload-outline', color: '#B5905B', bg: 'rgba(181,144,91,0.15)' },
+      { key: 'bk_payroll_reports',        label: 'Payroll Reports',                icon: 'cloud-upload-outline', color: '#B5905B', bg: 'rgba(181,144,91,0.15)' },
     ],
   },
   {
@@ -131,7 +134,7 @@ const FOLDERS: RootFolder[] = [
       { key: 'cfo_additional_docs', label: 'Additional CFO Docs', icon: 'folder-outline',        color: '#E8B923', bg: 'rgba(232,185,35,0.15)' },
       { key: 'cfo_mr_required_info',    label: 'Monthly Reporting (Required Info)',     icon: 'cloud-upload-outline', color: '#E8B923', bg: 'rgba(232,185,35,0.15)' },
       { key: 'cfo_mr_client_review',    label: 'Monthly Reporting (For Client Review)', icon: 'eye-outline',          color: '#B5905B', bg: 'rgba(181,144,91,0.15)' },
-      { key: 'cfo_mr_final_statements', label: 'Monthly Reporting (Final Statements)',  icon: 'ribbon-outline',       color: '#E8B923', bg: 'rgba(232,185,35,0.15)' },
+      { key: 'cfo_mr_final_statements', label: 'Monthly Reporting (Final Statements & Insights)',  icon: 'ribbon-outline', color: '#E8B923', bg: 'rgba(232,185,35,0.15)' },
     ],
   },
 ];
@@ -578,12 +581,11 @@ function UploadModal({ visible, sf, root, userId, userEmail, onClose, onUploaded
   const [busy, setBusy]       = useState(false);
   const [pct, setPct]         = useState(0);
   const [done, setDone]       = useState(false);
-  // Required Documents folders: which required item this upload fulfills.
-  const [requirement, setRequirement] = useState<RequiredItem | null>(null);
 
-  const requiresPick = isRequiredDocFolder(sf.key);
+  // If this folder IS a required item, uploading here auto-fulfills that requirement.
+  const requirement = requirementForFolder(sf.key);
 
-  const reset = () => { setPicked(null); setPct(0); setDone(false); setRequirement(null); };
+  const reset = () => { setPicked(null); setPct(0); setDone(false); };
   const close = () => { reset(); onClose(); };
 
   const pick = async () => {
@@ -642,9 +644,9 @@ function UploadModal({ visible, sf, root, userId, userEmail, onClose, onUploaded
         documentUrl: storageUrl,   // always a real https:// URL
         documentType: sf.key,
       });
-      // ── Step 4: For Required Documents folders, mark the picked item as PENDING ─
+      // ── Step 4: If this folder IS a required item, mark it PENDING ──────────────
       // (turns the dashboard radio yellow immediately, before admin approval)
-      if (doc && requiresPick && requirement && userEmail) {
+      if (doc && requirement && userEmail) {
         await createPendingRequirement({
           clientEmail:    userEmail,
           documentId:     doc.id,
@@ -682,7 +684,7 @@ function UploadModal({ visible, sf, root, userId, userEmail, onClose, onUploaded
               <Ionicons name={sf.icon} size={22} color={sf.color} />
             </View>
             <Text style={up.headerTitle}>{sf.label}</Text>
-            <Text style={up.headerSub}>{requiresPick ? 'Select an item, then upload' : 'Upload a document'}</Text>
+            <Text style={up.headerSub}>Upload a document</Text>
           </View>
           <View style={{ width: 34 }} />
         </LinearGradient>
@@ -721,60 +723,6 @@ function UploadModal({ visible, sf, root, userId, userEmail, onClose, onUploaded
           {/* ── Idle */}
           {!done && !busy && (
             <>
-              {/* ── Step 1 (Required Documents folders only): pick which item ── */}
-              {requiresPick && !requirement && (
-                <View style={up.reqPick}>
-                  <Text style={up.reqPickTitle}>What are you uploading?</Text>
-                  <Text style={up.reqPickSub}>Choose the required item this file is for</Text>
-                  {(['BK', 'CFO'] as RequirementService[]).map(svc => {
-                    // Items this folder collects, narrowed to what applies to THIS client
-                    // (their services + QBO access → hides Prior Month Bookkeeping when we have QBO).
-                    const items = itemsForFolderAndClient(sf.key, user?.services, user?.hasQboAccess)
-                      .filter(i => i.service === svc);
-                    if (items.length === 0) return null;
-                    return (
-                      <View key={svc} style={{ marginTop: 12 }}>
-                        <Text style={up.reqGroupLabel}>{svc === 'BK' ? 'Bookkeeping' : 'TAX'}</Text>
-                        {items.map(item => (
-                          <TouchableOpacity
-                            key={item.key}
-                            style={up.reqItem}
-                            activeOpacity={0.75}
-                            onPress={() => setRequirement(item)}
-                          >
-                            <Ionicons name="ellipse-outline" size={18} color={sf.color} />
-                            <Text style={up.reqItemText}>{item.label}</Text>
-                            <Ionicons name="chevron-forward" size={16} color={Colors.textMuted} />
-                          </TouchableOpacity>
-                        ))}
-                      </View>
-                    );
-                  })}
-                  <TouchableOpacity style={up.cancelBtn} onPress={close}>
-                    <Text style={up.cancelText}>Cancel</Text>
-                  </TouchableOpacity>
-                </View>
-              )}
-
-              {/* ── Step 2: selected-item chip + file picker (or normal folder) ── */}
-              {(!requiresPick || requirement) && (
-              <>
-              {/* Selected requirement chip */}
-              {requiresPick && requirement && (
-                <TouchableOpacity
-                  style={[up.selectedReq, { borderColor: `${sf.color}50`, backgroundColor: sf.bg }]}
-                  onPress={() => { setRequirement(null); setPicked(null); }}
-                  activeOpacity={0.8}
-                >
-                  <Ionicons name="checkmark-circle" size={18} color={sf.color} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={up.selectedReqLabel}>{requirement.label}</Text>
-                    <Text style={up.selectedReqHint}>Tap to change</Text>
-                  </View>
-                  <Ionicons name="swap-horizontal-outline" size={16} color={sf.color} />
-                </TouchableOpacity>
-              )}
-
               {/* Drop zone */}
               {!picked ? (
                 <TouchableOpacity style={[up.dropZone, { borderColor: `${sf.color}50` }]} onPress={pick} activeOpacity={0.85}>
@@ -825,8 +773,6 @@ function UploadModal({ visible, sf, root, userId, userEmail, onClose, onUploaded
               <TouchableOpacity style={up.cancelBtn} onPress={close}>
                 <Text style={up.cancelText}>Cancel</Text>
               </TouchableOpacity>
-              </>
-              )}
             </>
           )}
         </ScrollView>
@@ -1296,11 +1242,20 @@ export function DocumentsScreen() {
     [documents, activeSub],
   );
 
-  // Only show the categories for the services this client has (BK / CFO / both).
+  // Only show the categories for the services this client has (BK / TAX / CFO),
+  // and within each, hide requirement sub-folders that don't apply (e.g. the QBO
+  // folder when we already have QBO access).
   const visibleFolders = useMemo(() => {
     const svc = user?.services && user.services.length > 0 ? user.services : ['BK'];
-    return FOLDERS.filter(f => svc.includes(f.service));
-  }, [user?.services]);
+    return FOLDERS
+      .filter(f => svc.includes(f.service))
+      .map(f => ({
+        ...f,
+        subFolders: f.subFolders.filter(sf =>
+          requirementFolderVisible(sf.key, user?.services, user?.hasQboAccess)
+        ),
+      }));
+  }, [user?.services, user?.hasQboAccess]);
 
   return (
     <>

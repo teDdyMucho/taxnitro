@@ -16,16 +16,20 @@ import { FOLDER_TABLES } from '../../db/documents';
 // ─── Folder metadata (FTG brand palette only) ───────────────────────────────
 const FOLDER_META: Record<string, { label: string; color: string; icon: string }> = {
   tax_client_uploads:     { label: 'Client Uploads',  color: '#E8B923', icon: 'cloud-upload-outline'      },
-  tax_required_documents: { label: 'Required Documents', color: '#E8B923', icon: 'cloud-upload-outline'   },
+  tax_additional_docs:    { label: 'Additional Tax Docs', color: '#E8B923', icon: 'folder-outline'        },
   tax_contracts:          { label: 'Tax Contracts',   color: '#B5905B', icon: 'document-text-outline'     },
   tax_invoices:           { label: 'Tax Invoices',    color: '#E8B923', icon: 'receipt-outline'            },
-  tax_return_information: { label: 'Returns',         color: '#B5905B', icon: 'information-circle-outline' },
-  tax_additional_docs:    { label: 'Additional Tax Docs', color: '#E8B923', icon: 'folder-outline'        },
-  bk_required_documents:  { label: 'Required Documents', color: '#E8B923', icon: 'cloud-upload-outline'   },
+  tax_return_information: { label: 'Tax Returns',     color: '#B5905B', icon: 'information-circle-outline' },
+  tax_prior_month_bookkeeping: { label: 'Prior Month Bookkeeping / QBO Access', color: '#E8B923', icon: 'cloud-upload-outline' },
+  tax_ar_ap_aging:        { label: 'AR / AP Aging',   color: '#B5905B', icon: 'cloud-upload-outline'      },
   bk_contracts:           { label: 'BK Contracts',    color: '#2C2320', icon: 'document-text-outline'     },
   bk_invoices:            { label: 'BK Invoices',     color: '#E8B923', icon: 'receipt-outline'            },
   bk_for_client_review:   { label: 'Client Review',   color: '#B5905B', icon: 'eye-outline'               },
-  bk_final_pnl:           { label: 'Final P&L',       color: '#2C2320', icon: 'bar-chart-outline'         },
+  bk_final_pnl:           { label: 'Additional BK Docs', color: '#2C2320', icon: 'folder-outline'         },
+  bk_bank_statements:        { label: 'Bank Statements',      color: '#E8B923', icon: 'cloud-upload-outline' },
+  bk_credit_card_statements: { label: 'Credit Card Statements', color: '#E8B923', icon: 'cloud-upload-outline' },
+  bk_loan_statements:        { label: 'Loan Statements',      color: '#B5905B', icon: 'cloud-upload-outline' },
+  bk_payroll_reports:        { label: 'Payroll Reports',      color: '#B5905B', icon: 'cloud-upload-outline' },
   bk_mr_required_info:    { label: 'Monthly Reporting (Required Info)',     color: '#E8B923', icon: 'cloud-upload-outline' },
   bk_mr_client_review:    { label: 'Monthly Reporting (For Client Review)', color: '#B5905B', icon: 'eye-outline'          },
   bk_mr_final_statements: { label: 'Monthly Reporting (Final Statements)',  color: '#E8B923', icon: 'ribbon-outline'       },
@@ -34,7 +38,7 @@ const FOLDER_META: Record<string, { label: string; color: string; icon: string }
   cfo_additional_docs:    { label: 'Additional CFO Docs', color: '#B5905B', icon: 'folder-outline'        },
   cfo_mr_required_info:   { label: 'Monthly Reporting (Required Info)',     color: '#E8B923', icon: 'cloud-upload-outline' },
   cfo_mr_client_review:   { label: 'Monthly Reporting (For Client Review)', color: '#B5905B', icon: 'eye-outline'          },
-  cfo_mr_final_statements:{ label: 'Monthly Reporting (Final Statements)',  color: '#E8B923', icon: 'ribbon-outline'       },
+  cfo_mr_final_statements:{ label: 'Monthly Reporting (Final Statements & Insights)',  color: '#E8B923', icon: 'ribbon-outline' },
 };
 
 // Group folder tables into the three categories for the segregated breakdown.
@@ -139,6 +143,12 @@ export function AdminDashboardScreen({ onViewAllDocuments }: { onViewAllDocument
   const sheet      = useSheetStyles('sm');
   const { isDesktop } = useResponsive();   // 3-column category grid on desktop
   const insets     = useSafeAreaInsets();
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set()); // expanded Monthly Reporting rows
+  const toggleGroup = (id: string) => setExpandedGroups(prev => {
+    const next = new Set(prev);
+    next.has(id) ? next.delete(id) : next.add(id);
+    return next;
+  });
   const mountedRef = useRef(true);
   useEffect(() => () => { mountedRef.current = false; }, []);
 
@@ -192,13 +202,41 @@ export function AdminDashboardScreen({ onViewAllDocuments }: { onViewAllDocument
 
   const maxFolder = Math.max(...filteredFolderCounts.map(f => f.count), 1);
 
-  // Segregate folders by category (TAX / BK / CFO) for the grouped breakdown.
+  // Segregate folders by category (TAX / BK / CFO). Within a category, the three
+  // "Monthly Reporting (...)" folders collapse into ONE expandable parent row that
+  // shows the combined total, with the 3 real subfolders revealed on expand.
   const groupedFolders = useMemo(() =>
     CATEGORIES.map(cat => {
       const folders = filteredFolderCounts.filter(f => categoryOf(f.table) === cat.key);
       const total   = folders.reduce((acc, f) => acc + f.count, 0);
-      return { ...cat, folders, total };
-    }).filter(g => g.folders.length > 0),
+
+      const mrChildren = folders.filter(f => f.table.includes('_mr_'));
+      const rest       = folders.filter(f => !f.table.includes('_mr_'));
+
+      // Build the display rows: normal folder rows, plus a single Monthly Reporting
+      // group row (inserted where the first MR folder was) when there are MR folders.
+      type Row =
+        | { kind: 'folder'; table: string; count: number }
+        | { kind: 'group'; groupId: string; label: string; total: number; children: { table: string; count: number }[] };
+
+      let rows: Row[];
+      if (mrChildren.length > 0) {
+        const mrTotal = mrChildren.reduce((a, f) => a + f.count, 0);
+        const groupRow: Row = {
+          kind: 'group',
+          groupId: `${cat.key}_monthly_reporting`,
+          label: 'Monthly Reporting',
+          total: mrTotal,
+          children: mrChildren.map(f => ({ table: f.table, count: f.count })),
+        };
+        // Keep 'rest' order, then append the Monthly Reporting group at the end.
+        rows = [...rest.map(f => ({ kind: 'folder', table: f.table, count: f.count } as Row)), groupRow];
+      } else {
+        rows = folders.map(f => ({ kind: 'folder', table: f.table, count: f.count } as Row));
+      }
+
+      return { ...cat, rows, total, folderCount: folders.length };
+    }).filter(g => g.rows.length > 0),
   [filteredFolderCounts]);
 
   // ── Overview cards (3 cards per spec) ───────────────────────────────────
@@ -363,7 +401,7 @@ export function AdminDashboardScreen({ onViewAllDocuments }: { onViewAllDocument
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={s.catTitle}>{group.title}</Text>
-                  <Text style={s.catSub}>{group.folders.length} folder{group.folders.length !== 1 ? 's' : ''}</Text>
+                  <Text style={s.catSub}>{group.folderCount} folder{group.folderCount !== 1 ? 's' : ''}</Text>
                 </View>
                 <View style={[s.catTotalPill, { backgroundColor: group.color + '14', borderColor: group.color + '40' }]}>
                   <Text style={[s.catTotalNum, { color: group.color }]}>{group.total}</Text>
@@ -374,21 +412,63 @@ export function AdminDashboardScreen({ onViewAllDocuments }: { onViewAllDocument
               <View style={s.catDivider} />
 
               {/* Folder rows within this category */}
-              {group.folders.map((f, idx) => {
-                const meta = FOLDER_META[f.table] ?? { label: f.table, color: group.color, icon: 'folder-outline' };
-                const pct  = Math.round((f.count / maxFolder) * 100);
-                const isLast = idx === group.folders.length - 1;
+              {group.rows.map((row, idx) => {
+                const isLast = idx === group.rows.length - 1;
+
+                // ── Expandable "Monthly Reporting" group ──
+                if (row.kind === 'group') {
+                  const expanded = expandedGroups.has(row.groupId);
+                  const pct = Math.round((row.total / maxFolder) * 100);
+                  return (
+                    <View key={row.groupId}>
+                      <TouchableOpacity style={s.folderRow} onPress={() => toggleGroup(row.groupId)} activeOpacity={0.7}>
+                        <View style={[s.folderIconCircle, { backgroundColor: group.color + '18' }]}>
+                          <Ionicons name="bar-chart-outline" size={14} color={group.color} />
+                        </View>
+                        <Text style={s.folderLabel} numberOfLines={2}>{row.label}</Text>
+                        <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={14} color="#94A3B8" style={{ marginRight: 4 }} />
+                        <View style={s.barTrack}>
+                          <View style={[s.barFill, { width: `${Math.max(pct, row.total > 0 ? 6 : 0)}%` as any, backgroundColor: group.color }]} />
+                        </View>
+                        <Text style={[s.folderCount, { color: group.color }]}>{row.total}</Text>
+                      </TouchableOpacity>
+
+                      {/* Subfolders (real per-folder counts) */}
+                      {expanded && row.children.map(child => {
+                        const cmeta = FOLDER_META[child.table] ?? { label: child.table, color: group.color, icon: 'folder-outline' };
+                        const cpct  = Math.round((child.count / maxFolder) * 100);
+                        // Parent already says "Monthly Reporting" — show only the inner part.
+                        const childLabel = (cmeta.label.match(/\(([^)]+)\)/)?.[1]) ?? cmeta.label;
+                        return (
+                          <View key={child.table} style={s.subRow}>
+                            <View style={[s.subDot, { backgroundColor: cmeta.color }]} />
+                            <Text style={s.subLabel} numberOfLines={2}>{childLabel}</Text>
+                            <View style={s.barTrack}>
+                              <View style={[s.barFill, { width: `${Math.max(cpct, child.count > 0 ? 6 : 0)}%` as any, backgroundColor: cmeta.color }]} />
+                            </View>
+                            <Text style={[s.folderCount, { color: cmeta.color }]}>{child.count}</Text>
+                          </View>
+                        );
+                      })}
+                      {!isLast && <View style={s.divider} />}
+                    </View>
+                  );
+                }
+
+                // ── Normal folder row ──
+                const meta = FOLDER_META[row.table] ?? { label: row.table, color: group.color, icon: 'folder-outline' };
+                const pct  = Math.round((row.count / maxFolder) * 100);
                 return (
-                  <View key={f.table}>
+                  <View key={row.table}>
                     <View style={s.folderRow}>
                       <View style={[s.folderIconCircle, { backgroundColor: meta.color + '18' }]}>
                         <Ionicons name={meta.icon as any} size={14} color={meta.color} />
                       </View>
                       <Text style={s.folderLabel} numberOfLines={2}>{meta.label}</Text>
                       <View style={s.barTrack}>
-                        <View style={[s.barFill, { width: `${Math.max(pct, f.count > 0 ? 6 : 0)}%` as any, backgroundColor: meta.color }]} />
+                        <View style={[s.barFill, { width: `${Math.max(pct, row.count > 0 ? 6 : 0)}%` as any, backgroundColor: meta.color }]} />
                       </View>
-                      <Text style={[s.folderCount, { color: meta.color }]}>{f.count}</Text>
+                      <Text style={[s.folderCount, { color: meta.color }]}>{row.count}</Text>
                     </View>
                     {!isLast && <View style={s.divider} />}
                   </View>
@@ -794,6 +874,16 @@ const s = StyleSheet.create({
     paddingVertical: 13,
     gap: 12,
   },
+  // Indented subfolder row (Monthly Reporting children)
+  subRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingLeft: 42, paddingRight: 16, paddingVertical: 10,
+    gap: 10,
+    backgroundColor: '#FAFAF8',
+  },
+  subDot:   { width: 7, height: 7, borderRadius: 4 },
+  subLabel: { flex: 1, flexShrink: 1, color: '#374151', fontSize: 12.5, fontWeight: '500' },
   folderIconCircle: {
     width: 34,
     height: 34,
