@@ -87,14 +87,11 @@ const FOLDERS: RootFolder[] = [
     darkColor: '#008C5A',
     gradient: ['#2C2320', '#3A3131', '#4A3E3E'],
     subFolders: [
-      { key: 'tax_client_uploads',    label: 'Client Uploads',    icon: 'cloud-upload-outline',       color: '#E8B923', bg: 'rgba(232,185,35,0.15)'  },
-      { key: 'tax_additional_docs',    label: 'Additional Tax Docs', icon: 'folder-outline',           color: '#E8B923', bg: 'rgba(232,185,35,0.15)' },
       { key: 'tax_contracts',          label: 'Tax Contracts',      icon: 'document-text-outline',      color: '#E8B923', bg: 'rgba(232,185,35,0.15)' },
       { key: 'tax_invoices',           label: 'Tax Invoices',       icon: 'receipt-outline',            color: '#B5905B', bg: 'rgba(181,144,91,0.15)' },
+      { key: 'tax_client_uploads',     label: 'Client Uploads',     icon: 'cloud-upload-outline',       color: '#E8B923', bg: 'rgba(232,185,35,0.15)'  },
+      { key: 'tax_additional_docs',    label: 'Additional Tax Docs', icon: 'folder-outline',            color: '#E8B923', bg: 'rgba(232,185,35,0.15)' },
       { key: 'tax_return_information', label: 'Tax Returns',        icon: 'information-circle-outline', color: '#B5905B', bg: 'rgba(181,144,91,0.15)' },
-      // Required items (moved out of the old "Required Documents" folder) — at the end.
-      { key: 'tax_prior_month_bookkeeping', label: 'Prior Month Bookkeeping / QBO Access', icon: 'cloud-upload-outline', color: '#E8B923', bg: 'rgba(232,185,35,0.15)' },
-      { key: 'tax_ar_ap_aging',        label: 'AR / AP Aging',      icon: 'cloud-upload-outline',       color: '#B5905B', bg: 'rgba(181,144,91,0.15)' },
     ],
   },
   {

@@ -35,8 +35,6 @@ const FOLDER_LABELS: Record<string, string> = {
   tax_contracts:          'Tax Contracts',
   tax_invoices:           'Tax Invoices',
   tax_return_information: 'Tax Returns',
-  tax_prior_month_bookkeeping: 'Prior Month Bookkeeping / QBO Access',
-  tax_ar_ap_aging:        'AR / AP Aging',
   bk_contracts:           'BK Contracts',
   bk_invoices:            'BK Invoices',
   bk_final_pnl:           'Additional BK Docs',

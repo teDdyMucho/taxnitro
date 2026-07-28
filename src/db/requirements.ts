@@ -21,9 +21,6 @@ export const REQUIRED_UPLOADS: RequiredItem[] = [
   { service: 'BK',  key: 'credit_card_statements', label: 'Credit Card Statements' },
   { service: 'BK',  key: 'loan_statements',        label: 'Loan Statements' },
   { service: 'BK',  key: 'payroll_reports',        label: 'Payroll Reports' },
-  // ── Tax ──
-  { service: 'TAX', key: 'prior_month_bookkeeping', label: 'Prior Month Bookkeeping / QBO Access' },
-  { service: 'TAX', key: 'ar_ap_aging',             label: 'AR / AP Aging' },
 ];
 
 export function itemsByService(service: RequirementService): RequiredItem[] {
@@ -38,8 +35,6 @@ export const REQUIREMENT_FOR_FOLDER: Record<string, { service: RequirementServic
   bk_credit_card_statements:   { service: 'BK',  key: 'credit_card_statements' },
   bk_loan_statements:          { service: 'BK',  key: 'loan_statements' },
   bk_payroll_reports:          { service: 'BK',  key: 'payroll_reports' },
-  tax_prior_month_bookkeeping: { service: 'TAX', key: 'prior_month_bookkeeping' },
-  tax_ar_ap_aging:             { service: 'TAX', key: 'ar_ap_aging' },
 };
 
 /** The required item a folder fulfills, or null if the folder isn't a requirement folder. */

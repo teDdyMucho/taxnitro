@@ -31,13 +31,11 @@ const CATEGORIES = [
     title: 'Tax Documents & Returns',
     color: '#E8B923',
     folders: [
-      { table: 'tax_client_uploads',     label: 'Client Uploads',    icon: 'cloud-upload-outline'       as const },
-      { table: 'tax_additional_docs',   label: 'Additional Tax Docs', icon: 'folder-outline'          as const },
       { table: 'tax_contracts',          label: 'Tax Contracts',     icon: 'document-text-outline'      as const },
       { table: 'tax_invoices',           label: 'Tax Invoices',      icon: 'receipt-outline'            as const },
+      { table: 'tax_client_uploads',     label: 'Client Uploads',    icon: 'cloud-upload-outline'       as const },
+      { table: 'tax_additional_docs',   label: 'Additional Tax Docs', icon: 'folder-outline'          as const },
       { table: 'tax_return_information', label: 'Tax Returns',       icon: 'information-circle-outline' as const },
-      { table: 'tax_prior_month_bookkeeping', label: 'Prior Month Bookkeeping / QBO Access', icon: 'cloud-upload-outline' as const },
-      { table: 'tax_ar_ap_aging',       label: 'AR / AP Aging',      icon: 'cloud-upload-outline'      as const },
     ],
   },
   {

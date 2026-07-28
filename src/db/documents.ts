@@ -25,13 +25,11 @@ export interface Document {
 
 // All folder tables — matches the subfolder keys in DocumentsScreen
 export const FOLDER_TABLES = [
-  'tax_client_uploads',
   'tax_contracts',
   'tax_invoices',
-  'tax_return_information',
+  'tax_client_uploads',
   'tax_additional_docs',
-  'tax_prior_month_bookkeeping',
-  'tax_ar_ap_aging',
+  'tax_return_information',
   'bk_contracts',
   'bk_invoices',
   'bk_for_client_review',
