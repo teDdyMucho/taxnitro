@@ -23,6 +23,7 @@ import { AdminReplyBell } from '../../components/AdminReplyBell';
 import { AdminFileBrowser } from '../../components/AdminFileBrowser';
 import { useAuth } from '../../context/AuthContext';
 import { useSheetStyles } from '../../hooks/useSheetStyles';
+import { AdminUploadModal } from '../../components/AdminUploadModal';
 import {
   getAllDocuments,
   deleteDocument,
@@ -429,6 +430,7 @@ export function AdminDocumentsScreen() {
   const [approveDoc, setApproveDoc] = useState<Document | null>(null);
   const [actionBusy, setActionBusy] = useState<string | null>(null); // doc id being actioned
   const [browserOpen, setBrowserOpen] = useState(false);
+  const [uploadOpen, setUploadOpen] = useState(false);
 
   const load = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
@@ -643,6 +645,11 @@ export function AdminDocumentsScreen() {
             <Text style={s.pendingBadgeText}>{pendingCount}</Text>
           </View>
         )}
+        {/* Upload a document (admin/staff → any client, any folder) */}
+        <TouchableOpacity style={s.uploadHeaderBtn} onPress={() => setUploadOpen(true)} activeOpacity={0.85}>
+          <Ionicons name="cloud-upload-outline" size={16} color="#2C2320" />
+          <Text style={s.uploadHeaderText}>Upload</Text>
+        </TouchableOpacity>
         {/* Browse by folder */}
         <TouchableOpacity style={s.browseBtn} onPress={() => setBrowserOpen(true)} activeOpacity={0.75}>
           <Ionicons name="folder-open-outline" size={18} color="#FFFFFF" />
@@ -784,6 +791,12 @@ export function AdminDocumentsScreen() {
 
       {/* ── File Browser ── */}
       <AdminFileBrowser visible={browserOpen} onClose={() => setBrowserOpen(false)} />
+
+      <AdminUploadModal
+        visible={uploadOpen}
+        onClose={() => setUploadOpen(false)}
+        onUploaded={() => load(true)}
+      />
     </View>
   );
 }
@@ -809,6 +822,11 @@ const s = StyleSheet.create({
   },
   pendingBadgeText: { color: '#92400E', fontWeight: '800', fontSize: 13 },
 
+  uploadHeaderBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 6, height: 36, borderRadius: 10,
+    backgroundColor: '#E8B923', paddingHorizontal: 12,
+  },
+  uploadHeaderText: { color: '#2C2320', fontSize: 13, fontWeight: '800' },
   browseBtn: {
     width: 36, height: 36, borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.15)',
     alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)',
