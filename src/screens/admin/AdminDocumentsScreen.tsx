@@ -23,6 +23,8 @@ import { AdminReplyBell } from '../../components/AdminReplyBell';
 import { AdminFileBrowser } from '../../components/AdminFileBrowser';
 import { useAuth } from '../../context/AuthContext';
 import { useSheetStyles } from '../../hooks/useSheetStyles';
+import { supabase } from '../../lib/supabase';
+import { FileConversationPanel } from '../../components/FileConversationPanel';
 import { AdminUploadModal } from '../../components/AdminUploadModal';
 import {
   getAllDocuments,
@@ -183,21 +185,33 @@ function ApproveTagModal({ visible, doc, onConfirm, onCancel }: {
   const [selected, setSelected]     = useState<RequiredItem | null>(null); // manual pick (fallback only)
   const [clientTag, setClientTag]   = useState<RequiredItem | null>(null); // what the client chose
   const [loadingTag, setLoadingTag] = useState(false);
+  const [clientNote, setClientNote] = useState<string | null>(null); // the client's upload note (first message)
   // The doc id the loaded clientTag belongs to — guards against showing a stale
   // tag from the previously-approved doc while the new lookup is in flight.
   const [tagDocId, setTagDocId]     = useState<string | null>(null);
 
-  // On open, look up the item the client tagged this upload with.
+  // On open, look up the item the client tagged this upload with + their note.
   useEffect(() => {
     let cancelled = false;
     setSelected(null);
     setClientTag(null);
+    setClientNote(null);
     setTagDocId(null);
     if (visible && doc) {
       setLoadingTag(true);
       getRequirementForDocument(doc.id)
         .then(item => { if (!cancelled) { setClientTag(item); setTagDocId(doc.id); } })
         .finally(() => { if (!cancelled) setLoadingTag(false); });
+      // First message on the file from the client = the note they left on upload.
+      supabase
+        .from('file_conversations')
+        .select('message, sender_role, created_at')
+        .eq('file_id', doc.id)
+        .eq('folder_table', doc.document_type)
+        .eq('sender_role', 'client')
+        .order('created_at', { ascending: true })
+        .limit(1)
+        .then(({ data }) => { if (!cancelled) setClientNote(data?.[0]?.message ?? null); });
     }
     return () => { cancelled = true; };
   }, [visible, doc?.id]);
@@ -223,6 +237,16 @@ function ApproveTagModal({ visible, doc, onConfirm, onCancel }: {
             <Text style={dm.title}>Approve Upload</Text>
             <Text style={[dm.sub, { textAlign: 'center' }]} numberOfLines={2}>{doc?.name}</Text>
           </View>
+
+          {clientNote ? (
+            <View style={at.noteCard}>
+              <Ionicons name="chatbubble-ellipses-outline" size={16} color="#B5905B" />
+              <View style={{ flex: 1 }}>
+                <Text style={at.noteLabel}>Client note</Text>
+                <Text style={at.noteText}>{clientNote}</Text>
+              </View>
+            </View>
+          ) : null}
 
           {loadingTag || !tagReady ? (
             <View style={{ paddingVertical: 24, alignItems: 'center' }}>
@@ -310,6 +334,9 @@ function ApproveTagModal({ visible, doc, onConfirm, onCancel }: {
 }
 
 const at = StyleSheet.create({
+  noteCard:  { flexDirection: 'row', alignItems: 'flex-start', gap: 10, padding: 12, borderRadius: 12, borderWidth: 1, borderColor: '#EADFCB', backgroundColor: '#FBF6EC' },
+  noteLabel: { color: '#B5905B', fontSize: 10, fontWeight: '800', letterSpacing: 0.6, textTransform: 'uppercase', marginBottom: 2 },
+  noteText:  { color: '#5B4A38', fontSize: 13, lineHeight: 18 },
   prompt:     { color: '#374151', fontSize: 12, fontWeight: '500', lineHeight: 17 },
   groupLabel: { color: '#94A3B8', fontSize: 10, fontWeight: '800', letterSpacing: 0.6, textTransform: 'uppercase', marginBottom: 4, marginTop: 4 },
   itemRow:      { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 9, paddingHorizontal: 10, borderRadius: 12, borderWidth: 1, borderColor: '#E5E7EB', marginBottom: 6, backgroundColor: '#FFFFFF' },
@@ -425,6 +452,7 @@ export function AdminDocumentsScreen() {
   const [filterOpen, setFilterOpen] = useState(false);     // per-folder dropdown
   const filterSheet = useSheetStyles('sm');
   const [viewerDoc, setViewerDoc]   = useState<Document | null>(null);
+  const [convDoc, setConvDoc]       = useState<Document | null>(null);
   const [deleteDoc, setDeleteDoc]   = useState<Document | null>(null);
   const [rejectDoc, setRejectDoc]   = useState<Document | null>(null);
   const [approveDoc, setApproveDoc] = useState<Document | null>(null);
@@ -578,10 +606,13 @@ export function AdminDocumentsScreen() {
             </View>
           )}
 
-          {/* View / Delete always visible */}
+          {/* View / Notes / Delete always visible */}
           <View style={s.btnRow}>
             <TouchableOpacity style={[s.actionBtn, s.viewBtn]} onPress={() => handleView(item)} activeOpacity={0.75}>
               <Ionicons name="eye-outline" size={14} color="#1C1713" />
+            </TouchableOpacity>
+            <TouchableOpacity style={[s.actionBtn, s.notesBtn]} onPress={() => setConvDoc(item)} activeOpacity={0.75}>
+              <Ionicons name="chatbubble-ellipses-outline" size={14} color="#1C1713" />
             </TouchableOpacity>
             <TouchableOpacity style={[s.actionBtn, s.deleteActionBtn]} onPress={() => setDeleteDoc(item)} activeOpacity={0.75}>
               <Ionicons name="trash-outline" size={14} color="#FFFFFF" />
@@ -770,6 +801,14 @@ export function AdminDocumentsScreen() {
       {viewerDoc && (
         <DocViewerModal url={viewerDoc.document_url} name={viewerDoc.name} onClose={() => setViewerDoc(null)} />
       )}
+      {convDoc && (
+        <FileConversationPanel
+          visible={!!convDoc}
+          doc={convDoc}
+          fileOwnerId={convDoc.user_id ?? ''}
+          onClose={() => setConvDoc(null)}
+        />
+      )}
       <DeleteModal
         visible={!!deleteDoc}
         name={deleteDoc?.name ?? ''}
@@ -900,6 +939,7 @@ const s = StyleSheet.create({
   btnRow:         { flexDirection: 'row', gap: 6 },
   actionBtn:      { width: 32, height: 32, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   viewBtn:        { backgroundColor: '#E8B923' },
+  notesBtn:       { backgroundColor: '#EADFCB' },
   deleteActionBtn:{ backgroundColor: '#DC2626' },
 
   loadingWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
