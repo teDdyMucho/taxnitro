@@ -39,8 +39,8 @@ import {
   FOLDER_TABLES,
 } from '../../db/documents';
 import {
-  requirementForFolder,
-  requirementFolderVisible,
+  isRequirementFolder,
+  itemsForFolderAndClient,
   createPendingRequirement,
   clearPendingRequirementForDocument,
   monthOf,
@@ -109,12 +109,6 @@ const FOLDERS: RootFolder[] = [
       { key: 'bk_mr_required_info',  label: 'Monthly Reporting (Required Info)',     icon: 'cloud-upload-outline', color: '#E8B923', bg: 'rgba(232,185,35,0.15)' },
       { key: 'bk_mr_client_review',  label: 'Monthly Reporting (For Client Review)', icon: 'eye-outline',          color: '#B5905B', bg: 'rgba(181,144,91,0.15)' },
       { key: 'bk_mr_final_statements', label: 'Monthly Reporting (Final Statements)', icon: 'ribbon-outline',      color: '#E8B923', bg: 'rgba(232,185,35,0.15)' },
-      { key: 'bk_for_client_review', label: 'For Client Review',          icon: 'eye-outline',           color: '#E8B923', bg: 'rgba(232,185,35,0.15)'   },
-      // Required items (moved out of the old "Required Documents" folder) — at the end.
-      { key: 'bk_bank_statements',        label: 'Bank Statements (all accounts)', icon: 'cloud-upload-outline', color: '#E8B923', bg: 'rgba(232,185,35,0.15)' },
-      { key: 'bk_credit_card_statements', label: 'Credit Card Statements',         icon: 'cloud-upload-outline', color: '#E8B923', bg: 'rgba(232,185,35,0.15)' },
-      { key: 'bk_loan_statements',        label: 'Loan Statements',                icon: 'cloud-upload-outline', color: '#B5905B', bg: 'rgba(181,144,91,0.15)' },
-      { key: 'bk_payroll_reports',        label: 'Payroll Reports',                icon: 'cloud-upload-outline', color: '#B5905B', bg: 'rgba(181,144,91,0.15)' },
     ],
   },
   {
@@ -579,10 +573,12 @@ function UploadModal({ visible, sf, root, userId, userEmail, onClose, onUploaded
   const [pct, setPct]         = useState(0);
   const [done, setDone]       = useState(false);
 
-  // If this folder IS a required item, uploading here auto-fulfills that requirement.
-  const requirement = requirementForFolder(sf.key);
+  // Collector folders (e.g. Monthly Reporting → Required Info) show a picker of the
+  // required items, so the client tags which item this upload is for.
+  const requiresPick = isRequirementFolder(sf.key);
+  const [requirement, setRequirement] = useState<RequiredItem | null>(null);
 
-  const reset = () => { setPicked(null); setPct(0); setDone(false); };
+  const reset = () => { setPicked(null); setPct(0); setDone(false); setRequirement(null); };
   const close = () => { reset(); onClose(); };
 
   const pick = async () => {
@@ -681,7 +677,7 @@ function UploadModal({ visible, sf, root, userId, userEmail, onClose, onUploaded
               <Ionicons name={sf.icon} size={22} color={sf.color} />
             </View>
             <Text style={up.headerTitle}>{sf.label}</Text>
-            <Text style={up.headerSub}>Upload a document</Text>
+            <Text style={up.headerSub}>{requiresPick ? 'Select an item, then upload' : 'Upload a document'}</Text>
           </View>
           <View style={{ width: 34 }} />
         </LinearGradient>
@@ -720,6 +716,42 @@ function UploadModal({ visible, sf, root, userId, userEmail, onClose, onUploaded
           {/* ── Idle */}
           {!done && !busy && (
             <>
+              {/* Step 1 (collector folders): pick which required item this file is for */}
+              {requiresPick && !requirement && (
+                <View style={up.reqPick}>
+                  <Text style={up.reqPickTitle}>What are you uploading?</Text>
+                  <Text style={up.reqPickSub}>Choose the required item this file is for</Text>
+                  {itemsForFolderAndClient(sf.key, user?.services, user?.hasQboAccess).map(item => (
+                    <TouchableOpacity key={item.key} style={up.reqItem} activeOpacity={0.75} onPress={() => setRequirement(item)}>
+                      <Ionicons name="ellipse-outline" size={18} color={sf.color} />
+                      <Text style={up.reqItemText}>{item.label}</Text>
+                      <Ionicons name="chevron-forward" size={16} color={Colors.textMuted} />
+                    </TouchableOpacity>
+                  ))}
+                  <TouchableOpacity style={up.cancelBtn} onPress={close}>
+                    <Text style={up.cancelText}>Cancel</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+
+              {/* Step 2: selected-item chip + file picker (collector), or plain folder */}
+              {(!requiresPick || requirement) && (
+              <>
+              {requiresPick && requirement && (
+                <TouchableOpacity
+                  style={[up.selectedReq, { borderColor: `${sf.color}50`, backgroundColor: sf.bg }]}
+                  onPress={() => { setRequirement(null); setPicked(null); }}
+                  activeOpacity={0.8}
+                >
+                  <Ionicons name="checkmark-circle" size={18} color={sf.color} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={up.selectedReqLabel}>{requirement.label}</Text>
+                    <Text style={up.selectedReqHint}>Tap to change</Text>
+                  </View>
+                  <Ionicons name="swap-horizontal-outline" size={16} color={sf.color} />
+                </TouchableOpacity>
+              )}
+
               {/* Drop zone */}
               {!picked ? (
                 <TouchableOpacity style={[up.dropZone, { borderColor: `${sf.color}50` }]} onPress={pick} activeOpacity={0.85}>
@@ -770,6 +802,8 @@ function UploadModal({ visible, sf, root, userId, userEmail, onClose, onUploaded
               <TouchableOpacity style={up.cancelBtn} onPress={close}>
                 <Text style={up.cancelText}>Cancel</Text>
               </TouchableOpacity>
+              </>
+              )}
             </>
           )}
         </ScrollView>
@@ -1244,15 +1278,8 @@ export function DocumentsScreen() {
   // folder when we already have QBO access).
   const visibleFolders = useMemo(() => {
     const svc = user?.services && user.services.length > 0 ? user.services : ['BK'];
-    return FOLDERS
-      .filter(f => svc.includes(f.service))
-      .map(f => ({
-        ...f,
-        subFolders: f.subFolders.filter(sf =>
-          requirementFolderVisible(sf.key, user?.services, user?.hasQboAccess)
-        ),
-      }));
-  }, [user?.services, user?.hasQboAccess]);
+    return FOLDERS.filter(f => svc.includes(f.service));
+  }, [user?.services]);
 
   return (
     <>

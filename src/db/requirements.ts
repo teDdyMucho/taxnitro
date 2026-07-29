@@ -27,21 +27,23 @@ export function itemsByService(service: RequirementService): RequiredItem[] {
   return REQUIRED_UPLOADS.filter(i => i.service === service);
 }
 
-// Each required item now has its OWN folder table. This maps a folder table →
-// the requirement it fulfills, so a plain upload into that folder auto-tags the
-// requirement (no picker needed — the folder IS the item).
-export const REQUIREMENT_FOR_FOLDER: Record<string, { service: RequirementService; key: string }> = {
-  bk_bank_statements:          { service: 'BK',  key: 'bank_statements' },
-  bk_credit_card_statements:   { service: 'BK',  key: 'credit_card_statements' },
-  bk_loan_statements:          { service: 'BK',  key: 'loan_statements' },
-  bk_payroll_reports:          { service: 'BK',  key: 'payroll_reports' },
+// A "required-docs" folder COLLECTS several required items via an in-folder picker.
+// The client uploads into this folder and tags which item the file is for.
+// (BK's "Monthly Reporting → Required Info" collects the 4 Bookkeeping items.)
+const FOLDER_REQUIREMENT_ITEMS: Record<string, RequirementService> = {
+  bk_mr_required_info: 'BK',
 };
 
-/** The required item a folder fulfills, or null if the folder isn't a requirement folder. */
-export function requirementForFolder(folderKey: string): RequiredItem | null {
-  const m = REQUIREMENT_FOR_FOLDER[folderKey];
-  if (!m) return null;
-  return REQUIRED_UPLOADS.find(i => i.service === m.service && i.key === m.key) ?? null;
+/** True if this folder is a required-docs collector (shows the item picker on upload). */
+export function isRequirementFolder(folderKey: string): boolean {
+  return folderKey in FOLDER_REQUIREMENT_ITEMS;
+}
+
+/** The required items a collector folder gathers (empty if not a collector folder). */
+export function itemsForFolder(folderKey: string): RequiredItem[] {
+  const svc = FOLDER_REQUIREMENT_ITEMS[folderKey];
+  if (!svc) return [];
+  return REQUIRED_UPLOADS.filter(i => i.service === svc);
 }
 
 // Requirement keys that are only needed when we DON'T already have QBO access.
@@ -64,16 +66,16 @@ export function itemsForClient(
   );
 }
 
-/** Is this folder visible to the client, given their services + QBO access? */
-export function requirementFolderVisible(
+/** Items a collector folder gathers, narrowed to what applies to this client. */
+export function itemsForFolderAndClient(
   folderKey: string,
   services: RequirementService[] | undefined,
   hasQboAccess: boolean | undefined,
-): boolean {
-  const req = REQUIREMENT_FOR_FOLDER[folderKey];
-  if (!req) return true;  // not a requirement folder → always visible
-  const applicable = itemsForClient(services, hasQboAccess);
-  return applicable.some(i => i.service === req.service && i.key === req.key);
+): RequiredItem[] {
+  const folderItems = itemsForFolder(folderKey);
+  if (folderItems.length === 0) return [];
+  const applicable = new Set(itemsForClient(services, hasQboAccess).map(i => `${i.service}:${i.key}`));
+  return folderItems.filter(i => applicable.has(`${i.service}:${i.key}`));
 }
 
 /** Stable set-key for a fulfilled requirement. */
@@ -108,6 +110,24 @@ export async function getFulfilledRequirements(email: string, month: string): Pr
     .eq('month', month);
   if (error) { console.error('getFulfilledRequirements:', error.message); return []; }
   return (data ?? []).map(r => ({ ...r, status: (r.status ?? 'approved') as RequirementStatus })) as FulfilledRequirement[];
+}
+
+/**
+ * How many documents are tagged to each requirement item, keyed by `service:key`.
+ * Used by the admin dashboard to break down a collector folder (e.g. Required Info)
+ * into its individual items. Admin/staff only.
+ */
+export async function getRequirementDocCounts(): Promise<Record<string, number>> {
+  const { data, error } = await supabase
+    .from('document_requirements')
+    .select('service, requirement_key');
+  if (error) { console.error('getRequirementDocCounts:', error.message); return {}; }
+  const counts: Record<string, number> = {};
+  for (const r of (data ?? []) as { service: string; requirement_key: string }[]) {
+    const k = `${r.service}:${r.requirement_key}`;
+    counts[k] = (counts[k] ?? 0) + 1;
+  }
+  return counts;
 }
 
 /** Accepted-item counts per client for a month → { client_email: count }. Admin/staff only. */

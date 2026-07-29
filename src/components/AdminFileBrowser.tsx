@@ -50,11 +50,6 @@ const CATEGORIES = [
       { table: 'bk_mr_required_info',  label: 'Monthly Reporting (Required Info)',     icon: 'cloud-upload-outline' as const },
       { table: 'bk_mr_client_review',  label: 'Monthly Reporting (For Client Review)', icon: 'eye-outline'          as const },
       { table: 'bk_mr_final_statements', label: 'Monthly Reporting (Final Statements)', icon: 'ribbon-outline'      as const },
-      { table: 'bk_for_client_review', label: 'For Client Review',   icon: 'eye-outline'           as const },
-      { table: 'bk_bank_statements',        label: 'Bank Statements',        icon: 'cloud-upload-outline' as const },
-      { table: 'bk_credit_card_statements', label: 'Credit Card Statements', icon: 'cloud-upload-outline' as const },
-      { table: 'bk_loan_statements',        label: 'Loan Statements',        icon: 'cloud-upload-outline' as const },
-      { table: 'bk_payroll_reports',        label: 'Payroll Reports',        icon: 'cloud-upload-outline' as const },
     ],
   },
   {

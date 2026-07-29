@@ -331,11 +331,6 @@ const FOLDERS = [
   { key: 'bk_mr_required_info',    label: 'Monthly Reporting (Required Info)',     color: '#E8B923' },
   { key: 'bk_mr_client_review',    label: 'Monthly Reporting (For Client Review)', color: '#B5905B' },
   { key: 'bk_mr_final_statements', label: 'Monthly Reporting (Final Statements)',  color: '#E8B923' },
-  { key: 'bk_for_client_review',   label: 'Client Review',  color: '#B5905B' },
-  { key: 'bk_bank_statements',        label: 'Bank Statements',        color: '#E8B923' },
-  { key: 'bk_credit_card_statements', label: 'Credit Card Statements', color: '#E8B923' },
-  { key: 'bk_loan_statements',        label: 'Loan Statements',        color: '#B5905B' },
-  { key: 'bk_payroll_reports',        label: 'Payroll Reports',        color: '#B5905B' },
   { key: 'cfo_contracts',          label: 'CFO Contracts',  color: '#B5905B' },
   { key: 'cfo_invoices',           label: 'CFO Invoices',   color: '#E8B923' },
   { key: 'cfo_additional_docs',    label: 'Additional CFO Docs', color: '#B5905B' },
@@ -348,7 +343,7 @@ const FOLDERS = [
 const FILTER_GROUPS: { title: string; keys: string[] }[] = [
   { title: 'Quick',                     keys: ['all', 'pending'] },
   { title: 'Tax Documents & Returns',   keys: ['tax_contracts', 'tax_invoices', 'tax_client_uploads', 'tax_additional_docs', 'tax_return_information'] },
-  { title: 'Bookkeeping & Financials',  keys: ['bk_contracts', 'bk_invoices', 'bk_final_pnl', 'bk_mr_required_info', 'bk_mr_client_review', 'bk_mr_final_statements', 'bk_for_client_review', 'bk_bank_statements', 'bk_credit_card_statements', 'bk_loan_statements', 'bk_payroll_reports'] },
+  { title: 'Bookkeeping & Financials',  keys: ['bk_contracts', 'bk_invoices', 'bk_final_pnl', 'bk_mr_required_info', 'bk_mr_client_review', 'bk_mr_final_statements'] },
   { title: 'CFO Advisory',              keys: ['cfo_contracts', 'cfo_invoices', 'cfo_additional_docs', 'cfo_mr_required_info', 'cfo_mr_client_review', 'cfo_mr_final_statements'] },
 ];
 

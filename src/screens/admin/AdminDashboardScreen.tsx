@@ -12,6 +12,7 @@ import { useSheetStyles } from '../../hooks/useSheetStyles';
 import { useResponsive } from '../../hooks/useResponsive';
 import { supabase } from '../../lib/supabase';
 import { FOLDER_TABLES } from '../../db/documents';
+import { isRequirementFolder, itemsForFolder, reqKey, getRequirementDocCounts } from '../../db/requirements';
 
 // ─── Folder metadata (FTG brand palette only) ───────────────────────────────
 const FOLDER_META: Record<string, { label: string; color: string; icon: string }> = {
@@ -22,12 +23,7 @@ const FOLDER_META: Record<string, { label: string; color: string; icon: string }
   tax_return_information: { label: 'Tax Returns',     color: '#B5905B', icon: 'information-circle-outline' },
   bk_contracts:           { label: 'BK Contracts',    color: '#2C2320', icon: 'document-text-outline'     },
   bk_invoices:            { label: 'BK Invoices',     color: '#E8B923', icon: 'receipt-outline'            },
-  bk_for_client_review:   { label: 'Client Review',   color: '#B5905B', icon: 'eye-outline'               },
   bk_final_pnl:           { label: 'Additional BK Docs', color: '#2C2320', icon: 'folder-outline'         },
-  bk_bank_statements:        { label: 'Bank Statements',      color: '#E8B923', icon: 'cloud-upload-outline' },
-  bk_credit_card_statements: { label: 'Credit Card Statements', color: '#E8B923', icon: 'cloud-upload-outline' },
-  bk_loan_statements:        { label: 'Loan Statements',      color: '#B5905B', icon: 'cloud-upload-outline' },
-  bk_payroll_reports:        { label: 'Payroll Reports',      color: '#B5905B', icon: 'cloud-upload-outline' },
   bk_mr_required_info:    { label: 'Monthly Reporting (Required Info)',     color: '#E8B923', icon: 'cloud-upload-outline' },
   bk_mr_client_review:    { label: 'Monthly Reporting (For Client Review)', color: '#B5905B', icon: 'eye-outline'          },
   bk_mr_final_statements: { label: 'Monthly Reporting (Final Statements)',  color: '#E8B923', icon: 'ribbon-outline'       },
@@ -151,6 +147,7 @@ export function AdminDashboardScreen({ onViewAllDocuments }: { onViewAllDocument
   useEffect(() => () => { mountedRef.current = false; }, []);
 
   const [stats, setStats]           = useState<Stats>({ totalClients: 0, totalStaff: 0, totalDocs: 0, newDocs: 0, docsThisWeek: 0, folderCounts: [], recentUploads: [] });
+  const [reqCounts, setReqCounts]   = useState<Record<string, number>>({}); // docs tagged per requirement item
   const [loading, setLoading]       = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [menuDoc, setMenuDoc]       = useState<RecentDoc | null>(null);
@@ -172,6 +169,8 @@ export function AdminDashboardScreen({ onViewAllDocuments }: { onViewAllDocument
         ...FOLDER_TABLES.map(t => supabase.from(t).select('id, name, email, created_at, status, document_url').order('created_at', { ascending: false })),
       ]);
       const allDocs = tableResults.flatMap((r, i) => (r.data ?? []).map(d => ({ ...d, document_type: FOLDER_TABLES[i] })));
+      const reqDocCounts = await getRequirementDocCounts();
+      if (mountedRef.current) setReqCounts(reqDocCounts);
       if (mountedRef.current) setStats({
         totalClients:  clientRes.count ?? 0,
         totalStaff:    staffRes.count ?? 0,
@@ -437,6 +436,41 @@ export function AdminDashboardScreen({ onViewAllDocuments }: { onViewAllDocument
                         const cpct  = Math.round((child.count / maxFolder) * 100);
                         // Parent already says "Monthly Reporting" — show only the inner part.
                         const childLabel = (cmeta.label.match(/\(([^)]+)\)/)?.[1]) ?? cmeta.label;
+
+                        // Required Info is a collector — make it further expandable to its items.
+                        if (isRequirementFolder(child.table)) {
+                          const cid = `col_${child.table}`;
+                          const cexpanded = expandedGroups.has(cid);
+                          const items = itemsForFolder(child.table);
+                          return (
+                            <View key={child.table}>
+                              <TouchableOpacity style={s.subRow} onPress={() => toggleGroup(cid)} activeOpacity={0.7}>
+                                <View style={[s.subDot, { backgroundColor: cmeta.color }]} />
+                                <Text style={s.subLabel} numberOfLines={2}>{childLabel}</Text>
+                                <Ionicons name={cexpanded ? 'chevron-up' : 'chevron-down'} size={13} color="#94A3B8" style={{ marginRight: 4 }} />
+                                <View style={s.barTrack}>
+                                  <View style={[s.barFill, { width: `${Math.max(cpct, child.count > 0 ? 6 : 0)}%` as any, backgroundColor: cmeta.color }]} />
+                                </View>
+                                <Text style={[s.folderCount, { color: cmeta.color }]}>{child.count}</Text>
+                              </TouchableOpacity>
+                              {cexpanded && items.map(item => {
+                                const icnt  = reqCounts[reqKey(item.service, item.key)] ?? 0;
+                                const ipct  = Math.round((icnt / maxFolder) * 100);
+                                return (
+                                  <View key={item.key} style={s.subSubRow}>
+                                    <View style={[s.subDot, { backgroundColor: cmeta.color, opacity: 0.6 }]} />
+                                    <Text style={s.subLabel} numberOfLines={2}>{item.label}</Text>
+                                    <View style={s.barTrack}>
+                                      <View style={[s.barFill, { width: `${Math.max(ipct, icnt > 0 ? 6 : 0)}%` as any, backgroundColor: cmeta.color }]} />
+                                    </View>
+                                    <Text style={[s.folderCount, { color: cmeta.color }]}>{icnt}</Text>
+                                  </View>
+                                );
+                              })}
+                            </View>
+                          );
+                        }
+
                         return (
                           <View key={child.table} style={s.subRow}>
                             <View style={[s.subDot, { backgroundColor: cmeta.color }]} />
@@ -453,9 +487,49 @@ export function AdminDashboardScreen({ onViewAllDocuments }: { onViewAllDocument
                   );
                 }
 
-                // ── Normal folder row ──
+                // ── Collector folder (e.g. Required Info) → expandable with its items ──
                 const meta = FOLDER_META[row.table] ?? { label: row.table, color: group.color, icon: 'folder-outline' };
                 const pct  = Math.round((row.count / maxFolder) * 100);
+
+                if (isRequirementFolder(row.table)) {
+                  const collectorId = `col_${row.table}`;
+                  const expanded = expandedGroups.has(collectorId);
+                  const items = itemsForFolder(row.table);
+                  return (
+                    <View key={row.table}>
+                      <TouchableOpacity style={s.folderRow} onPress={() => toggleGroup(collectorId)} activeOpacity={0.7}>
+                        <View style={[s.folderIconCircle, { backgroundColor: meta.color + '18' }]}>
+                          <Ionicons name={meta.icon as any} size={14} color={meta.color} />
+                        </View>
+                        <Text style={s.folderLabel} numberOfLines={2}>{meta.label}</Text>
+                        <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={14} color="#94A3B8" style={{ marginRight: 4 }} />
+                        <View style={s.barTrack}>
+                          <View style={[s.barFill, { width: `${Math.max(pct, row.count > 0 ? 6 : 0)}%` as any, backgroundColor: meta.color }]} />
+                        </View>
+                        <Text style={[s.folderCount, { color: meta.color }]}>{row.count}</Text>
+                      </TouchableOpacity>
+
+                      {/* Required items inside — count of docs tagged to each */}
+                      {expanded && items.map(item => {
+                        const cnt  = reqCounts[reqKey(item.service, item.key)] ?? 0;
+                        const cpct = Math.round((cnt / maxFolder) * 100);
+                        return (
+                          <View key={item.key} style={s.subRow}>
+                            <View style={[s.subDot, { backgroundColor: meta.color }]} />
+                            <Text style={s.subLabel} numberOfLines={2}>{item.label}</Text>
+                            <View style={s.barTrack}>
+                              <View style={[s.barFill, { width: `${Math.max(cpct, cnt > 0 ? 6 : 0)}%` as any, backgroundColor: meta.color }]} />
+                            </View>
+                            <Text style={[s.folderCount, { color: meta.color }]}>{cnt}</Text>
+                          </View>
+                        );
+                      })}
+                      {!isLast && <View style={s.divider} />}
+                    </View>
+                  );
+                }
+
+                // ── Normal folder row ──
                 return (
                   <View key={row.table}>
                     <View style={s.folderRow}>
@@ -879,6 +953,14 @@ const s = StyleSheet.create({
     paddingLeft: 42, paddingRight: 16, paddingVertical: 10,
     gap: 10,
     backgroundColor: '#FAFAF8',
+  },
+  // Deeper level — required items inside Required Info
+  subSubRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingLeft: 64, paddingRight: 16, paddingVertical: 9,
+    gap: 10,
+    backgroundColor: '#F4F4F0',
   },
   subDot:   { width: 7, height: 7, borderRadius: 4 },
   subLabel: { flex: 1, flexShrink: 1, color: '#374151', fontSize: 12.5, fontWeight: '500' },
