@@ -12,7 +12,7 @@ import { useSheetStyles } from '../../hooks/useSheetStyles';
 import { useResponsive } from '../../hooks/useResponsive';
 import { supabase } from '../../lib/supabase';
 import { FOLDER_TABLES } from '../../db/documents';
-import { isRequirementFolder, itemsForFolder, reqKey, getRequirementDocCounts, getTaggedFilesForItem, TaggedFile, RequiredItem } from '../../db/requirements';
+import { isRequirementFolder, itemsForFolder, reqKey, getRequirementDocCounts } from '../../db/requirements';
 
 // ─── Folder metadata (FTG brand palette only) ───────────────────────────────
 const FOLDER_META: Record<string, { label: string; color: string; icon: string }> = {
@@ -148,14 +148,6 @@ export function AdminDashboardScreen({ onViewAllDocuments }: { onViewAllDocument
 
   const [stats, setStats]           = useState<Stats>({ totalClients: 0, totalStaff: 0, totalDocs: 0, newDocs: 0, docsThisWeek: 0, folderCounts: [], recentUploads: [] });
   const [reqCounts, setReqCounts]   = useState<Record<string, number>>({}); // docs tagged per requirement item
-  const [tagFilesItem, setTagFilesItem] = useState<RequiredItem | null>(null); // item whose tagged files are shown
-  const [tagFiles, setTagFiles]     = useState<TaggedFile[] | null>(null);   // null = loading
-
-  const openTaggedFiles = async (item: RequiredItem) => {
-    setTagFilesItem(item); setTagFiles(null);
-    const files = await getTaggedFilesForItem(item.service, item.key);
-    setTagFiles(files);
-  };
   const [loading, setLoading]       = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [menuDoc, setMenuDoc]       = useState<RecentDoc | null>(null);
@@ -454,46 +446,6 @@ export function AdminDashboardScreen({ onViewAllDocuments }: { onViewAllDocument
                         // Parent already says "Monthly Reporting" — show only the inner part.
                         const childLabel = (cmeta.label.match(/\(([^)]+)\)/)?.[1]) ?? cmeta.label;
 
-                        // Required Info is a collector — make it further expandable to its items.
-                        if (isRequirementFolder(child.table)) {
-                          const cid = `col_${child.table}`;
-                          const cexpanded = expandedGroups.has(cid);
-                          const items = itemsForFolder(child.table);
-                          return (
-                            <View key={child.table}>
-                              <TouchableOpacity style={s.subRow} onPress={() => toggleGroup(cid)} activeOpacity={0.7}>
-                                <View style={[s.subDot, { backgroundColor: cmeta.color }]} />
-                                <Text style={s.subLabel} numberOfLines={2}>{childLabel}</Text>
-                                <Ionicons name={cexpanded ? 'chevron-up' : 'chevron-down'} size={13} color="#94A3B8" style={{ marginRight: 4 }} />
-                                <View style={s.barTrack}>
-                                  <View style={[s.barFill, { width: `${Math.max(cpct, child.count > 0 ? 6 : 0)}%` as any, backgroundColor: cmeta.color }]} />
-                                </View>
-                                <Text style={[s.folderCount, { color: cmeta.color }]}>{child.count}</Text>
-                              </TouchableOpacity>
-                              {cexpanded && items.map(item => {
-                                const icnt  = reqCounts[reqKey(item.service, item.key)] ?? 0;
-                                const ipct  = Math.round((icnt / maxFolder) * 100);
-                                return (
-                                  <TouchableOpacity
-                                    key={item.key}
-                                    style={s.subSubRow}
-                                    activeOpacity={icnt > 0 ? 0.6 : 1}
-                                    onPress={() => { if (icnt > 0) openTaggedFiles(item); }}
-                                  >
-                                    <View style={[s.subDot, { backgroundColor: cmeta.color, opacity: 0.6 }]} />
-                                    <Text style={s.subLabel} numberOfLines={2}>{item.label}</Text>
-                                    {icnt > 0 && <Ionicons name="chevron-forward" size={13} color="#94A3B8" style={{ marginRight: 2 }} />}
-                                    <View style={s.barTrack}>
-                                      <View style={[s.barFill, { width: `${Math.max(ipct, icnt > 0 ? 6 : 0)}%` as any, backgroundColor: cmeta.color }]} />
-                                    </View>
-                                    <Text style={[s.folderCount, { color: cmeta.color }]}>{icnt}</Text>
-                                  </TouchableOpacity>
-                                );
-                              })}
-                            </View>
-                          );
-                        }
-
                         return (
                           <View key={child.table} style={s.subRow}>
                             <View style={[s.subDot, { backgroundColor: cmeta.color }]} />
@@ -699,59 +651,6 @@ export function AdminDashboardScreen({ onViewAllDocuments }: { onViewAllDocument
         </Pressable>
       </Modal>
 
-      {/* ── Tagged files for a required item ── */}
-      <Modal visible={!!tagFilesItem} transparent animationType="slide" onRequestClose={() => setTagFilesItem(null)}>
-        <Pressable style={[s.menuOverlay, sheet.overlay]} onPress={() => setTagFilesItem(null)}>
-          <Pressable style={[s.menuSheet, sheet.sheet]} onPress={() => {}}>
-            <View style={s.menuHandle} />
-            <Text style={s.menuFileName} numberOfLines={1}>{tagFilesItem?.label}</Text>
-            <Text style={s.menuEmail}>Tagged files</Text>
-            <View style={s.menuDivider} />
-
-            {tagFiles === null ? (
-              <ActivityIndicator color="#E8B923" style={{ paddingVertical: 24 }} />
-            ) : tagFiles.length === 0 ? (
-              <Text style={{ color: '#A8998A', fontSize: 13, textAlign: 'center', paddingVertical: 24 }}>No files tagged yet.</Text>
-            ) : (
-              <ScrollView style={{ maxHeight: 360 }} showsVerticalScrollIndicator={false}>
-                {tagFiles.map(f => (
-                  <TouchableOpacity
-                    key={f.document_id}
-                    style={s.tagFileRow}
-                    activeOpacity={0.75}
-                    onPress={() => {
-                      if (f.document_url) {
-                        Platform.OS === 'web'
-                          ? window.open(f.document_url, '_blank')
-                          : Linking.openURL(f.document_url).catch(() => {});
-                      }
-                    }}
-                  >
-                    <View style={s.tagFileIcon}><Ionicons name="document-text-outline" size={16} color="#B5905B" /></View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={s.tagFileName} numberOfLines={1}>{f.name}</Text>
-                      <Text style={s.tagFileMeta} numberOfLines={1}>{f.client_email} · {new Date(f.created_at).toLocaleDateString()}</Text>
-                    </View>
-                    <View style={[s.tagFileStatus, {
-                      backgroundColor: f.status === 'approved' ? '#D1FAE5' : f.status === 'rejected' ? '#FEE2E2' : '#FEF3C7',
-                    }]}>
-                      <Text style={[s.tagFileStatusText, {
-                        color: f.status === 'approved' ? '#065F46' : f.status === 'rejected' ? '#991B1B' : '#92400E',
-                      }]}>{f.status}</Text>
-                    </View>
-                    <Ionicons name="open-outline" size={16} color="#A8998A" />
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-            )}
-
-            <View style={s.menuDivider} />
-            <TouchableOpacity style={s.menuItem} onPress={() => setTagFilesItem(null)}>
-              <Text style={[s.menuItemText, { color: '#A8998A', flex: 1, textAlign: 'center' }]}>Close</Text>
-            </TouchableOpacity>
-          </Pressable>
-        </Pressable>
-      </Modal>
     </View>
   );
 }

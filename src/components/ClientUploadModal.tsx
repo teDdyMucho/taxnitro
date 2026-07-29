@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import {
-  View, Text, StyleSheet, Modal, Pressable, TouchableOpacity,
+  View, Text, StyleSheet, Modal, Pressable, TouchableOpacity, TextInput,
   ScrollView, ActivityIndicator, Alert, Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -9,6 +9,7 @@ import { Colors } from '../constants/colors';
 import { useAuth } from '../context/AuthContext';
 import { useSheetStyles } from '../hooks/useSheetStyles';
 import { uploadDocumentToStorage, createDocumentRecord, Document } from '../db/documents';
+import { supabase } from '../lib/supabase';
 
 // The ONLY folders a client uploads into. Everything else is staff-delivered.
 const CLIENT_UPLOAD_FOLDERS: { key: string; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
@@ -25,11 +26,12 @@ export function ClientUploadModal({ visible, onClose, onUploaded }: {
   const { user } = useAuth();
   const sheet = useSheetStyles('md');
   const [folderKey, setFolderKey] = useState<string | null>(null);
+  const [note, setNote] = useState('');
   const [picked, setPicked] = useState<{ uri: string; name: string; mimeType: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
 
-  const reset = () => { setFolderKey(null); setPicked(null); setBusy(false); setDone(false); };
+  const reset = () => { setFolderKey(null); setNote(''); setPicked(null); setBusy(false); setDone(false); };
   const close = () => { reset(); onClose(); };
 
   const pick = async () => {
@@ -56,8 +58,24 @@ export function ClientUploadModal({ visible, onClose, onUploaded }: {
         uploadedByRole: 'client',
         uploadedBy: user.email,
       });
+      if (!doc) { setBusy(false); Alert.alert('Partial success', 'File saved but record creation failed.'); return; }
+
+      // Optional note → first message in the file's conversation thread (staff can reply).
+      const trimmed = note.trim();
+      if (trimmed) {
+        await supabase.from('file_conversations').insert({
+          file_id:       doc.id,
+          folder_table:  folderKey,
+          file_owner_id: user.id,
+          sender_id:     user.id,
+          sender_name:   user.name ?? user.email ?? 'Client',
+          sender_role:   'client',
+          message:       trimmed,
+          is_read:       false,
+        });
+      }
+
       setBusy(false);
-      if (!doc) { Alert.alert('Partial success', 'File saved but record creation failed.'); return; }
       setDone(true);
       onUploaded?.(doc);
       setTimeout(close, 1300);
@@ -104,6 +122,18 @@ export function ClientUploadModal({ visible, onClose, onUploaded }: {
                 <Text style={s.pickText} numberOfLines={1}>{picked ? picked.name : 'Choose a file…'}</Text>
               </TouchableOpacity>
 
+              <Text style={s.label}>Note <Text style={s.optional}>(optional)</Text></Text>
+              <TextInput
+                style={s.noteInput}
+                value={note}
+                onChangeText={setNote}
+                placeholder="What is this document for?"
+                placeholderTextColor={Colors.textMuted}
+                multiline
+                numberOfLines={3}
+                textAlignVertical="top"
+              />
+
               <View style={s.row}>
                 <TouchableOpacity style={s.cancelBtn} onPress={close}>
                   <Text style={s.cancelText}>Cancel</Text>
@@ -131,6 +161,8 @@ const s = StyleSheet.create({
   title: { color: Colors.textPrimary, fontSize: 18, fontWeight: '800' },
   sub: { color: Colors.textMuted, fontSize: 13, marginBottom: 4 },
   label: { color: Colors.textMuted, fontSize: 11, fontWeight: '700', letterSpacing: 1, textTransform: 'uppercase', marginTop: 8 },
+  optional: { color: Colors.textMuted, fontSize: 10, fontWeight: '600', letterSpacing: 0.5, textTransform: 'none' },
+  noteInput: { color: Colors.textPrimary, fontSize: 14, backgroundColor: Colors.bgMid, borderRadius: 12, borderWidth: 1, borderColor: Colors.border, paddingHorizontal: 12, paddingVertical: 10, minHeight: 72 },
   folderRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 11, paddingHorizontal: 12, borderRadius: 12, borderWidth: 1, borderColor: Colors.border, marginBottom: 6, backgroundColor: Colors.bgMid },
   folderRowActive: { borderColor: 'rgba(232,185,35,0.5)', backgroundColor: 'rgba(232,185,35,0.1)' },
   folderText: { color: Colors.textSecondary, fontSize: 14, flex: 1 },
