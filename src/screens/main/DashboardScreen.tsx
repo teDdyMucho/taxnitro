@@ -22,7 +22,7 @@ import { supabase } from '../../lib/supabase';
 import { getDocumentsByEmail, FOLDER_TABLES } from '../../db/documents';
 import {
   itemsForClient, reqKey, getFulfilledRequirements,
-  monthOf, formatMonthLabel,
+  monthOf, formatMonthLabel, serviceLabel,
 } from '../../db/requirements';
 import { getCustomRequests, CustomRequest } from '../../db/customRequests';
 
@@ -511,7 +511,7 @@ export function DashboardScreen() {
               if (items.length === 0) return null;
               return (
                 <View key={svc} style={styles.reqGroup}>
-                  <Text style={styles.reqGroupLabel}>{svc === 'BK' ? 'Bookkeeping' : 'TAX'}</Text>
+                  <Text style={styles.reqGroupLabel}>{serviceLabel(svc)}</Text>
                   {items.map(item => {
                     const k          = reqKey(item.service, item.key);
                     const isApproved = fulfilled.has(k);

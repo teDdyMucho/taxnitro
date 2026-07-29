@@ -44,6 +44,7 @@ import {
   createPendingRequirement,
   clearPendingRequirementForDocument,
   monthOf,
+  formatMonthLabel,
   RequiredItem,
   RequirementService,
 } from '../../db/requirements';
@@ -106,9 +107,14 @@ const FOLDERS: RootFolder[] = [
       { key: 'bk_contracts',         label: 'BK Contracts',               icon: 'document-text-outline', color: '#E8B923', bg: 'rgba(232,185,35,0.15)'  },
       { key: 'bk_invoices',          label: 'BK Invoices',                icon: 'receipt-outline',       color: '#B5905B', bg: 'rgba(181,144,91,0.15)'  },
       { key: 'bk_final_pnl',         label: 'Additional BK Docs',         icon: 'folder-outline',        color: '#B5905B', bg: 'rgba(181,144,91,0.15)'  },
-      { key: 'bk_mr_required_info',  label: 'Monthly Reporting (Required Info)',     icon: 'cloud-upload-outline', color: '#E8B923', bg: 'rgba(232,185,35,0.15)' },
-      { key: 'bk_mr_client_review',  label: 'Monthly Reporting (For Client Review)', icon: 'eye-outline',          color: '#B5905B', bg: 'rgba(181,144,91,0.15)' },
-      { key: 'bk_mr_final_statements', label: 'Monthly Reporting (Final Statements)', icon: 'ribbon-outline',      color: '#E8B923', bg: 'rgba(232,185,35,0.15)' },
+      {
+        key: 'bk_monthly_reporting', label: 'Monthly Reporting', icon: 'bar-chart-outline', color: '#E8B923', bg: 'rgba(232,185,35,0.15)',
+        children: [
+          { key: 'bk_mr_required_info',    label: 'Required Info',     icon: 'cloud-upload-outline', color: '#E8B923', bg: 'rgba(232,185,35,0.15)' },
+          { key: 'bk_mr_client_review',    label: 'For Client Review', icon: 'eye-outline',          color: '#B5905B', bg: 'rgba(181,144,91,0.15)' },
+          { key: 'bk_mr_final_statements', label: 'Final Statements',  icon: 'ribbon-outline',       color: '#E8B923', bg: 'rgba(232,185,35,0.15)' },
+        ],
+      },
     ],
   },
   {
@@ -123,9 +129,14 @@ const FOLDERS: RootFolder[] = [
       { key: 'cfo_contracts',       label: 'CFO Contracts',      icon: 'document-text-outline', color: '#E8B923', bg: 'rgba(232,185,35,0.15)' },
       { key: 'cfo_invoices',        label: 'CFO Invoices',       icon: 'receipt-outline',       color: '#B5905B', bg: 'rgba(181,144,91,0.15)' },
       { key: 'cfo_additional_docs', label: 'Additional CFO Docs', icon: 'folder-outline',        color: '#E8B923', bg: 'rgba(232,185,35,0.15)' },
-      { key: 'cfo_mr_required_info',    label: 'Monthly Reporting (Required Info)',     icon: 'cloud-upload-outline', color: '#E8B923', bg: 'rgba(232,185,35,0.15)' },
-      { key: 'cfo_mr_client_review',    label: 'Monthly Reporting (For Client Review)', icon: 'eye-outline',          color: '#B5905B', bg: 'rgba(181,144,91,0.15)' },
-      { key: 'cfo_mr_final_statements', label: 'Monthly Reporting (Final Statements & Insights)',  icon: 'ribbon-outline', color: '#E8B923', bg: 'rgba(232,185,35,0.15)' },
+      {
+        key: 'cfo_monthly_reporting', label: 'Monthly Reporting', icon: 'bar-chart-outline', color: '#E8B923', bg: 'rgba(232,185,35,0.15)',
+        children: [
+          { key: 'cfo_mr_required_info',    label: 'Required Info',              icon: 'cloud-upload-outline', color: '#E8B923', bg: 'rgba(232,185,35,0.15)' },
+          { key: 'cfo_mr_client_review',    label: 'For Client Review',          icon: 'eye-outline',          color: '#B5905B', bg: 'rgba(181,144,91,0.15)' },
+          { key: 'cfo_mr_final_statements', label: 'Final Statements & Insights', icon: 'ribbon-outline',      color: '#E8B923', bg: 'rgba(232,185,35,0.15)' },
+        ],
+      },
     ],
   },
 ];
@@ -369,6 +380,10 @@ function DocListView({ sf, root, rootColor, documents, refreshing, onRefresh, on
   const [filter, setFilter]   = useState<FilterType>('all');
   const [uploadOpen, setUploadOpen] = useState(false);
 
+  // Client uploads only via the sidebar "Upload" button now, so every folder view
+  // is read-only here (view / approve / reject — no per-folder upload button).
+  const readOnly = true;
+
   const unread = documents.filter(d => d.status !== 'viewed').length;
 
   const filtered = useMemo(() => {
@@ -377,6 +392,21 @@ function DocListView({ sf, root, rootColor, documents, refreshing, onRefresh, on
     if (filter !== 'all') items = items.filter(d => d.status === filter);
     return items.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
   }, [documents, search, filter]);
+
+  // Required Info folders group their docs by month (JUL 2026 …) via section headers.
+  const groupByMonth = isRequirementFolder(sf.key);
+  type ListRow = { type: 'header'; month: string } | { type: 'doc'; doc: Document };
+  const listRows: ListRow[] = useMemo(() => {
+    if (!groupByMonth) return filtered.map(d => ({ type: 'doc', doc: d }));
+    const rows: ListRow[] = [];
+    let currentMonth = '';
+    for (const d of filtered) {
+      const m = monthOf(d.created_at);
+      if (m !== currentMonth) { currentMonth = m; rows.push({ type: 'header', month: m }); }
+      rows.push({ type: 'doc', doc: d });
+    }
+    return rows;
+  }, [filtered, groupByMonth, sf.key]);
 
   const filters: { key: FilterType; label: string }[] = [
     { key: 'all', label: 'All' }, { key: 'new', label: 'New' }, { key: 'viewed', label: 'Viewed' },
@@ -407,10 +437,12 @@ function DocListView({ sf, root, rootColor, documents, refreshing, onRefresh, on
             </Text>
           </View>
 
-          <TouchableOpacity style={s.uploadFab} onPress={() => setUploadOpen(true)}>
-            <Ionicons name="cloud-upload-outline" size={15} color="#2C2320" />
-            <Text style={s.uploadFabText}>Upload</Text>
-          </TouchableOpacity>
+          {!readOnly && (
+            <TouchableOpacity style={s.uploadFab} onPress={() => setUploadOpen(true)}>
+              <Ionicons name="cloud-upload-outline" size={15} color="#2C2320" />
+              <Text style={s.uploadFabText}>Upload</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* Search */}
@@ -446,13 +478,17 @@ function DocListView({ sf, root, rootColor, documents, refreshing, onRefresh, on
       </LinearGradient>
 
       <FlatList
-        data={filtered}
-        keyExtractor={item => item.id}
+        data={listRows}
+        keyExtractor={(row, i) => row.type === 'header' ? `h_${row.month}` : row.doc.id + i}
         contentContainerStyle={[s.docList, { paddingBottom: pb }]}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor='#E8B923' />}
         showsVerticalScrollIndicator={false}
-        renderItem={({ item }) => <DocCard doc={item} sf={sf} onPress={() => onDocPress(item)} />}
-        ListEmptyComponent={<EmptyDocs sf={sf} onUpload={() => setUploadOpen(true)} />}
+        renderItem={({ item }) =>
+          item.type === 'header'
+            ? <Text style={s.monthHeader}>{formatMonthLabel(item.month)}</Text>
+            : <DocCard doc={item.doc} sf={sf} onPress={() => onDocPress(item.doc)} />
+        }
+        ListEmptyComponent={<EmptyDocs sf={sf} />}
       />
 
       <UploadModal
@@ -470,18 +506,16 @@ function DocListView({ sf, root, rootColor, documents, refreshing, onRefresh, on
 
 // ── Empty state ───────────────────────────────────────────────────────────────
 
-function EmptyDocs({ sf, onUpload }: { sf: SubFolder; onUpload: () => void }) {
+function EmptyDocs({ sf }: { sf: SubFolder }) {
   return (
     <View style={s.empty}>
       <View style={[s.emptyIcon, { backgroundColor: sf.bg }]}>
         <Ionicons name={sf.icon} size={36} color={sf.color} />
       </View>
       <Text style={s.emptyTitle}>No files yet</Text>
-      <Text style={s.emptySub}>Upload files or wait for staff to share documents in this folder</Text>
-      <TouchableOpacity style={[s.emptyBtn, { backgroundColor: sf.color }]} onPress={onUpload}>
-        <Ionicons name="cloud-upload-outline" size={16} color={Colors.white} />
-        <Text style={s.emptyBtnText}>Upload First File</Text>
-      </TouchableOpacity>
+      <Text style={s.emptySub}>
+        Documents will appear here once uploaded. Use the “Upload” button in the sidebar to add files.
+      </Text>
     </View>
   );
 }
@@ -630,10 +664,12 @@ function UploadModal({ visible, sf, root, userId, userEmail, onClose, onUploaded
       setPct(80);
 
       // ── Step 3: Save record to the correct folder table ──────────────────────
+      // For Required Info folders, prefix the chosen item label so it's identifiable.
+      const docName = requirement ? `${requirement.label} — ${picked.name}` : picked.name;
       const doc = await createDocumentRecord({
         userId,
         email: userEmail,
-        name: picked.name,
+        name: docName,
         documentUrl: storageUrl,   // always a real https:// URL
         documentType: sf.key,
       });
@@ -930,6 +966,7 @@ function DocDetailPage({ doc, sf, root, fileOwnerId, userEmail, onClose, onMarkV
   onApprovalChange: (status: 'approved' | 'rejected', note: string | null) => void;
 }) {
   const insets = useSafeAreaInsets();
+  const { isDesktop } = useResponsive();   // center + cap the detail page on desktop
   const [viewerOpen, setViewerOpen]           = useState(false);
   const [renameOpen, setRenameOpen]           = useState(false);
   const [deleteOpen, setDeleteOpen]           = useState(false);
@@ -964,7 +1001,8 @@ function DocDetailPage({ doc, sf, root, fileOwnerId, userEmail, onClose, onMarkV
   const pb  = Platform.OS === 'web' ? 0 : insets.bottom;
 
   return (
-    <View style={[dp.root, { paddingTop: pt }]}>
+    <View style={isDesktop ? dp.backdrop : { flex: 1 }}>
+    <View style={[isDesktop ? dp.rootDesktop : dp.root, { paddingTop: isDesktop ? 0 : pt }]}>
 
       {/* ── Top bar */}
       <LinearGradient colors={root.gradient} style={dp.topBar} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
@@ -1149,6 +1187,7 @@ function DocDetailPage({ doc, sf, root, fileOwnerId, userEmail, onClose, onMarkV
         </Pressable>
       </Modal>
 
+    </View>
     </View>
   );
 }
@@ -1453,6 +1492,7 @@ const s = StyleSheet.create({
 
   // doc list
   docList: { padding: 14 },
+  monthHeader: { color: Colors.textSecondary, fontSize: 12, fontWeight: '800', letterSpacing: 0.8, textTransform: 'uppercase', marginTop: 10, marginBottom: 6, paddingHorizontal: 4 },
   docCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFFFFF', borderRadius: 16, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: '#E8E0D0', gap: 12, overflow: 'hidden', shadowColor: '#3A3131', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 2 },
   docCardNew:      { borderColor: '#E8B923', borderLeftWidth: 3 },
   docCardPending:  { borderColor: '#F59E0B', borderLeftWidth: 3, backgroundColor: '#FFFBEB' },
@@ -1527,6 +1567,9 @@ const up = StyleSheet.create({
 // ── Detail page styles ────────────────────────────────────────────────────────
 const dp = StyleSheet.create({
   root:   { flex: 1, backgroundColor: Colors.bgDeep },
+  // Desktop: center the detail page as a capped card over a dark backdrop.
+  backdrop:    { flex: 1, backgroundColor: 'rgba(28,23,19,0.55)', alignItems: 'center', justifyContent: 'center', padding: 24 },
+  rootDesktop: { width: '100%', maxWidth: 720, height: '100%', maxHeight: 820, backgroundColor: Colors.bgDeep, borderRadius: 24, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.4, shadowRadius: 30, elevation: 20 },
   topBar: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 12, gap: 10 },
   backBtn:{ width: 36, height: 36, borderRadius: 11, backgroundColor: 'rgba(255,255,255,0.15)', alignItems: 'center', justifyContent: 'center' },
   topBarCenter: { flex: 1 },

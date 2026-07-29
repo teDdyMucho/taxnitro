@@ -15,23 +15,37 @@ export interface RequiredItem {
   service: RequirementService;
 }
 
+// ── CLIENT-upload items (blue in the spec) — client picks the label, then uploads.
+// These go into each suite's "Monthly Reporting → Required Info" collector folder.
 export const REQUIRED_UPLOADS: RequiredItem[] = [
-  // ── Bookkeeping ──
-  { service: 'BK',  key: 'bank_statements',        label: 'Bank Statements (all accounts)' },
-  { service: 'BK',  key: 'credit_card_statements', label: 'Credit Card Statements' },
-  { service: 'BK',  key: 'loan_statements',        label: 'Loan Statements' },
-  { service: 'BK',  key: 'payroll_reports',        label: 'Payroll Reports' },
+  // ── Bookkeeping (Required Info) ──
+  { service: 'BK',  key: 'bank_statements',         label: 'Bank Statements (all accounts)' },
+  { service: 'BK',  key: 'credit_card_statements',  label: 'Credit Card Statements' },
+  { service: 'BK',  key: 'loan_statements',         label: 'Loan Statements' },
+  { service: 'BK',  key: 'payroll_reports',         label: 'Payroll Reports' },
+  // ── CFO (Required Info) — same as BK plus the two below ──
+  { service: 'CFO', key: 'bank_statements',         label: 'Bank Statements (all accounts)' },
+  { service: 'CFO', key: 'credit_card_statements',  label: 'Credit Card Statements' },
+  { service: 'CFO', key: 'loan_statements',         label: 'Loan Statements' },
+  { service: 'CFO', key: 'payroll_reports',         label: 'Payroll Reports' },
+  { service: 'CFO', key: 'prior_month_bookkeeping', label: 'Prior Month Bookkeeping / QBO Access' },
+  { service: 'CFO', key: 'ar_ap_aging',             label: 'AR / AP Aging' },
 ];
 
 export function itemsByService(service: RequirementService): RequiredItem[] {
   return REQUIRED_UPLOADS.filter(i => i.service === service);
 }
 
-// A "required-docs" folder COLLECTS several required items via an in-folder picker.
-// The client uploads into this folder and tags which item the file is for.
-// (BK's "Monthly Reporting → Required Info" collects the 4 Bookkeeping items.)
+/** Display label for a service (used in checklist group headers). */
+export function serviceLabel(service: RequirementService): string {
+  return service === 'BK' ? 'Bookkeeping' : service === 'TAX' ? 'Tax' : 'CFO';
+}
+
+// A "required-docs" collector folder — the CLIENT uploads here and tags which
+// required item the file is for (Required Info folders, one per suite).
 const FOLDER_REQUIREMENT_ITEMS: Record<string, RequirementService> = {
-  bk_mr_required_info: 'BK',
+  bk_mr_required_info:  'BK',
+  cfo_mr_required_info: 'CFO',
 };
 
 /** True if this folder is a required-docs collector (shows the item picker on upload). */
@@ -44,6 +58,36 @@ export function itemsForFolder(folderKey: string): RequiredItem[] {
   const svc = FOLDER_REQUIREMENT_ITEMS[folderKey];
   if (!svc) return [];
   return REQUIRED_UPLOADS.filter(i => i.service === svc);
+}
+
+// ── STAFF-upload items (purple in the spec) — staff picks the label, then uploads.
+// These are the deliverables FTG provides TO the client in the For Client Review
+// and Final Statements folders. The client only approves/rejects/comments.
+export const STAFF_UPLOAD_ITEMS: Record<string, string[]> = {
+  // For Client Review (BK + CFO share the same three)
+  bk_mr_client_review:      ['Query Sheet', 'P&L Statement', 'Balance Sheet'],
+  cfo_mr_client_review:     ['Query Sheet', 'P&L Statement', 'Balance Sheet'],
+  // Final Statements — BK
+  bk_mr_final_statements:   ['FINAL P&L Statement', 'FINAL Balance Sheet'],
+  // Final Statements & Insights — CFO (richer set)
+  cfo_mr_final_statements:  [
+    'FINAL P&L Statement',
+    'FINAL Balance Sheet',
+    'Cash Flow Statement / Cash Flow Forecast',
+    'KPI Dashboard / Financial Model Update',
+    'Monthly TLDR Summary Email',
+    'Budget vs Actual Variance',
+  ],
+};
+
+/** True if a folder is a staff-deliverable that uses a label picker on upload. */
+export function isStaffLabelFolder(folderKey: string): boolean {
+  return folderKey in STAFF_UPLOAD_ITEMS;
+}
+
+/** The label options a staff-deliverable folder offers (empty if none). */
+export function staffLabelsForFolder(folderKey: string): string[] {
+  return STAFF_UPLOAD_ITEMS[folderKey] ?? [];
 }
 
 // Requirement keys that are only needed when we DON'T already have QBO access.

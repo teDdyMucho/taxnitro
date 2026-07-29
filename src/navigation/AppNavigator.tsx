@@ -17,6 +17,7 @@ import { NotificationsScreen } from '../screens/main/NotificationsScreen';
 import { ProfileScreen } from '../screens/main/ProfileScreen';
 import { AdminNavigator } from './AdminNavigator';
 import { getUnreadCount } from '../db/notifications';
+import { ClientUploadModal } from '../components/ClientUploadModal';
 
 export type MainTabParamList = {
   Dashboard: undefined;
@@ -48,6 +49,7 @@ function WebLayout({ onLogout }: { onLogout: () => void }) {
   const [unreadCount, setUnreadCount] = useState(0);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const [uploadOpen, setUploadOpen] = useState(false);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -116,8 +118,15 @@ function WebLayout({ onLogout }: { onLogout: () => void }) {
                 </TouchableOpacity>
               );
             })}
+            {/* Upload action */}
+            <TouchableOpacity style={mob.tabItem} onPress={() => setUploadOpen(true)} activeOpacity={0.7}>
+              <Ionicons name="cloud-upload-outline" size={22} color="#E8B923" />
+              <Text style={[mob.tabLabel, { color: '#E8B923' }]}>Upload</Text>
+            </TouchableOpacity>
           </View>
         </View>
+
+        <ClientUploadModal visible={uploadOpen} onClose={() => setUploadOpen(false)} />
       </View>
     );
   }
@@ -173,6 +182,12 @@ function WebLayout({ onLogout }: { onLogout: () => void }) {
               </TouchableOpacity>
             );
           })}
+
+          {/* Upload — the single client upload entry point */}
+          <TouchableOpacity style={web.uploadBtn} onPress={() => setUploadOpen(true)} activeOpacity={0.85}>
+            <Ionicons name="cloud-upload-outline" size={18} color="#3A3131" />
+            <Text style={web.uploadBtnText}>Upload</Text>
+          </TouchableOpacity>
         </View>
 
         <View style={{ flex: 1 }} />
@@ -227,6 +242,8 @@ function WebLayout({ onLogout }: { onLogout: () => void }) {
           </View>
         </View>
       )}
+
+      <ClientUploadModal visible={uploadOpen} onClose={() => setUploadOpen(false)} />
     </View>
   );
 }
@@ -427,6 +444,12 @@ const web = StyleSheet.create({
   navItemActive: {
     backgroundColor: 'rgba(232,185,35,0.15)',
   },
+  uploadBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    marginTop: 10, paddingVertical: 12, borderRadius: 12, backgroundColor: '#E8B923',
+    shadowColor: '#E8B923', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 4,
+  },
+  uploadBtnText: { color: '#3A3131', fontSize: 14, fontWeight: '800' },
   navActiveBar: {
     position: 'absolute',
     left: 0,

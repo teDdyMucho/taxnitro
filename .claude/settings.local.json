@@ -17,7 +17,8 @@
       "Bash(cp public/financial-report.html report/FTG_Financial_Report_App_v5.html)",
       "Bash(rm -f public/financial-report.html.bak)",
       "Bash(grep -oE '<aside class=\"sidebar\">.{0,300}' public/financial-report.html)",
-      "Bash(python -c ' *)"
+      "Bash(python -c ' *)",
+      "Bash(grep -n \"selected?.key === item.key && selected?.service\\\\|key={\\\\`\\\\${item.service}\" src/screens/admin/AdminDocumentsScreen.tsx)"
     ],
     "additionalDirectories": [
       "c:\\c\\Users\\AKT\\Desktop\\Tax Nitro\\taxnitro\\src\\components"

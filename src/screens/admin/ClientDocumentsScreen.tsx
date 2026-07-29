@@ -34,7 +34,7 @@ import {
   Document,
 } from '../../db/documents';
 import { createCustomRequest } from '../../db/customRequests';
-import { monthOf } from '../../db/requirements';
+import { monthOf, isStaffLabelFolder, staffLabelsForFolder } from '../../db/requirements';
 
 interface Props {
   client: Profile;
@@ -202,13 +202,18 @@ function StaffUploadModal({ client, visible, onClose, onUploaded }: {
   const { user } = useAuth();
   const sheet = useSheetStyles('lg');
   const [folderKey, setFolderKey] = useState<string | null>(null);
+  const [docLabel, setDocLabel]   = useState<string | null>(null); // for staff-label folders
   const [picked, setPicked] = useState<{ uri: string; name: string; mimeType: string } | null>(null);
   const [busy, setBusy] = useState(false);
 
   const services = Array.isArray(client.services) && client.services.length > 0 ? client.services : ['BK'];
   const folders = STAFF_UPLOAD_FOLDERS.filter(f => services.includes(f.service));
 
-  const reset = () => { setFolderKey(null); setPicked(null); setBusy(false); };
+  // Staff-deliverable folders (For Client Review / Final Statements) require a label pick.
+  const labelOptions = folderKey ? staffLabelsForFolder(folderKey) : [];
+  const needsLabel   = !!folderKey && isStaffLabelFolder(folderKey);
+
+  const reset = () => { setFolderKey(null); setDocLabel(null); setPicked(null); setBusy(false); };
   const close = () => { reset(); onClose(); };
 
   const pick = async () => {
@@ -226,10 +231,12 @@ function StaffUploadModal({ client, visible, onClose, onUploaded }: {
     try {
       const url = await uploadDocumentToStorage(client.id, folderKey, picked.uri, picked.name, picked.mimeType);
       if (!url) { setBusy(false); Alert.alert('Upload failed', 'Could not save file to storage.'); return; }
+      // For staff-label folders, prefix the chosen label so it's clear to the client.
+      const displayName = needsLabel && docLabel ? `${docLabel} — ${picked.name}` : picked.name;
       const doc = await createDocumentRecord({
         userId: client.id,
         email: client.email,
-        name: picked.name,
+        name: displayName,
         documentUrl: url,
         documentType: folderKey,
         uploadedByRole: (user?.role === 'admin' ? 'admin' : 'staff'),
@@ -258,13 +265,31 @@ function StaffUploadModal({ client, visible, onClose, onUploaded }: {
             {folders.map(f => {
               const active = folderKey === f.key;
               return (
-                <TouchableOpacity key={f.key} style={[su.folderRow, active && su.folderRowActive]} onPress={() => setFolderKey(f.key)} activeOpacity={0.75}>
+                <TouchableOpacity key={f.key} style={[su.folderRow, active && su.folderRowActive]} onPress={() => { setFolderKey(f.key); setDocLabel(null); }} activeOpacity={0.75}>
                   <Ionicons name={active ? 'radio-button-on' : 'radio-button-off'} size={18} color={active ? '#E8B923' : Colors.textMuted} />
                   <Text style={[su.folderText, active && { color: Colors.textPrimary, fontWeight: '700' }]}>{f.label}</Text>
                 </TouchableOpacity>
               );
             })}
           </ScrollView>
+
+          {/* Document label — required for staff-deliverable folders */}
+          {needsLabel && (
+            <>
+              <Text style={su.label}>What is this document?</Text>
+              <ScrollView style={{ maxHeight: 180 }} showsVerticalScrollIndicator={false}>
+                {labelOptions.map(opt => {
+                  const active = docLabel === opt;
+                  return (
+                    <TouchableOpacity key={opt} style={[su.folderRow, active && su.folderRowActive]} onPress={() => setDocLabel(opt)} activeOpacity={0.75}>
+                      <Ionicons name={active ? 'radio-button-on' : 'radio-button-off'} size={18} color={active ? '#E8B923' : Colors.textMuted} />
+                      <Text style={[su.folderText, active && { color: Colors.textPrimary, fontWeight: '700' }]}>{opt}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            </>
+          )}
 
           <Text style={su.label}>File</Text>
           <TouchableOpacity style={su.pickBtn} onPress={pick} activeOpacity={0.8}>
@@ -277,9 +302,9 @@ function StaffUploadModal({ client, visible, onClose, onUploaded }: {
               <Text style={su.cancelText}>Cancel</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[su.sendBtn, (!folderKey || !picked || busy) && { opacity: 0.5 }]}
+              style={[su.sendBtn, (!folderKey || !picked || busy || (needsLabel && !docLabel)) && { opacity: 0.5 }]}
               onPress={upload}
-              disabled={!folderKey || !picked || busy}
+              disabled={!folderKey || !picked || busy || (needsLabel && !docLabel)}
             >
               {busy ? <ActivityIndicator color="#3A3131" size="small" /> : <Text style={su.sendText}>Send to Client</Text>}
             </TouchableOpacity>

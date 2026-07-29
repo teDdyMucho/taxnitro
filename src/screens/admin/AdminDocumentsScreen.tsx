@@ -41,6 +41,7 @@ import {
   getRequirementForDocument,
   monthOf,
   formatMonthLabel,
+  serviceLabel,
 } from '../../db/requirements';
 
 // ── Viewer Modal ───────────────────────────────────────────────────────────────
@@ -205,6 +206,9 @@ function ApproveTagModal({ visible, doc, onConfirm, onCancel }: {
   const tagReady = !!doc && tagDocId === doc.id;
   const showTag  = tagReady && !!clientTag;
 
+  // Admin can tag which required item this upload fulfills. Show Bookkeeping and CFO
+  // groups (both services' items). Each item is keyed by service+key so BK and CFO
+  // items with the same key (e.g. bank_statements) don't select together.
   const services: Array<RequiredItem['service']> = ['BK', 'CFO'];
 
   return (
@@ -234,7 +238,7 @@ function ApproveTagModal({ visible, doc, onConfirm, onCancel }: {
                 <Ionicons name="checkmark-circle" size={20} color="#059669" />
                 <View style={{ flex: 1 }}>
                   <Text style={at.tagLabel}>{clientTag.label}</Text>
-                  <Text style={at.tagService}>{clientTag.service === 'BK' ? 'Bookkeeping' : 'TAX'}</Text>
+                  <Text style={at.tagService}>{serviceLabel(clientTag.service)}</Text>
                 </View>
               </View>
 
@@ -251,7 +255,7 @@ function ApproveTagModal({ visible, doc, onConfirm, onCancel }: {
               </View>
             </>
           ) : (
-            // ── Untagged (legacy) upload → admin picks manually (fallback) ──
+            // ── Untagged upload → admin picks the required item it fulfills ──
             <>
               <Text style={at.prompt}>
                 Tag which required item this fulfills for{' '}
@@ -261,12 +265,12 @@ function ApproveTagModal({ visible, doc, onConfirm, onCancel }: {
               <ScrollView style={{ maxHeight: 260 }} showsVerticalScrollIndicator={false}>
                 {services.map(svc => (
                   <View key={svc} style={{ marginBottom: 6 }}>
-                    <Text style={at.groupLabel}>{svc === 'BK' ? 'Bookkeeping' : 'TAX'}</Text>
+                    <Text style={at.groupLabel}>{serviceLabel(svc)}</Text>
                     {REQUIRED_UPLOADS.filter(i => i.service === svc).map(item => {
-                      const active = selected?.key === item.key;
+                      const active = selected?.key === item.key && selected?.service === item.service;
                       return (
                         <TouchableOpacity
-                          key={item.key}
+                          key={`${item.service}:${item.key}`}
                           style={[at.itemRow, active && at.itemRowActive]}
                           onPress={() => setSelected(active ? null : item)}
                           activeOpacity={0.75}

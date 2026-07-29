@@ -15,7 +15,7 @@ import {
 } from '../../db/profiles';
 import {
   getRequirementCountsForMonth, getFulfilledRequirements,
-  itemsForClient, reqKey, monthOf, formatMonthLabel,
+  itemsForClient, reqKey, monthOf, formatMonthLabel, serviceLabel,
 } from '../../db/requirements';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -1073,7 +1073,7 @@ function ProgressDetailModal({ client, onClose, onViewDocs }: {
                 if (svcItems.length === 0) return null;
                 return (
                 <View key={svc} style={pd.group}>
-                  <Text style={pd.groupLabel}>{svc === 'BK' ? 'Bookkeeping' : 'TAX'}</Text>
+                  <Text style={pd.groupLabel}>{serviceLabel(svc)}</Text>
                   {svcItems.map(item => {
                     const ok = fulfilled.has(reqKey(item.service, item.key));
                     return (
