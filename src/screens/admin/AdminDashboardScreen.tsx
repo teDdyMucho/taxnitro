@@ -12,7 +12,7 @@ import { useSheetStyles } from '../../hooks/useSheetStyles';
 import { useResponsive } from '../../hooks/useResponsive';
 import { supabase } from '../../lib/supabase';
 import { FOLDER_TABLES } from '../../db/documents';
-import { isRequirementFolder, itemsForFolder, reqKey, getRequirementDocCounts } from '../../db/requirements';
+import { isRequirementFolder, itemsForFolder, reqKey, getRequirementDocCounts, getTaggedFilesForItem, TaggedFile, RequiredItem } from '../../db/requirements';
 
 // ─── Folder metadata (FTG brand palette only) ───────────────────────────────
 const FOLDER_META: Record<string, { label: string; color: string; icon: string }> = {
@@ -148,6 +148,14 @@ export function AdminDashboardScreen({ onViewAllDocuments }: { onViewAllDocument
 
   const [stats, setStats]           = useState<Stats>({ totalClients: 0, totalStaff: 0, totalDocs: 0, newDocs: 0, docsThisWeek: 0, folderCounts: [], recentUploads: [] });
   const [reqCounts, setReqCounts]   = useState<Record<string, number>>({}); // docs tagged per requirement item
+  const [tagFilesItem, setTagFilesItem] = useState<RequiredItem | null>(null); // item whose tagged files are shown
+  const [tagFiles, setTagFiles]     = useState<TaggedFile[] | null>(null);   // null = loading
+
+  const openTaggedFiles = async (item: RequiredItem) => {
+    setTagFilesItem(item); setTagFiles(null);
+    const files = await getTaggedFilesForItem(item.service, item.key);
+    setTagFiles(files);
+  };
   const [loading, setLoading]       = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [menuDoc, setMenuDoc]       = useState<RecentDoc | null>(null);
@@ -186,16 +194,25 @@ export function AdminDashboardScreen({ onViewAllDocuments }: { onViewAllDocument
 
   useEffect(() => { if (!authLoading && user?.id) load(); }, [authLoading, user?.id]);
 
-  // Filter folder counts by selected period
+  // Filter folder counts by selected period. For a Required-Info COLLECTOR folder,
+  // the count is the sum of its required-item TAG counts (document_requirements),
+  // so the folder / Monthly Reporting / category totals match the item breakdown.
   const periodStart = useMemo(() => getPeriodStart(period), [period]);
   const filteredFolderCounts = useMemo(() =>
-    stats.folderCounts.map(f => ({
-      ...f,
-      count: stats.recentUploads.filter(d =>
-        d.document_type === f.table && d.created_at >= periodStart
-      ).length,
-    })),
-  [stats, periodStart]);
+    stats.folderCounts.map(f => {
+      if (isRequirementFolder(f.table)) {
+        const count = itemsForFolder(f.table)
+          .reduce((sum, item) => sum + (reqCounts[reqKey(item.service, item.key)] ?? 0), 0);
+        return { ...f, count };
+      }
+      return {
+        ...f,
+        count: stats.recentUploads.filter(d =>
+          d.document_type === f.table && d.created_at >= periodStart
+        ).length,
+      };
+    }),
+  [stats, periodStart, reqCounts]);
 
   const maxFolder = Math.max(...filteredFolderCounts.map(f => f.count), 1);
 
@@ -457,14 +474,20 @@ export function AdminDashboardScreen({ onViewAllDocuments }: { onViewAllDocument
                                 const icnt  = reqCounts[reqKey(item.service, item.key)] ?? 0;
                                 const ipct  = Math.round((icnt / maxFolder) * 100);
                                 return (
-                                  <View key={item.key} style={s.subSubRow}>
+                                  <TouchableOpacity
+                                    key={item.key}
+                                    style={s.subSubRow}
+                                    activeOpacity={icnt > 0 ? 0.6 : 1}
+                                    onPress={() => { if (icnt > 0) openTaggedFiles(item); }}
+                                  >
                                     <View style={[s.subDot, { backgroundColor: cmeta.color, opacity: 0.6 }]} />
                                     <Text style={s.subLabel} numberOfLines={2}>{item.label}</Text>
+                                    {icnt > 0 && <Ionicons name="chevron-forward" size={13} color="#94A3B8" style={{ marginRight: 2 }} />}
                                     <View style={s.barTrack}>
                                       <View style={[s.barFill, { width: `${Math.max(ipct, icnt > 0 ? 6 : 0)}%` as any, backgroundColor: cmeta.color }]} />
                                     </View>
                                     <Text style={[s.folderCount, { color: cmeta.color }]}>{icnt}</Text>
-                                  </View>
+                                  </TouchableOpacity>
                                 );
                               })}
                             </View>
@@ -671,6 +694,60 @@ export function AdminDashboardScreen({ onViewAllDocuments }: { onViewAllDocument
 
             <TouchableOpacity style={s.menuItem} onPress={() => setMenuDoc(null)}>
               <Text style={[s.menuItemText, { color: '#A8998A', flex: 1, textAlign: 'center' }]}>Cancel</Text>
+            </TouchableOpacity>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* ── Tagged files for a required item ── */}
+      <Modal visible={!!tagFilesItem} transparent animationType="slide" onRequestClose={() => setTagFilesItem(null)}>
+        <Pressable style={[s.menuOverlay, sheet.overlay]} onPress={() => setTagFilesItem(null)}>
+          <Pressable style={[s.menuSheet, sheet.sheet]} onPress={() => {}}>
+            <View style={s.menuHandle} />
+            <Text style={s.menuFileName} numberOfLines={1}>{tagFilesItem?.label}</Text>
+            <Text style={s.menuEmail}>Tagged files</Text>
+            <View style={s.menuDivider} />
+
+            {tagFiles === null ? (
+              <ActivityIndicator color="#E8B923" style={{ paddingVertical: 24 }} />
+            ) : tagFiles.length === 0 ? (
+              <Text style={{ color: '#A8998A', fontSize: 13, textAlign: 'center', paddingVertical: 24 }}>No files tagged yet.</Text>
+            ) : (
+              <ScrollView style={{ maxHeight: 360 }} showsVerticalScrollIndicator={false}>
+                {tagFiles.map(f => (
+                  <TouchableOpacity
+                    key={f.document_id}
+                    style={s.tagFileRow}
+                    activeOpacity={0.75}
+                    onPress={() => {
+                      if (f.document_url) {
+                        Platform.OS === 'web'
+                          ? window.open(f.document_url, '_blank')
+                          : Linking.openURL(f.document_url).catch(() => {});
+                      }
+                    }}
+                  >
+                    <View style={s.tagFileIcon}><Ionicons name="document-text-outline" size={16} color="#B5905B" /></View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={s.tagFileName} numberOfLines={1}>{f.name}</Text>
+                      <Text style={s.tagFileMeta} numberOfLines={1}>{f.client_email} · {new Date(f.created_at).toLocaleDateString()}</Text>
+                    </View>
+                    <View style={[s.tagFileStatus, {
+                      backgroundColor: f.status === 'approved' ? '#D1FAE5' : f.status === 'rejected' ? '#FEE2E2' : '#FEF3C7',
+                    }]}>
+                      <Text style={[s.tagFileStatusText, {
+                        color: f.status === 'approved' ? '#065F46' : f.status === 'rejected' ? '#991B1B' : '#92400E',
+                      }]}>{f.status}</Text>
+                    </View>
+                    <Ionicons name="open-outline" size={16} color="#A8998A" />
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            )}
+
+            <View style={s.menuDivider} />
+            <TouchableOpacity style={s.menuItem} onPress={() => setTagFilesItem(null)}>
+              <Text style={[s.menuItemText, { color: '#A8998A', flex: 1, textAlign: 'center' }]}>Close</Text>
             </TouchableOpacity>
           </Pressable>
         </Pressable>
@@ -1132,6 +1209,12 @@ const s = StyleSheet.create({
     fontSize: 15,
     fontWeight: '700',
   },
+  tagFileRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 11, paddingHorizontal: 4 },
+  tagFileIcon: { width: 34, height: 34, borderRadius: 10, backgroundColor: 'rgba(181,144,91,0.12)', alignItems: 'center', justifyContent: 'center' },
+  tagFileName: { color: '#111827', fontSize: 13.5, fontWeight: '600' },
+  tagFileMeta: { color: '#94A3B8', fontSize: 11, marginTop: 1 },
+  tagFileStatus: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10 },
+  tagFileStatusText: { fontSize: 10, fontWeight: '800', textTransform: 'capitalize' },
   menuEmail: {
     color: '#A8998A',
     fontSize: 12,

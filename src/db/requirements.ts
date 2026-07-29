@@ -174,6 +174,57 @@ export async function getRequirementDocCounts(): Promise<Record<string, number>>
   return counts;
 }
 
+export interface TaggedFile {
+  document_id: string;
+  document_table: string;
+  client_email: string;
+  status: RequirementStatus;
+  month: string;
+  name: string;
+  created_at: string;
+  document_url: string;
+}
+
+/**
+ * The actual files tagged to a given required item (service + key). Loads each
+ * tag's document from its folder table so the admin can open them. Admin/staff only.
+ */
+export async function getTaggedFilesForItem(service: RequirementService, key: string): Promise<TaggedFile[]> {
+  const { data: tags, error } = await supabase
+    .from('document_requirements')
+    .select('document_id, document_table, client_email, status, month')
+    .eq('service', service)
+    .eq('requirement_key', key)
+    .not('document_id', 'is', null);
+  if (error) { console.error('getTaggedFilesForItem:', error.message); return []; }
+
+  const rows = (tags ?? []) as { document_id: string; document_table: string; client_email: string; status: RequirementStatus; month: string }[];
+
+  const files = await Promise.all(rows.map(async (t) => {
+    if (!t.document_table) return null;
+    const { data: doc } = await supabase
+      .from(t.document_table)
+      .select('name, file_name, created_at, document_url')
+      .eq('id', t.document_id)
+      .maybeSingle();
+    if (!doc) return null;   // doc was deleted — skip
+    return {
+      document_id:    t.document_id,
+      document_table: t.document_table,
+      client_email:   t.client_email,
+      status:         t.status,
+      month:          t.month,
+      name:           doc.file_name || doc.name || 'Document',
+      created_at:     doc.created_at,
+      document_url:   doc.document_url,
+    } as TaggedFile;
+  }));
+
+  return files.filter(Boolean).sort(
+    (a, b) => new Date(b!.created_at).getTime() - new Date(a!.created_at).getTime(),
+  ) as TaggedFile[];
+}
+
 /** Accepted-item counts per client for a month → { client_email: count }. Admin/staff only. */
 export async function getRequirementCountsForMonth(month: string): Promise<Record<string, number>> {
   const { data, error } = await supabase
