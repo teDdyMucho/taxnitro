@@ -12,7 +12,12 @@
       "PowerShell(if \\($?\\) { \"---EXPO OK---\" })",
       "Bash(node -e ' *)",
       "Bash(echo \"exit:$?\")",
-      "Bash(grep -oE '<h[1-3][^>]*>[^<]{1,60}' report/FTG_Financial_Report_App_v5.html)"
+      "Bash(grep -oE '<h[1-3][^>]*>[^<]{1,60}' report/FTG_Financial_Report_App_v5.html)",
+      "Bash(grep -oE '\\(--[a-z-]+:\\\\s*#[0-9a-fA-F]{3,8}\\)|\\(--[a-z-]+:\\\\s*rgb[a]?\\\\\\([^\\)]+\\\\\\)\\)' public/financial-report.html)",
+      "Bash(cp public/financial-report.html report/FTG_Financial_Report_App_v5.html)",
+      "Bash(rm -f public/financial-report.html.bak)",
+      "Bash(grep -oE '<aside class=\"sidebar\">.{0,300}' public/financial-report.html)",
+      "Bash(python -c ' *)"
     ],
     "additionalDirectories": [
       "c:\\c\\Users\\AKT\\Desktop\\Tax Nitro\\taxnitro\\src\\components"

@@ -94,7 +94,7 @@ export function AdminNavigator({ onLogout }: { onLogout: () => void }) {
       case 'Clients':   return <ClientListScreen onSelectClient={c => setSelectedClient(c)} />;
       case 'Staff':     return <StaffManagementScreen />;
       case 'Workflow':  return <WorkflowDashboardScreen />;
-      case 'Reports':   return <ReportsScreen />;
+      case 'Reports':   return <ReportsScreen onBack={() => handleTabPress('Dashboard')} />;
       case 'Profile':   return <ProfileScreen onLogout={onLogout} />;
     }
   };
