@@ -41,7 +41,7 @@ const NAV_ITEMS: NavItem[] = [
   { name: 'Documents', label: 'Documents', active: 'documents',     inactive: 'documents-outline' },
   { name: 'Clients',   label: 'Clients',   active: 'people',        inactive: 'people-outline' },
   { name: 'Staff',     label: 'Staff',     active: 'shield',        inactive: 'shield-outline', adminOnly: true },
-  { name: 'Workflow',  label: 'Workflow',  active: 'git-branch',    inactive: 'git-branch-outline', adminOnly: true },
+  { name: 'Workflow',  label: 'Workflow',  active: 'git-branch',    inactive: 'git-branch-outline' },
   { name: 'Reports',   label: 'Financial Reports', active: 'analytics', inactive: 'analytics-outline' },
   { name: 'Profile',   label: 'Profile',   active: 'person',        inactive: 'person-outline' },
 ];
