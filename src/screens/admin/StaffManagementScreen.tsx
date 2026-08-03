@@ -527,6 +527,12 @@ export function StaffManagementScreen() {
   const staffCount  = staff.filter(s => s.role === 'staff').length;
   const activeCount = staff.filter(s => s.is_active).length;
 
+  // Admins first, then staff (each already name-sorted from the query).
+  const sortedStaff = [...staff].sort((a, b) => {
+    if (a.role === b.role) return 0;
+    return a.role === 'admin' ? -1 : 1;
+  });
+
   const renderItem = ({ item }: { item: Profile }) => {
     const safeRole = (item.role === 'admin' ? 'admin' : 'staff') as 'admin' | 'staff';
     const rc = ROLE_CONFIG[safeRole];
@@ -560,32 +566,42 @@ export function StaffManagementScreen() {
 
         {/* Actions */}
         <View style={s.actions}>
-          {/* Role toggle pill */}
-          <TouchableOpacity
-            style={[s.rolePill, { backgroundColor: rc.pillBg, borderColor: rc.pillBorder }]}
-            onPress={() => toggleRole(item)}
-            activeOpacity={0.7}
-          >
-            <Ionicons
-              name={item.role === 'admin' ? 'shield-checkmark' : 'person'}
-              size={11}
-              color={rc.pillText}
-            />
-            <Text style={[s.rolePillText, { color: rc.pillText }]}>{rc.label}</Text>
-          </TouchableOpacity>
+          {/* Role pill — admins are read-only (role can't be changed here) */}
+          {safeRole === 'admin' ? (
+            <View style={[s.rolePill, { backgroundColor: rc.pillBg, borderColor: rc.pillBorder }]}>
+              <Ionicons name="shield-checkmark" size={11} color={rc.pillText} />
+              <Text style={[s.rolePillText, { color: rc.pillText }]}>{rc.label}</Text>
+              <Ionicons name="lock-closed" size={9} color={rc.pillText} style={{ marginLeft: 1 }} />
+            </View>
+          ) : (
+            <TouchableOpacity
+              style={[s.rolePill, { backgroundColor: rc.pillBg, borderColor: rc.pillBorder }]}
+              onPress={() => toggleRole(item)}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="person" size={11} color={rc.pillText} />
+              <Text style={[s.rolePillText, { color: rc.pillText }]}>{rc.label}</Text>
+            </TouchableOpacity>
+          )}
 
-          {/* Active / Inactive toggle */}
-          <TouchableOpacity
-            style={[s.activeBtn, item.is_active ? s.activeBtnOn : s.activeBtnOff]}
-            onPress={() => toggleActive(item)}
-            activeOpacity={0.7}
-          >
-            <Ionicons
-              name={item.is_active ? 'checkmark-circle' : 'ban-outline'}
-              size={19}
-              color={item.is_active ? '#E8B923' : '#A8998A'}
-            />
-          </TouchableOpacity>
+          {/* Active / Inactive toggle — admins can't be deactivated here */}
+          {safeRole === 'admin' ? (
+            <View style={[s.activeBtn, s.activeBtnOn]}>
+              <Ionicons name="checkmark-circle" size={19} color="#E8B923" />
+            </View>
+          ) : (
+            <TouchableOpacity
+              style={[s.activeBtn, item.is_active ? s.activeBtnOn : s.activeBtnOff]}
+              onPress={() => toggleActive(item)}
+              activeOpacity={0.7}
+            >
+              <Ionicons
+                name={item.is_active ? 'checkmark-circle' : 'ban-outline'}
+                size={19}
+                color={item.is_active ? '#E8B923' : '#A8998A'}
+              />
+            </TouchableOpacity>
+          )}
         </View>
       </View>
     );
@@ -667,7 +683,7 @@ export function StaffManagementScreen() {
         </View>
       ) : (
         <FlatList
-          data={staff}
+          data={sortedStaff}
           keyExtractor={i => i.id}
           renderItem={renderItem}
           contentContainerStyle={s.listContent}

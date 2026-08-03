@@ -76,10 +76,12 @@ export async function getAllClients(): Promise<Profile[]> {
 }
 
 export async function getAllStaff(): Promise<Profile[]> {
+  // Include admins too — they show in the Staff tab (admins first), but their
+  // role is not editable there (see StaffManagementScreen).
   const { data, error } = await supabase
     .from('profiles')
     .select('*')
-    .eq('role', 'staff')
+    .in('role', ['staff', 'admin'])
     .order('full_name', { ascending: true });
   if (error) { console.error('getAllStaff:', error.message); return []; }
   return (data ?? []) as Profile[];
