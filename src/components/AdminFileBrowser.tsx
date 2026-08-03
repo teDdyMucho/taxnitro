@@ -17,10 +17,13 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import WebView from 'react-native-webview';
 import { supabase } from '../lib/supabase';
-import { approveDocument, rejectDocument } from '../db/documents';
+import { approveDocument, rejectDocument, deleteDocument } from '../db/documents';
 import type { Document } from '../db/documents';
 import { useAuth } from '../context/AuthContext';
 import { FileConversationPanel } from './FileConversationPanel';
+import {
+  listSubfolders, createSubfolder, deleteSubfolder, moveDocumentToSubfolder, Subfolder,
+} from '../db/subfolders';
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
@@ -91,6 +94,7 @@ interface FileRow {
   id: string; name: string; status: string;
   approval_status: string; approval_note: string | null;
   document_url: string; created_at: string; email: string;
+  subfolder_id?: string | null;
   convCount?: number; latestReply?: ConvPreview | null; unreadCount?: number;
 }
 
@@ -151,6 +155,17 @@ export function AdminFileBrowser({ visible, onClose }: Props) {
   const [rejectFolder, setRejectFolder]   = useState('');
   const [viewFile, setViewFile]           = useState<{ url: string; name: string } | null>(null);
   const [convOpen, setConvOpen]           = useState(false);
+  const [deleteTarget, setDeleteTarget]   = useState<{ file: FileRow; folderTable: string } | null>(null);
+  const [deleteBusy, setDeleteBusy]       = useState(false);
+
+  // Subfolders (staff/admin created, global per folder table)
+  const [subfolders, setSubfolders]       = useState<Subfolder[]>([]);
+  const [activeSubfolder, setActiveSubfolder] = useState<string>('all'); // 'all' | 'none' | <id>
+  const [newSubOpen, setNewSubOpen]       = useState(false);
+  const [newSubName, setNewSubName]       = useState('');
+  const [subBusy, setSubBusy]             = useState(false);
+  const [delSubTarget, setDelSubTarget]   = useState<Subfolder | null>(null);
+  const [moveTarget, setMoveTarget]       = useState<{ file: FileRow; folderTable: string } | null>(null);
 
   // ── Load categories ─────────────────────────────────────────────────────────
 
@@ -223,8 +238,10 @@ export function AdminFileBrowser({ visible, onClose }: Props) {
     setNav({ kind: 'files', category: cat, folder, client });
     setFileQuery('');
     setFileFilter('all');
+    setActiveSubfolder('all');
     setLoading(true);
-    const base = supabase.from(folder.table).select('id, name, status, approval_status, approval_note, document_url, created_at, email').order('created_at', { ascending: false });
+    listSubfolders(folder.table).then(subs => { if (mountedRef.current) setSubfolders(subs); });
+    const base = supabase.from(folder.table).select('id, name, status, approval_status, approval_note, document_url, created_at, email, subfolder_id').order('created_at', { ascending: false });
     const { data } = client.user_id ? await base.eq('user_id', client.user_id) : await base.eq('email', client.email);
     const rawFiles = (data ?? []) as FileRow[];
     const fileIds = rawFiles.map(f => f.id);
@@ -291,6 +308,72 @@ export function AdminFileBrowser({ visible, onClose }: Props) {
     setActionBusy(null);
   };
 
+  // ── Delete ──────────────────────────────────────────────────────────────────
+
+  const handleDelete = async () => {
+    if (!deleteTarget || deleteBusy) return;
+    setDeleteBusy(true);
+    const ok = await deleteDocument(deleteTarget.file.id, deleteTarget.folderTable as any);
+    setDeleteBusy(false);
+    if (ok) {
+      const id = deleteTarget.file.id;
+      setFiles(prev => prev.filter(f => f.id !== id));
+      // If we were viewing the deleted file, step back to its file list.
+      setNav(prev => prev.kind === 'detail' && prev.file.id === id
+        ? { kind: 'files', category: prev.category, folder: prev.folder, client: prev.client }
+        : prev);
+    }
+    setDeleteTarget(null);
+  };
+
+  // ── Subfolders ──────────────────────────────────────────────────────────────
+
+  const currentFolderTable = nav.kind === 'files' || nav.kind === 'detail' ? nav.folder.table : null;
+
+  const handleCreateSubfolder = async () => {
+    const name = newSubName.trim();
+    if (!name || !currentFolderTable || subBusy) return;
+    setSubBusy(true);
+    const created = await createSubfolder(currentFolderTable, name, user?.email ?? null);
+    setSubBusy(false);
+    if (created) {
+      setSubfolders(prev => [...prev, created].sort((a, b) => a.name.localeCompare(b.name)));
+      setActiveSubfolder(created.id);
+    }
+    setNewSubName('');
+    setNewSubOpen(false);
+  };
+
+  const handleDeleteSubfolder = async () => {
+    if (!delSubTarget || subBusy) return;
+    setSubBusy(true);
+    const ok = await deleteSubfolder(delSubTarget.id);
+    setSubBusy(false);
+    if (ok) {
+      const id = delSubTarget.id;
+      setSubfolders(prev => prev.filter(s => s.id !== id));
+      // Files that were in it become unfiled locally (FK reset to null).
+      setFiles(prev => prev.map(f => f.subfolder_id === id ? { ...f, subfolder_id: null } : f));
+      if (activeSubfolder === id) setActiveSubfolder('all');
+    }
+    setDelSubTarget(null);
+  };
+
+  const handleMoveToSubfolder = async (subfolderId: string | null) => {
+    if (!moveTarget || subBusy) return;
+    setSubBusy(true);
+    const ok = await moveDocumentToSubfolder(moveTarget.folderTable, moveTarget.file.id, subfolderId);
+    setSubBusy(false);
+    if (ok) {
+      const id = moveTarget.file.id;
+      setFiles(prev => prev.map(f => f.id === id ? { ...f, subfolder_id: subfolderId } : f));
+      setNav(prev => prev.kind === 'detail' && prev.file.id === id
+        ? { ...prev, file: { ...prev.file, subfolder_id: subfolderId } }
+        : prev);
+    }
+    setMoveTarget(null);
+  };
+
   // ── File filter helper ──────────────────────────────────────────────────────
 
   const filteredFiles = files.filter(f => {
@@ -298,6 +381,8 @@ export function AdminFileBrowser({ visible, onClose }: Props) {
     if (fileFilter === 'viewed'   && f.status !== 'viewed')                return false;
     if (fileFilter === 'rejected' && f.approval_status !== 'rejected')     return false;
     if (fileFilter === 'approved' && f.approval_status !== 'approved')     return false;
+    if (activeSubfolder === 'none' && f.subfolder_id)                      return false;
+    if (activeSubfolder !== 'all' && activeSubfolder !== 'none' && f.subfolder_id !== activeSubfolder) return false;
     if (fileQuery.trim() && !f.name.toLowerCase().includes(fileQuery.toLowerCase())) return false;
     return true;
   });
@@ -466,6 +551,51 @@ export function AdminFileBrowser({ visible, onClose }: Props) {
             </TouchableOpacity>
           )}
         </View>
+
+        {/* Subfolder bar */}
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={fb.subBar} contentContainerStyle={fb.subBarContent}>
+          {([
+            { id: 'all',  label: 'All Files', icon: 'albums-outline' as const },
+            { id: 'none', label: 'Unfiled',   icon: 'file-tray-outline' as const },
+          ]).map(chip => {
+            const active = activeSubfolder === chip.id;
+            const cnt = chip.id === 'all' ? files.length : files.filter(f => !f.subfolder_id).length;
+            return (
+              <TouchableOpacity key={chip.id} style={[fb.subChip, active && fb.subChipActive]} onPress={() => setActiveSubfolder(chip.id)} activeOpacity={0.8}>
+                <Ionicons name={chip.icon} size={13} color={active ? '#1C1713' : '#B5905B'} />
+                <Text style={[fb.subChipText, active && fb.subChipTextActive]}>{chip.label}</Text>
+                {cnt > 0 && <Text style={[fb.subChipCount, active && { color: '#1C1713' }]}>{cnt}</Text>}
+              </TouchableOpacity>
+            );
+          })}
+          {subfolders.map(sf => {
+            const active = activeSubfolder === sf.id;
+            const cnt = files.filter(f => f.subfolder_id === sf.id).length;
+            return (
+              <TouchableOpacity
+                key={sf.id}
+                style={[fb.subChip, active && fb.subChipActive]}
+                onPress={() => setActiveSubfolder(sf.id)}
+                onLongPress={() => setDelSubTarget(sf)}
+                delayLongPress={350}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="folder" size={13} color={active ? '#1C1713' : '#B5905B'} />
+                <Text style={[fb.subChipText, active && fb.subChipTextActive]}>{sf.name}</Text>
+                {cnt > 0 && <Text style={[fb.subChipCount, active && { color: '#1C1713' }]}>{cnt}</Text>}
+                {active && (
+                  <TouchableOpacity onPress={() => setDelSubTarget(sf)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+                    <Ionicons name="close" size={13} color="#1C1713" />
+                  </TouchableOpacity>
+                )}
+              </TouchableOpacity>
+            );
+          })}
+          <TouchableOpacity style={fb.subNewChip} onPress={() => { setNewSubName(''); setNewSubOpen(true); }} activeOpacity={0.8}>
+            <Ionicons name="add" size={15} color="#E8B923" />
+            <Text style={fb.subNewText}>New Subfolder</Text>
+          </TouchableOpacity>
+        </ScrollView>
 
         {/* Filter tabs */}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={fb.filterBar} contentContainerStyle={fb.filterBarContent}>
@@ -649,6 +779,30 @@ export function AdminFileBrowser({ visible, onClose }: Props) {
           </View>
         </View>
 
+        {/* Subfolder */}
+        <View style={fb.detailSection}>
+          <Text style={fb.detailSectionLabel}>SUBFOLDER</Text>
+          <View style={fb.detailCard}>
+            <View style={[fb.detailRow, { borderBottomWidth: 0 }]}>
+              <View style={fb.detailRowIcon}>
+                <Ionicons name="folder-open-outline" size={14} color="#E8B923" />
+              </View>
+              <Text style={fb.detailRowLabel}>Filed in</Text>
+              <Text style={fb.detailRowValue} numberOfLines={1}>
+                {subfolders.find(s => s.id === file.subfolder_id)?.name ?? 'Not filed'}
+              </Text>
+            </View>
+          </View>
+          <TouchableOpacity
+            style={[fb.replyBtn, { marginTop: 8, backgroundColor: '#E8B923' }]}
+            onPress={() => setMoveTarget({ file, folderTable: folder.table })}
+            activeOpacity={0.82}
+          >
+            <Ionicons name="swap-horizontal-outline" size={15} color="#1C1713" />
+            <Text style={fb.replyBtnText}>Move to Subfolder</Text>
+          </TouchableOpacity>
+        </View>
+
         {/* Conversation reply preview */}
         {(file.convCount ?? 0) > 0 && file.latestReply && (
           <View style={fb.detailSection}>
@@ -687,7 +841,11 @@ export function AdminFileBrowser({ visible, onClose }: Props) {
         <TouchableOpacity style={fb.headerIconBtn} onPress={() => setViewFile({ url: nav.file.document_url, name: nav.file.name })} activeOpacity={0.75}>
           <Ionicons name="pencil-outline" size={16} color="rgba(255,255,255,0.7)" />
         </TouchableOpacity>
-        <TouchableOpacity style={[fb.headerIconBtn, { backgroundColor: 'rgba(239,68,68,0.15)' }]} activeOpacity={0.75}>
+        <TouchableOpacity
+          style={[fb.headerIconBtn, { backgroundColor: 'rgba(239,68,68,0.15)' }]}
+          activeOpacity={0.75}
+          onPress={() => setDeleteTarget({ file: nav.file, folderTable: nav.folder.table })}
+        >
           <Ionicons name="trash-outline" size={16} color="#EF4444" />
         </TouchableOpacity>
       </View>
@@ -783,6 +941,94 @@ export function AdminFileBrowser({ visible, onClose }: Props) {
         </Pressable>
       </Modal>
 
+      {/* ── Delete confirm modal ── */}
+      <Modal visible={!!deleteTarget} transparent animationType="fade" onRequestClose={() => setDeleteTarget(null)}>
+        <Pressable style={fb.modalOverlay} onPress={() => setDeleteTarget(null)}>
+          <Pressable style={fb.rejectModal} onPress={() => {}}>
+            <View style={fb.rejectIconWrap}><Ionicons name="trash-outline" size={28} color="#EF4444" /></View>
+            <Text style={fb.rejectModalTitle}>Delete File?</Text>
+            <Text style={fb.rejectModalSub} numberOfLines={2}>{deleteTarget?.file.name}</Text>
+            <Text style={[fb.rejectModalSub, { marginTop: 2, fontSize: 12 }]}>This permanently removes the file. This cannot be undone.</Text>
+            <View style={fb.rejectModalBtns}>
+              <TouchableOpacity style={fb.rejectCancelBtn} onPress={() => setDeleteTarget(null)}><Text style={fb.rejectCancelText}>Cancel</Text></TouchableOpacity>
+              <TouchableOpacity style={[fb.rejectConfirmBtn, deleteBusy && { opacity: 0.5 }]} onPress={handleDelete} disabled={deleteBusy}>
+                {deleteBusy ? <ActivityIndicator size="small" color="#FFFFFF" /> : <Text style={fb.rejectConfirmText}>Delete</Text>}
+              </TouchableOpacity>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* ── New subfolder modal ── */}
+      <Modal visible={newSubOpen} transparent animationType="fade" onRequestClose={() => setNewSubOpen(false)}>
+        <Pressable style={fb.modalOverlay} onPress={() => setNewSubOpen(false)}>
+          <Pressable style={fb.rejectModal} onPress={() => {}}>
+            <View style={[fb.rejectIconWrap, { backgroundColor: 'rgba(232,185,35,0.15)' }]}><Ionicons name="folder-outline" size={26} color="#E8B923" /></View>
+            <Text style={fb.rejectModalTitle}>New Subfolder</Text>
+            <Text style={fb.rejectModalSub} numberOfLines={2}>Inside {(nav as any).folder?.label ?? 'this folder'}</Text>
+            <TextInput style={fb.rejectInput} placeholder="Subfolder name" placeholderTextColor="#94A3B8" value={newSubName} onChangeText={setNewSubName} autoFocus onSubmitEditing={handleCreateSubfolder} />
+            <View style={fb.rejectModalBtns}>
+              <TouchableOpacity style={fb.rejectCancelBtn} onPress={() => setNewSubOpen(false)}><Text style={fb.rejectCancelText}>Cancel</Text></TouchableOpacity>
+              <TouchableOpacity style={[fb.rejectConfirmBtn, { backgroundColor: '#E8B923' }, (subBusy || !newSubName.trim()) && { opacity: 0.5 }]} onPress={handleCreateSubfolder} disabled={subBusy || !newSubName.trim()}>
+                {subBusy ? <ActivityIndicator size="small" color="#1C1713" /> : <Text style={[fb.rejectConfirmText, { color: '#1C1713' }]}>Create</Text>}
+              </TouchableOpacity>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* ── Delete subfolder confirm ── */}
+      <Modal visible={!!delSubTarget} transparent animationType="fade" onRequestClose={() => setDelSubTarget(null)}>
+        <Pressable style={fb.modalOverlay} onPress={() => setDelSubTarget(null)}>
+          <Pressable style={fb.rejectModal} onPress={() => {}}>
+            <View style={fb.rejectIconWrap}><Ionicons name="trash-outline" size={26} color="#EF4444" /></View>
+            <Text style={fb.rejectModalTitle}>Delete Subfolder?</Text>
+            <Text style={fb.rejectModalSub} numberOfLines={2}>{delSubTarget?.name}</Text>
+            <Text style={[fb.rejectModalSub, { marginTop: 2, fontSize: 12 }]}>Files inside stay — they just become unfiled.</Text>
+            <View style={fb.rejectModalBtns}>
+              <TouchableOpacity style={fb.rejectCancelBtn} onPress={() => setDelSubTarget(null)}><Text style={fb.rejectCancelText}>Cancel</Text></TouchableOpacity>
+              <TouchableOpacity style={[fb.rejectConfirmBtn, subBusy && { opacity: 0.5 }]} onPress={handleDeleteSubfolder} disabled={subBusy}>
+                {subBusy ? <ActivityIndicator size="small" color="#FFFFFF" /> : <Text style={fb.rejectConfirmText}>Delete</Text>}
+              </TouchableOpacity>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* ── Move to subfolder picker ── */}
+      <Modal visible={!!moveTarget} transparent animationType="fade" onRequestClose={() => setMoveTarget(null)}>
+        <Pressable style={fb.modalOverlay} onPress={() => setMoveTarget(null)}>
+          <Pressable style={fb.rejectModal} onPress={() => {}}>
+            <View style={[fb.rejectIconWrap, { backgroundColor: 'rgba(232,185,35,0.15)' }]}><Ionicons name="swap-horizontal-outline" size={26} color="#E8B923" /></View>
+            <Text style={fb.rejectModalTitle}>Move to Subfolder</Text>
+            <Text style={fb.rejectModalSub} numberOfLines={2}>{moveTarget?.file.name}</Text>
+            <ScrollView style={{ maxHeight: 260, alignSelf: 'stretch', marginTop: 10 }} showsVerticalScrollIndicator={false}>
+              <TouchableOpacity style={[fb.moveRow, !moveTarget?.file.subfolder_id && fb.moveRowActive]} onPress={() => handleMoveToSubfolder(null)} disabled={subBusy}>
+                <Ionicons name="file-tray-outline" size={16} color="#B5905B" />
+                <Text style={fb.moveRowText}>Unfiled (no subfolder)</Text>
+                {!moveTarget?.file.subfolder_id && <Ionicons name="checkmark" size={16} color="#10B981" />}
+              </TouchableOpacity>
+              {subfolders.map(sf => {
+                const active = moveTarget?.file.subfolder_id === sf.id;
+                return (
+                  <TouchableOpacity key={sf.id} style={[fb.moveRow, active && fb.moveRowActive]} onPress={() => handleMoveToSubfolder(sf.id)} disabled={subBusy}>
+                    <Ionicons name="folder" size={16} color="#B5905B" />
+                    <Text style={fb.moveRowText} numberOfLines={1}>{sf.name}</Text>
+                    {active && <Ionicons name="checkmark" size={16} color="#10B981" />}
+                  </TouchableOpacity>
+                );
+              })}
+              {subfolders.length === 0 && (
+                <Text style={[fb.rejectModalSub, { textAlign: 'center', paddingVertical: 12 }]}>No subfolders yet. Create one from the file list.</Text>
+              )}
+            </ScrollView>
+            <View style={[fb.rejectModalBtns, { marginTop: 8 }]}>
+              <TouchableOpacity style={fb.rejectCancelBtn} onPress={() => setMoveTarget(null)}><Text style={fb.rejectCancelText}>Close</Text></TouchableOpacity>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
       {/* ── Document viewer ── */}
       {viewFile && (
         <Modal visible animationType="slide" onRequestClose={() => setViewFile(null)}>
@@ -839,6 +1085,22 @@ const fb = StyleSheet.create({
   headerFolderLabel: { color: 'rgba(255,255,255,0.45)', fontSize: 11 },
   headerTitle: { color: '#FFFFFF', fontSize: 16, fontWeight: '800', letterSpacing: -0.2, marginTop: 2 },
   headerIconBtn: { width: 34, height: 34, borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.1)', alignItems: 'center', justifyContent: 'center' },
+
+  // Subfolder bar
+  subBar:        { flexGrow: 0, backgroundColor: '#FFFFFF' },
+  subBarContent: { paddingHorizontal: 12, paddingVertical: 8, gap: 8, alignItems: 'center' },
+  subChip:       { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 11, paddingVertical: 7, borderRadius: 20, backgroundColor: '#F8F4EC', borderWidth: 1, borderColor: '#EADFC8' },
+  subChipActive: { backgroundColor: '#E8B923', borderColor: '#E8B923' },
+  subChipText:   { color: '#8B6914', fontSize: 12, fontWeight: '700' },
+  subChipTextActive: { color: '#1C1713' },
+  subChipCount:  { color: '#B5905B', fontSize: 11, fontWeight: '800', marginLeft: 2 },
+  subNewChip:    { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 11, paddingVertical: 7, borderRadius: 20, backgroundColor: 'rgba(232,185,35,0.12)', borderWidth: 1, borderColor: 'rgba(232,185,35,0.4)', borderStyle: 'dashed' },
+  subNewText:    { color: '#B5905B', fontSize: 12, fontWeight: '800' },
+
+  // Move-to-subfolder rows
+  moveRow:       { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 12, paddingVertical: 12, borderRadius: 12, backgroundColor: '#F8FAFC', marginBottom: 6 },
+  moveRowActive: { backgroundColor: '#ECFDF5', borderWidth: 1, borderColor: '#A7F3D0' },
+  moveRowText:   { flex: 1, color: '#374151', fontSize: 13, fontWeight: '600' },
 
   // Breadcrumb
   breadcrumb: { flexDirection: 'row', alignItems: 'center', gap: 5, flexWrap: 'wrap', paddingHorizontal: 16, paddingVertical: 8, backgroundColor: '#FFFFFF', borderBottomWidth: 1, borderBottomColor: '#F1F5F9' },

@@ -13,10 +13,14 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabase } from '../lib/supabase';
+import { FOLDER_TABLES } from '../db/documents';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
+// One notification row — either a new client comment on a file, or a new client
+// upload. Uploads carry no message_ids; they are "read" by flipping the doc status.
 interface UnreadFile {
+  kind: 'comment' | 'upload';
   file_id: string;
   folder_table: string;
   file_name: string;
@@ -80,7 +84,9 @@ export function AdminReplyBell({ onMarkedRead }: Props) {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const { data } = await supabase
+
+    // ── (a) Unread client comments ──────────────────────────────────────────
+    const { data: convData } = await supabase
       .from('file_conversations')
       .select('id, file_id, folder_table, sender_name, message, created_at')
       .eq('sender_role', 'client')
@@ -89,12 +95,10 @@ export function AdminReplyBell({ onMarkedRead }: Props) {
 
     if (!mountedRef.current) return;
 
-    const rows = data ?? [];
-
-    // Group by (folder_table, file_id)
+    // Group comments by (folder_table, file_id)
     const map = new Map<string, UnreadFile>();
-    for (const r of rows) {
-      const key = `${r.folder_table}::${r.file_id}`;
+    for (const r of convData ?? []) {
+      const key = `comment::${r.folder_table}::${r.file_id}`;
       const existing = map.get(key);
       if (existing) {
         existing.unread_count += 1;
@@ -102,6 +106,7 @@ export function AdminReplyBell({ onMarkedRead }: Props) {
         // keep the latest message (rows are desc so first entry is latest)
       } else {
         map.set(key, {
+          kind:          'comment',
           file_id:       r.file_id,
           folder_table:  r.folder_table,
           file_name:     '',   // filled in below
@@ -114,25 +119,51 @@ export function AdminReplyBell({ onMarkedRead }: Props) {
       }
     }
 
-    const grouped = Array.from(map.values());
+    const commentItems = Array.from(map.values());
 
-    // Fetch file names from each table in parallel
-    const withNames = await Promise.all(
-      grouped.map(async (item) => {
+    // Fetch comment file names from each table in parallel
+    const commentsWithNames = await Promise.all(
+      commentItems.map(async (item) => {
         const { data: fileData } = await supabase
           .from(item.folder_table)
           .select('name, file_name')
           .eq('id', item.file_id)
           .maybeSingle();
-
         const name = (fileData as any)?.file_name || (fileData as any)?.name || 'Unknown file';
         return { ...item, file_name: name };
       })
     );
 
+    // ── (b) New client uploads (status='new', uploaded by a client) ─────────
+    const uploadResults = await Promise.all(
+      FOLDER_TABLES.map(async (table) => {
+        const { data } = await supabase
+          .from(table)
+          .select('id, name, file_name, email, created_at, uploaded_by_role')
+          .eq('status', 'new')
+          .order('created_at', { ascending: false });
+        // Treat rows without an uploader tag as client uploads (legacy default).
+        return (data ?? [])
+          .filter((d: any) => (d.uploaded_by_role ?? 'client') === 'client')
+          .map((d: any): UnreadFile => ({
+            kind:         'upload',
+            file_id:      d.id,
+            folder_table: table,
+            file_name:    d.file_name || d.name || 'Unknown file',
+            sender_name:  d.email || 'Client',
+            last_message: 'Uploaded a new file',
+            last_at:      d.created_at,
+            unread_count: 1,
+            message_ids:  [],
+          }));
+      })
+    );
+    const uploadItems = uploadResults.flat();
+
     if (mountedRef.current) {
-      // Sort by last_at descending
-      setItems(withNames.sort((a, b) => new Date(b.last_at).getTime() - new Date(a.last_at).getTime()));
+      const all = [...commentsWithNames, ...uploadItems]
+        .sort((a, b) => new Date(b.last_at).getTime() - new Date(a.last_at).getTime());
+      setItems(all);
       setLoading(false);
     }
   }, []);
@@ -153,31 +184,55 @@ export function AdminReplyBell({ onMarkedRead }: Props) {
         event: 'UPDATE',
         schema: 'public',
         table: 'file_conversations',
-      }, () => { load(); })
-      .subscribe();
+      }, () => { load(); });
 
+    // Live-refresh when a client uploads into any folder table.
+    for (const table of FOLDER_TABLES) {
+      channel.on('postgres_changes', { event: 'INSERT', schema: 'public', table }, () => { load(); });
+    }
+
+    channel.subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [load]);
 
   // ── Mark file read ─────────────────────────────────────────────────────────
 
-  const markFileRead = async (item: UnreadFile) => {
-    setMarking(item.file_id);
-    await supabase
-      .from('file_conversations')
-      .update({ is_read: true })
-      .in('id', item.message_ids);
+  const markOneRead = async (item: UnreadFile) => {
+    if (item.kind === 'comment') {
+      await supabase.from('file_conversations').update({ is_read: true }).in('id', item.message_ids);
+    } else {
+      // Upload: flip the document status from 'new' → 'viewed'.
+      await supabase.from(item.folder_table).update({ status: 'viewed' }).eq('id', item.file_id);
+    }
+  };
 
-    setItems(prev => prev.filter(f => f.file_id !== item.file_id));
+  const markFileRead = async (item: UnreadFile) => {
+    setMarking(`${item.kind}:${item.file_id}`);
+    await markOneRead(item);
+    setItems(prev => prev.filter(f => !(f.kind === item.kind && f.file_id === item.file_id)));
     setMarking(null);
     onMarkedRead?.();
   };
 
   const markAllRead = async () => {
-    const allIds = items.flatMap(f => f.message_ids);
-    if (allIds.length === 0) return;
+    if (items.length === 0) return;
     setMarking('__all__');
-    await supabase.from('file_conversations').update({ is_read: true }).in('id', allIds);
+    // Comments: one batched update. Uploads: per-table batched updates.
+    const commentIds = items.filter(i => i.kind === 'comment').flatMap(i => i.message_ids);
+    if (commentIds.length > 0) {
+      await supabase.from('file_conversations').update({ is_read: true }).in('id', commentIds);
+    }
+    const uploadsByTable = new Map<string, string[]>();
+    for (const i of items.filter(i => i.kind === 'upload')) {
+      const arr = uploadsByTable.get(i.folder_table) ?? [];
+      arr.push(i.file_id);
+      uploadsByTable.set(i.folder_table, arr);
+    }
+    await Promise.all(
+      [...uploadsByTable.entries()].map(([table, ids]) =>
+        supabase.from(table).update({ status: 'viewed' }).in('id', ids)
+      )
+    );
     setItems([]);
     setMarking(null);
     setOpen(false);
@@ -225,9 +280,9 @@ export function AdminReplyBell({ onMarkedRead }: Props) {
                   <Ionicons name="notifications" size={16} color="#E8B923" />
                 </View>
                 <View>
-                  <Text style={bs.panelTitle}>Client Replies</Text>
+                  <Text style={bs.panelTitle}>Notifications</Text>
                   <Text style={bs.panelSub}>
-                    {totalUnread > 0 ? `${totalUnread} unread message${totalUnread !== 1 ? 's' : ''}` : 'All caught up'}
+                    {totalUnread > 0 ? `${totalUnread} new item${totalUnread !== 1 ? 's' : ''}` : 'All caught up'}
                   </Text>
                 </View>
               </View>
@@ -254,22 +309,22 @@ export function AdminReplyBell({ onMarkedRead }: Props) {
             ) : items.length === 0 ? (
               <View style={bs.empty}>
                 <Ionicons name="checkmark-circle-outline" size={48} color="rgba(232,185,35,0.3)" />
-                <Text style={bs.emptyTitle}>No new replies</Text>
-                <Text style={bs.emptySub}>All client messages have been read.</Text>
+                <Text style={bs.emptyTitle}>No new notifications</Text>
+                <Text style={bs.emptySub}>New client uploads and messages will appear here.</Text>
               </View>
             ) : (
               <ScrollView bounces={false} showsVerticalScrollIndicator={false} style={{ maxHeight: 420 }}>
                 {items.map((item, idx) => (
-                  <View key={`${item.folder_table}::${item.file_id}`}>
+                  <View key={`${item.kind}::${item.folder_table}::${item.file_id}`}>
                     {idx > 0 && <View style={bs.sep} />}
                     <View style={bs.item}>
                       {/* Icon */}
                       <LinearGradient
-                        colors={['#E8B923', '#B5905B']}
+                        colors={item.kind === 'upload' ? ['#10B981', '#059669'] : ['#E8B923', '#B5905B']}
                         start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
                         style={bs.itemAvatar}
                       >
-                        <Ionicons name="chatbubble-ellipses" size={14} color="#1C1713" />
+                        <Ionicons name={item.kind === 'upload' ? 'cloud-upload' : 'chatbubble-ellipses'} size={14} color={item.kind === 'upload' ? '#FFFFFF' : '#1C1713'} />
                       </LinearGradient>
 
                       {/* Content */}
@@ -295,11 +350,11 @@ export function AdminReplyBell({ onMarkedRead }: Props) {
                         <TouchableOpacity
                           style={bs.readBtn}
                           onPress={() => markFileRead(item)}
-                          disabled={marking === item.file_id}
+                          disabled={marking === `${item.kind}:${item.file_id}`}
                           activeOpacity={0.75}
                           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                         >
-                          {marking === item.file_id
+                          {marking === `${item.kind}:${item.file_id}`
                             ? <ActivityIndicator size="small" color="#E8B923" />
                             : <Ionicons name="checkmark-done-outline" size={16} color="#E8B923" />
                           }
