@@ -213,6 +213,8 @@ export function AdminFileBrowser({ visible, onClose }: Props) {
 
   const openFolder = async (cat: Category, folder: FolderMeta) => {
     setNav({ kind: 'clients', category: cat, folder });
+    setActiveSubfolder('all');
+    listSubfolders(folder.table).then(subs => { if (mountedRef.current) setSubfolders(subs); });
     setLoading(true);
     const { data: docs } = await supabase.from(folder.table).select('id, user_id, email, status').order('email', { ascending: true });
     const allDocs = docs ?? [];
@@ -328,7 +330,8 @@ export function AdminFileBrowser({ visible, onClose }: Props) {
 
   // ── Subfolders ──────────────────────────────────────────────────────────────
 
-  const currentFolderTable = nav.kind === 'files' || nav.kind === 'detail' ? nav.folder.table : null;
+  const currentFolderTable =
+    nav.kind === 'clients' || nav.kind === 'files' || nav.kind === 'detail' ? nav.folder.table : null;
 
   const handleCreateSubfolder = async () => {
     const name = newSubName.trim();
@@ -402,6 +405,55 @@ export function AdminFileBrowser({ visible, onClose }: Props) {
 
   // ── Renderers ───────────────────────────────────────────────────────────────
 
+  // Subfolder chip bar — used at both the clients level and the file-list level,
+  // so staff can create/manage subfolders even when the folder is empty.
+  // `withFileFilters` shows the All Files / Unfiled chips (file-list only).
+  const renderSubfolderBar = (withFileFilters: boolean) => (
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={fb.subBar} contentContainerStyle={fb.subBarContent}>
+      {withFileFilters && ([
+        { id: 'all',  label: 'All Files', icon: 'albums-outline' as const },
+        { id: 'none', label: 'Unfiled',   icon: 'file-tray-outline' as const },
+      ]).map(chip => {
+        const active = activeSubfolder === chip.id;
+        const cnt = chip.id === 'all' ? files.length : files.filter(f => !f.subfolder_id).length;
+        return (
+          <TouchableOpacity key={chip.id} style={[fb.subChip, active && fb.subChipActive]} onPress={() => setActiveSubfolder(chip.id)} activeOpacity={0.8}>
+            <Ionicons name={chip.icon} size={13} color={active ? '#1C1713' : '#B5905B'} />
+            <Text style={[fb.subChipText, active && fb.subChipTextActive]}>{chip.label}</Text>
+            {cnt > 0 && <Text style={[fb.subChipCount, active && { color: '#1C1713' }]}>{cnt}</Text>}
+          </TouchableOpacity>
+        );
+      })}
+      {subfolders.map(sf => {
+        const active = withFileFilters && activeSubfolder === sf.id;
+        const cnt = files.filter(f => f.subfolder_id === sf.id).length;
+        return (
+          <TouchableOpacity
+            key={sf.id}
+            style={[fb.subChip, active && fb.subChipActive]}
+            onPress={() => withFileFilters ? setActiveSubfolder(sf.id) : setDelSubTarget(sf)}
+            onLongPress={() => setDelSubTarget(sf)}
+            delayLongPress={350}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="folder" size={13} color={active ? '#1C1713' : '#B5905B'} />
+            <Text style={[fb.subChipText, active && fb.subChipTextActive]}>{sf.name}</Text>
+            {withFileFilters && cnt > 0 && <Text style={[fb.subChipCount, active && { color: '#1C1713' }]}>{cnt}</Text>}
+            {active && (
+              <TouchableOpacity onPress={() => setDelSubTarget(sf)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+                <Ionicons name="close" size={13} color="#1C1713" />
+              </TouchableOpacity>
+            )}
+          </TouchableOpacity>
+        );
+      })}
+      <TouchableOpacity style={fb.subNewChip} onPress={() => { setNewSubName(''); setNewSubOpen(true); }} activeOpacity={0.8}>
+        <Ionicons name="add" size={15} color="#E8B923" />
+        <Text style={fb.subNewText}>New Subfolder</Text>
+      </TouchableOpacity>
+    </ScrollView>
+  );
+
   const renderCategories = () => (
     <ScrollView contentContainerStyle={fb.scrollContent} showsVerticalScrollIndicator={false}>
       {CATEGORIES.map(cat => {
@@ -453,7 +505,7 @@ export function AdminFileBrowser({ visible, onClose }: Props) {
           const stats = folderStats.find(s => s.table === f.table) ?? { total: 0, newCount: 0 };
           const isEmpty = stats.total === 0;
           return (
-            <TouchableOpacity key={f.table} style={[fb.folderRow, idx === cat.folders.length - 1 && { borderBottomWidth: 0 }]} onPress={() => !isEmpty && openFolder(cat, f)} activeOpacity={isEmpty ? 1 : 0.82}>
+            <TouchableOpacity key={f.table} style={[fb.folderRow, idx === cat.folders.length - 1 && { borderBottomWidth: 0 }]} onPress={() => openFolder(cat, f)} activeOpacity={0.82}>
               <View style={[fb.folderIcon, { backgroundColor: cat.color + '18' }]}>
                 <Ionicons name={f.icon} size={20} color={cat.color} />
               </View>
@@ -481,10 +533,13 @@ export function AdminFileBrowser({ visible, onClose }: Props) {
   const renderClients = () => {
     if (nav.kind !== 'clients') return null;
     const { category: cat, folder } = nav;
-    if (clients.length === 0) return (
-      <View style={fb.emptyWrap}><Ionicons name="people-outline" size={52} color="rgba(232,185,35,0.25)" /><Text style={fb.emptyTitle}>No clients yet</Text><Text style={fb.emptySub}>No files have been uploaded to this folder.</Text></View>
-    );
     return (
+      <View style={{ flex: 1 }}>
+        {/* Subfolder management — available even when the folder has no files yet */}
+        {renderSubfolderBar(false)}
+        {clients.length === 0 ? (
+          <View style={fb.emptyWrap}><Ionicons name="people-outline" size={52} color="rgba(232,185,35,0.25)" /><Text style={fb.emptyTitle}>No files yet</Text><Text style={fb.emptySub}>Create subfolders above. Files appear here once uploaded.</Text></View>
+        ) : (
       <FlatList
         data={clients}
         keyExtractor={c => c.user_id ?? c.email}
@@ -508,6 +563,8 @@ export function AdminFileBrowser({ visible, onClose }: Props) {
           </TouchableOpacity>
         )}
       />
+        )}
+      </View>
     );
   };
 
@@ -553,49 +610,7 @@ export function AdminFileBrowser({ visible, onClose }: Props) {
         </View>
 
         {/* Subfolder bar */}
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={fb.subBar} contentContainerStyle={fb.subBarContent}>
-          {([
-            { id: 'all',  label: 'All Files', icon: 'albums-outline' as const },
-            { id: 'none', label: 'Unfiled',   icon: 'file-tray-outline' as const },
-          ]).map(chip => {
-            const active = activeSubfolder === chip.id;
-            const cnt = chip.id === 'all' ? files.length : files.filter(f => !f.subfolder_id).length;
-            return (
-              <TouchableOpacity key={chip.id} style={[fb.subChip, active && fb.subChipActive]} onPress={() => setActiveSubfolder(chip.id)} activeOpacity={0.8}>
-                <Ionicons name={chip.icon} size={13} color={active ? '#1C1713' : '#B5905B'} />
-                <Text style={[fb.subChipText, active && fb.subChipTextActive]}>{chip.label}</Text>
-                {cnt > 0 && <Text style={[fb.subChipCount, active && { color: '#1C1713' }]}>{cnt}</Text>}
-              </TouchableOpacity>
-            );
-          })}
-          {subfolders.map(sf => {
-            const active = activeSubfolder === sf.id;
-            const cnt = files.filter(f => f.subfolder_id === sf.id).length;
-            return (
-              <TouchableOpacity
-                key={sf.id}
-                style={[fb.subChip, active && fb.subChipActive]}
-                onPress={() => setActiveSubfolder(sf.id)}
-                onLongPress={() => setDelSubTarget(sf)}
-                delayLongPress={350}
-                activeOpacity={0.8}
-              >
-                <Ionicons name="folder" size={13} color={active ? '#1C1713' : '#B5905B'} />
-                <Text style={[fb.subChipText, active && fb.subChipTextActive]}>{sf.name}</Text>
-                {cnt > 0 && <Text style={[fb.subChipCount, active && { color: '#1C1713' }]}>{cnt}</Text>}
-                {active && (
-                  <TouchableOpacity onPress={() => setDelSubTarget(sf)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
-                    <Ionicons name="close" size={13} color="#1C1713" />
-                  </TouchableOpacity>
-                )}
-              </TouchableOpacity>
-            );
-          })}
-          <TouchableOpacity style={fb.subNewChip} onPress={() => { setNewSubName(''); setNewSubOpen(true); }} activeOpacity={0.8}>
-            <Ionicons name="add" size={15} color="#E8B923" />
-            <Text style={fb.subNewText}>New Subfolder</Text>
-          </TouchableOpacity>
-        </ScrollView>
+        {renderSubfolderBar(true)}
 
         {/* Filter tabs */}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={fb.filterBar} contentContainerStyle={fb.filterBarContent}>
