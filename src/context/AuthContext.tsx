@@ -1,6 +1,8 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import { View, Platform } from 'react-native';
 import { supabase } from '../lib/supabase';
 import { BankAccount, normalizeBankAccounts } from '../db/requirements';
+import { useIdleLogout, IDLE_TIMEOUT_MS } from '../hooks/useIdleLogout';
 
 export type UserRole = 'client' | 'staff' | 'admin';
 export type ClientService = 'BK' | 'TAX' | 'CFO';
@@ -17,11 +19,17 @@ export interface AuthUser {
   bankAccounts: BankAccount[];  // one required Bank Statements slot per account
 }
 
+/** Why the last session ended — drives the notice shown on the signed-out screen. */
+export type SignOutReason = 'idle' | null;
+
 interface AuthContextValue {
   isAuthenticated: boolean;
   isLoading: boolean;
   error: string | null;
   user: AuthUser | null;
+  /** Set when the session was ended for the user rather than by them. */
+  signOutReason: SignOutReason;
+  clearSignOutReason: () => void;
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
   register: (fullName: string, email: string, password: string) => Promise<{ success: boolean; needsConfirmation: boolean; error?: string }>;
   logout: () => Promise<void>;
@@ -84,6 +92,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [user, setUser] = useState<AuthUser | null>(null);
+  const [signOutReason, setSignOutReason] = useState<SignOutReason>(null);
 
   useEffect(() => {
     // Step 1: Fast session check from local storage — no network needed
@@ -138,6 +147,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const login = useCallback(async (email: string, password: string) => {
     setError(null);
+    setSignOutReason(null);   // a fresh sign-in clears the last session's notice
     const { error: authError } = await supabase.auth.signInWithPassword({ email, password });
 
     if (authError) {
@@ -182,12 +192,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const logout = useCallback(async () => {
+    setSignOutReason(null);   // signing out by hand needs no explanation
     setUser(null);
     setIsAuthenticated(false);
     await supabase.auth.signOut();
   }, []);
 
   const clearError = useCallback(() => setError(null), []);
+  const clearSignOutReason = useCallback(() => setSignOutReason(null), []);
+
+  // ── Idle sign-out ──────────────────────────────────────────────────────────
+  // Applies to every role. Financial documents sit behind this session, so a
+  // screen left unattended must not stay signed in.
+  const handleIdle = useCallback(async () => {
+    setUser(null);
+    setIsAuthenticated(false);
+    setSignOutReason('idle');   // the signed-out screen explains what happened
+    await supabase.auth.signOut();
+  }, []);
+
+  const { notifyActivity } = useIdleLogout({
+    enabled: isAuthenticated,
+    onIdle: handleIdle,
+    timeoutMs: IDLE_TIMEOUT_MS,
+  });
 
   const forgotPassword = useCallback(async (email: string) => {
     const { error: err } = await supabase.auth.resetPasswordForEmail(email, {
@@ -198,8 +226,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ isAuthenticated, isLoading, error, user, login, register, logout, clearError, forgotPassword }}>
-      {children}
+    <AuthContext.Provider value={{
+      isAuthenticated, isLoading, error, user, signOutReason, clearSignOutReason,
+      login, register, logout, clearError, forgotPassword,
+    }}>
+      {/* Web tracks input through DOM listeners. React Native has no global
+          input event, so touches are captured here and passed along — the
+          capture handler returns false, so it never swallows the gesture. */}
+      {Platform.OS === 'web' ? children : (
+        <View
+          style={{ flex: 1 }}
+          onStartShouldSetResponderCapture={() => { notifyActivity(); return false; }}
+          onMoveShouldSetResponderCapture={() => { notifyActivity(); return false; }}
+        >
+          {children}
+        </View>
+      )}
     </AuthContext.Provider>
   );
 }

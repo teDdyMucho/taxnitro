@@ -22,6 +22,9 @@ import type { Document } from '../db/documents';
 import { useAuth } from '../context/AuthContext';
 import { FileConversationPanel } from './FileConversationPanel';
 import {
+  useDownloadSelection, DownloadSelectionBar, DownloadNotice, SelectCheckbox,
+} from './DownloadSelectionBar';
+import {
   listSubfolders, createSubfolder, deleteSubfolder, moveDocumentToSubfolder, Subfolder,
 } from '../db/subfolders';
 
@@ -379,6 +382,10 @@ export function AdminFileBrowser({ visible, onClose }: Props) {
 
   // ── File filter helper ──────────────────────────────────────────────────────
 
+  const dl = useDownloadSelection<FileRow>(
+    useCallback((f: FileRow) => ({ url: f.document_url, name: f.name }), []),
+  );
+
   const filteredFiles = files.filter(f => {
     if (fileFilter === 'new'      && f.status !== 'new')                   return false;
     if (fileFilter === 'viewed'   && f.status !== 'viewed')                return false;
@@ -653,6 +660,14 @@ export function AdminFileBrowser({ visible, onClose }: Props) {
             keyExtractor={f => f.id}
             contentContainerStyle={{ padding: 12, gap: 8 }}
             showsVerticalScrollIndicator={false}
+            ListHeaderComponent={
+              <DownloadSelectionBar
+                selection={dl}
+                items={filteredFiles}
+                zipName={`${client?.name ?? 'Client'} — ${folder.label}`}
+                label="files"
+              />
+            }
             renderItem={({ item }) => {
               const ext      = item.name.split('.').pop()?.toLowerCase() ?? 'file';
               const extUpper = ext.toUpperCase().slice(0, 4);
@@ -662,11 +677,22 @@ export function AdminFileBrowser({ visible, onClose }: Props) {
               const isApproved = approval === 'approved';
               return (
                 <TouchableOpacity
-                  style={[fb.fileListCard, isRejected && fb.fileListCardRejected]}
-                  onPress={() => setNav({ kind: 'detail', category: cat, folder, client, file: item })}
+                  style={[
+                    fb.fileListCard,
+                    isRejected && fb.fileListCardRejected,
+                    dl.selecting && dl.selected.has(item.id) && fb.fileListCardMarked,
+                  ]}
+                  onPress={() => dl.selecting
+                    ? dl.toggle(item.id)
+                    : setNav({ kind: 'detail', category: cat, folder, client, file: item })}
                   activeOpacity={0.88}
                 >
-                  {/* Icon */}
+                  {/* Icon — the checkbox takes its place while marking. */}
+                  {dl.selecting ? (
+                    <View style={fb.fileListIconSlot}>
+                      <SelectCheckbox checked={dl.selected.has(item.id)} />
+                    </View>
+                  ) : (
                   <View style={[fb.fileListIcon, {
                     backgroundColor: isRejected ? '#FEE2E2' : isApproved ? '#D1FAE5' : '#FEF3C7',
                   }]}>
@@ -679,6 +705,7 @@ export function AdminFileBrowser({ visible, onClose }: Props) {
                       <Text style={fb.fileListExtText}>{extUpper}</Text>
                     </View>
                   </View>
+                  )}
 
                   {/* Info */}
                   <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
@@ -836,11 +863,15 @@ export function AdminFileBrowser({ visible, onClose }: Props) {
           </View>
         )}
 
-        {/* View Document */}
-        <View style={[fb.detailSection, { paddingBottom: 32 }]}>
-          <TouchableOpacity style={fb.viewDocBtn} onPress={() => setViewFile({ url: file.document_url, name: file.name })} activeOpacity={0.82}>
+        {/* View / Download */}
+        <View style={[fb.detailSection, { paddingBottom: 32, flexDirection: 'row', gap: 10 }]}>
+          <TouchableOpacity style={[fb.viewDocBtn, { flex: 2 }]} onPress={() => setViewFile({ url: file.document_url, name: file.name })} activeOpacity={0.82}>
             <Ionicons name="eye-outline" size={18} color="#1C1713" />
             <Text style={fb.viewDocBtnText}>View Document</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={fb.dlDocBtn} onPress={() => dl.downloadSingle(file)} activeOpacity={0.82}>
+            <Ionicons name="download-outline" size={18} color="#B5905B" />
+            <Text style={fb.dlDocBtnText}>Download</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -936,6 +967,8 @@ export function AdminFileBrowser({ visible, onClose }: Props) {
             {nav.kind === 'detail'     && renderFileDetail()}
           </>
         )}
+
+        <DownloadNotice message={dl.notice} />
       </View>
 
       {/* ── Reject modal ── */}
@@ -1188,6 +1221,15 @@ const fb = StyleSheet.create({
     borderWidth: 1, borderColor: '#F1F5F9',
     shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 4, elevation: 1,
   },
+  fileListCardMarked: { backgroundColor: 'rgba(232,185,35,0.10)', borderColor: 'rgba(232,185,35,0.55)' },
+  fileListIconSlot: { width: 46, height: 46, alignItems: 'center', justifyContent: 'center' },
+  dlDocBtn: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7,
+    paddingVertical: 14, borderRadius: 14,
+    backgroundColor: 'rgba(232,185,35,0.14)',
+    borderWidth: 1, borderColor: 'rgba(232,185,35,0.45)',
+  },
+  dlDocBtnText: { color: '#B5905B', fontSize: 14, fontWeight: '800' },
   fileListCardRejected: { backgroundColor: '#FFF5F5', borderColor: '#FECACA', borderLeftWidth: 3, borderLeftColor: '#EF4444' },
   fileListIcon:   { width: 52, height: 60, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexShrink: 0, position: 'relative' },
   fileListExtBadge: { position: 'absolute', bottom: 2, right: 2, borderRadius: 4, paddingHorizontal: 4, paddingVertical: 1 },

@@ -18,6 +18,9 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import {
+  useDownloadSelection, DownloadSelectionBar, DownloadNotice, SelectCheckbox,
+} from '../../components/DownloadSelectionBar';
 import * as DocumentPicker from 'expo-document-picker';
 import * as WebBrowser from 'expo-web-browser';
 import WebView from 'react-native-webview';
@@ -280,6 +283,16 @@ function SubFolderView({ root, folders, title, documents, refreshing, onRefresh,
   const list = folders ?? root.subFolders;
 
   // Count documents for a folder — a GROUP folder sums its children's docs.
+  const folderDl = useDownloadSelection<Document>(
+    useCallback((d: Document) => ({ url: d.document_url, name: displayName(d) }), []),
+  );
+
+  /** Every document in a folder — a group folder pulls in its children's too. */
+  const docsIn = (sf: SubFolder): Document[] =>
+    sf.children
+      ? sf.children.flatMap(c => documents.filter(d => d.document_type === c.key))
+      : documents.filter(d => d.document_type === sf.key);
+
   const countFor = (sf: SubFolder): { total: number; unread: number } => {
     if (sf.children) {
       return sf.children.reduce((acc, c) => {
@@ -357,11 +370,26 @@ function SubFolderView({ root, folders, title, documents, refreshing, onRefresh,
                 </View>
               </View>
 
+              {/* Take the whole folder without opening it. */}
+              {total > 0 && (
+                <TouchableOpacity
+                  style={[s.folderDlBtn, folderDl.busy && { opacity: 0.5 }]}
+                  onPress={() => folderDl.download(docsIn(sf), sf.label)}
+                  disabled={folderDl.busy}
+                  activeOpacity={0.75}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <Ionicons name="download-outline" size={16} color="#B5905B" />
+                </TouchableOpacity>
+              )}
+
               <Ionicons name="chevron-forward" size={17} color={Colors.textMuted} />
             </TouchableOpacity>
           );
         })}
       </ScrollView>
+
+      <DownloadNotice message={folderDl.notice} />
     </View>
   );
 }
@@ -383,6 +411,10 @@ function DocListView({ sf, root, rootColor, documents, refreshing, onRefresh, on
   // Client uploads only via the sidebar "Upload" button now, so every folder view
   // is read-only here (view / approve / reject — no per-folder upload button).
   const readOnly = true;
+
+  const dl = useDownloadSelection<Document>(
+    useCallback((d: Document) => ({ url: d.document_url, name: displayName(d) }), []),
+  );
 
   const unread = documents.filter(d => d.status !== 'viewed').length;
 
@@ -483,13 +515,35 @@ function DocListView({ sf, root, rootColor, documents, refreshing, onRefresh, on
         contentContainerStyle={[s.docList, { paddingBottom: pb }]}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor='#E8B923' />}
         showsVerticalScrollIndicator={false}
+        ListHeaderComponent={
+          filtered.length > 0 ? (
+            <DownloadSelectionBar
+              selection={dl}
+              // Whatever search and the filter pills currently leave visible.
+              items={filtered}
+              zipName={sf.label}
+              label="files"
+            />
+          ) : null
+        }
         renderItem={({ item }) =>
           item.type === 'header'
             ? <Text style={s.monthHeader}>{formatMonthLabel(item.month)}</Text>
-            : <DocCard doc={item.doc} sf={sf} onPress={() => onDocPress(item.doc)} />
+            : (
+              <DocCard
+                doc={item.doc}
+                sf={sf}
+                selecting={dl.selecting}
+                marked={dl.selected.has(item.doc.id)}
+                onPress={() => (dl.selecting ? dl.toggle(item.doc.id) : onDocPress(item.doc))}
+                onDownload={() => dl.downloadSingle(item.doc)}
+              />
+            )
         }
         ListEmptyComponent={<EmptyDocs sf={sf} />}
       />
+
+      <DownloadNotice message={dl.notice} />
 
       <UploadModal
         visible={uploadOpen}
@@ -540,7 +594,10 @@ function ApprovalBadge({ status }: { status: string }) {
 
 // ── Doc card ──────────────────────────────────────────────────────────────────
 
-function DocCard({ doc, sf, onPress }: { doc: Document; sf: SubFolder; onPress: () => void }) {
+function DocCard({ doc, sf, onPress, selecting, marked, onDownload }: {
+  doc: Document; sf: SubFolder; onPress: () => void;
+  selecting: boolean; marked: boolean; onDownload: () => void;
+}) {
   const isNew      = doc.status !== 'viewed';
   const isPending  = (doc.approval_status ?? 'approved') === 'pending';
   const isRejected = (doc.approval_status ?? 'approved') === 'rejected';
@@ -553,6 +610,7 @@ function DocCard({ doc, sf, onPress }: { doc: Document; sf: SubFolder; onPress: 
         isNew && !isPending && !isRejected && s.docCardNew,
         isPending  && s.docCardPending,
         isRejected && s.docCardRejected,
+        selecting && marked && s.docCardMarked,
       ]}
       onPress={onPress}
       activeOpacity={0.78}
@@ -561,15 +619,19 @@ function DocCard({ doc, sf, onPress }: { doc: Document; sf: SubFolder; onPress: 
       {isRejected && <View style={[s.newAccent, { backgroundColor: '#EF4444' }]} />}
       {isNew && !isPending && !isRejected && <View style={[s.newAccent, { backgroundColor: sf.color }]} />}
 
-      {/* File type badge */}
-      <View style={[s.extBox, { backgroundColor: isPending ? '#FEF3C7' : isRejected ? '#FEF2F2' : sf.bg }]}>
-        <Ionicons
-          name={isPending ? 'time-outline' : isRejected ? 'close-circle-outline' : 'document-text'}
-          size={20}
-          color={isPending ? '#F59E0B' : isRejected ? '#EF4444' : sf.color}
-        />
-        {!!ext && <Text style={[s.extText, { color: isPending ? '#F59E0B' : isRejected ? '#EF4444' : sf.color }]}>{ext}</Text>}
-      </View>
+      {/* While marking, the type badge gives way to the checkbox. */}
+      {selecting ? (
+        <View style={s.extBoxSlot}><SelectCheckbox checked={marked} /></View>
+      ) : (
+        <View style={[s.extBox, { backgroundColor: isPending ? '#FEF3C7' : isRejected ? '#FEF2F2' : sf.bg }]}>
+          <Ionicons
+            name={isPending ? 'time-outline' : isRejected ? 'close-circle-outline' : 'document-text'}
+            size={20}
+            color={isPending ? '#F59E0B' : isRejected ? '#EF4444' : sf.color}
+          />
+          {!!ext && <Text style={[s.extText, { color: isPending ? '#F59E0B' : isRejected ? '#EF4444' : sf.color }]}>{ext}</Text>}
+        </View>
+      )}
 
       <View style={s.docCardBody}>
         <Text style={s.docCardName} numberOfLines={2}>{displayName(doc)}</Text>
@@ -587,7 +649,16 @@ function DocCard({ doc, sf, onPress }: { doc: Document; sf: SubFolder; onPress: 
 
       <View style={s.docCardRight}>
         {!isPending && !isRejected && <StatusBadge status={doc.status} size="sm" />}
-        <Ionicons name="chevron-forward" size={15} color={Colors.textMuted} style={{ marginTop: 4 }} />
+        {selecting ? null : (
+          <TouchableOpacity
+            style={s.cardDlBtn}
+            onPress={onDownload}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Ionicons name="download-outline" size={15} color="#B5905B" />
+          </TouchableOpacity>
+        )}
+        <Ionicons name="chevron-forward" size={15} color={Colors.textMuted} style={{ marginTop: 2 }} />
       </View>
     </TouchableOpacity>
   );
@@ -1469,6 +1540,21 @@ const s = StyleSheet.create({
   sfMeta:    { color: '#A8998A', fontSize: 12, marginBottom: 8 },
   miniBar:   { height: 3, backgroundColor: '#F5F0E8', borderRadius: 2, overflow: 'hidden' },
   miniBarFill: { height: '100%', borderRadius: 2 },
+  folderDlBtn: {
+    width: 34, height: 34, borderRadius: 10,
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: 'rgba(232,185,35,0.12)',
+    borderWidth: 1, borderColor: 'rgba(232,185,35,0.35)',
+  },
+  // Checkbox occupies the type-badge slot while marking, so rows don't shift.
+  extBoxSlot: { width: 52, height: 52, alignItems: 'center', justifyContent: 'center' },
+  docCardMarked: { backgroundColor: 'rgba(232,185,35,0.10)', borderColor: 'rgba(232,185,35,0.55)' },
+  cardDlBtn: {
+    width: 30, height: 30, borderRadius: 9,
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: 'rgba(232,185,35,0.12)',
+    marginTop: 4,
+  },
 
   // doc header — gradient, no bg color needed
   docHeader:    { paddingHorizontal: 16, paddingBottom: 14 },

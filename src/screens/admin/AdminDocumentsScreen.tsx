@@ -23,8 +23,12 @@ import { AdminReplyBell } from '../../components/AdminReplyBell';
 import { AdminFileBrowser } from '../../components/AdminFileBrowser';
 import { useAuth } from '../../context/AuthContext';
 import { useSheetStyles } from '../../hooks/useSheetStyles';
+import { useResponsive } from '../../hooks/useResponsive';
 import { supabase } from '../../lib/supabase';
 import { FileConversationPanel } from '../../components/FileConversationPanel';
+import {
+  useDownloadSelection, DownloadSelectionBar, DownloadNotice, SelectCheckbox,
+} from '../../components/DownloadSelectionBar';
 import { AdminUploadModal } from '../../components/AdminUploadModal';
 import {
   getAllDocuments,
@@ -512,6 +516,12 @@ export function AdminDocumentsScreen() {
     );
   });
 
+  const { isPhone } = useResponsive();
+
+  const dl = useDownloadSelection<Document>(
+    useCallback((d: Document) => ({ url: d.document_url, name: d.name }), []),
+  );
+
   const handleView = async (doc: Document) => {
     if (doc.status === 'new') {
       await updateDocumentStatus(doc.id, 'viewed', doc.document_type ?? '');
@@ -572,6 +582,28 @@ export function AdminDocumentsScreen() {
   // ── Document Card ────────────────────────────────────────────────────────────
 
   const renderDoc = ({ item }: { item: Document }) => {
+    const marked = dl.selected.has(item.id);
+    if (dl.selecting) {
+      // Marking replaces the row's own actions — nothing else is reachable.
+      return (
+        <TouchableOpacity
+          style={[s.card, marked && s.cardMarked]}
+          onPress={() => dl.toggle(item.id)}
+          activeOpacity={0.7}
+        >
+          <SelectCheckbox checked={marked} />
+          <View style={s.info}>
+            <Text style={s.docName} numberOfLines={1}>{item.name}</Text>
+            <Text style={s.docEmail} numberOfLines={1}>{item.email}</Text>
+          </View>
+          <Text style={s.dateText}>{fmtDate(item.created_at)}</Text>
+        </TouchableOpacity>
+      );
+    }
+    return renderDocRow({ item });
+  };
+
+  const renderDocRow = ({ item }: { item: Document }) => {
     const ext      = getExt(item.name);
     const color    = EXT_COLOR[ext] ?? '#64748B';
     const folder   = folderOf(item.document_type ?? '');
@@ -579,9 +611,17 @@ export function AdminDocumentsScreen() {
     const isBusy   = actionBusy === item.id;
 
     return (
-      <View style={[s.card, approval === 'pending' && s.cardPending, approval === 'rejected' && s.cardRejected]}>
+      <View style={[
+        s.card,
+        // On a phone the action column is wider than the space left for the
+        // text, so the card stacks: details on top, actions on their own row.
+        isPhone && s.cardPhone,
+        approval === 'pending' && s.cardPending,
+        approval === 'rejected' && s.cardRejected,
+      ]}>
+        <View style={isPhone ? s.cardPhoneTop : s.cardTopContents}>
         {/* File type badge */}
-        <View style={[s.fileBadge, { backgroundColor: color + '15' }]}>
+        <View style={[s.fileBadge, isPhone && s.fileBadgePhone, { backgroundColor: color + '15' }]}>
           <Text style={[s.fileBadgeExt, { color }]}>{ext.slice(0, 4).toUpperCase()}</Text>
           <Ionicons name="document-outline" size={11} color={color} style={{ opacity: 0.7 }} />
         </View>
@@ -603,9 +643,14 @@ export function AdminDocumentsScreen() {
           )}
         </View>
 
+          {/* The status pill rides with the text on a phone; the buttons drop
+              to their own row below. */}
+          {isPhone && <ApprovalPill status={approval} />}
+        </View>
+
         {/* Actions */}
-        <View style={s.actions}>
-          <ApprovalPill status={approval} />
+        <View style={isPhone ? s.actionsPhone : s.actions}>
+          {!isPhone && <ApprovalPill status={approval} />}
 
           {/* Approve / Reject for pending */}
           {approval === 'pending' && (
@@ -631,10 +676,13 @@ export function AdminDocumentsScreen() {
             </View>
           )}
 
-          {/* View / Notes / Delete always visible */}
+          {/* View / Download / Notes / Delete always visible */}
           <View style={s.btnRow}>
             <TouchableOpacity style={[s.actionBtn, s.viewBtn]} onPress={() => handleView(item)} activeOpacity={0.75}>
               <Ionicons name="eye-outline" size={14} color="#1C1713" />
+            </TouchableOpacity>
+            <TouchableOpacity style={[s.actionBtn, s.dlBtn]} onPress={() => dl.downloadSingle(item)} activeOpacity={0.75}>
+              <Ionicons name="download-outline" size={14} color="#1C1713" />
             </TouchableOpacity>
             <TouchableOpacity style={[s.actionBtn, s.notesBtn]} onPress={() => setConvDoc(item)} activeOpacity={0.75}>
               <Ionicons name="chatbubble-ellipses-outline" size={14} color="#1C1713" />
@@ -681,40 +729,47 @@ export function AdminDocumentsScreen() {
       <LinearGradient
         colors={['#3A3131', '#4A3E3E', '#3A3131']}
         start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-        style={[s.header, { paddingTop: insets.top + 16 }]}
+        style={[s.header, isPhone && s.headerPhone, { paddingTop: insets.top + 16 }]}
       >
         <View style={s.headerOverlay} pointerEvents="none" />
         <View style={s.decorCircle1} pointerEvents="none" />
         <View style={s.decorCircle2} pointerEvents="none" />
-        <View style={{ flex: 1 }}>
-          <Text style={s.headerTitle}>All Documents</Text>
-          <Text style={s.headerSub}>
+
+        <View style={isPhone ? s.headerTitleWrapPhone : { flex: 1 }}>
+          <Text style={[s.headerTitle, isPhone && s.headerTitlePhone]} numberOfLines={1}>
+            All Documents
+          </Text>
+          <Text style={s.headerSub} numberOfLines={1}>
             {documents.length} total
             {pendingCount > 0 ? ` · ${pendingCount} pending` : ''}
             {newCount > 0 ? ` · ${newCount} new` : ''}
           </Text>
         </View>
-        {/* Pending badge */}
-        {pendingCount > 0 && (
-          <View style={s.pendingBadge}>
-            <Ionicons name="time-outline" size={13} color="#92400E" />
-            <Text style={s.pendingBadgeText}>{pendingCount}</Text>
-          </View>
-        )}
-        {/* Upload a document (admin/staff → any client, any folder) */}
-        <TouchableOpacity style={s.uploadHeaderBtn} onPress={() => setUploadOpen(true)} activeOpacity={0.85}>
-          <Ionicons name="cloud-upload-outline" size={16} color="#2C2320" />
-          <Text style={s.uploadHeaderText}>Upload</Text>
-        </TouchableOpacity>
-        {/* Browse by folder */}
-        <TouchableOpacity style={s.browseBtn} onPress={() => setBrowserOpen(true)} activeOpacity={0.75}>
-          <Ionicons name="folder-open-outline" size={18} color="#FFFFFF" />
-        </TouchableOpacity>
-        {/* Reply notification bell */}
-        <AdminReplyBell onMarkedRead={() => load()} />
-        <TouchableOpacity style={s.refreshBtn} onPress={() => load(true)} activeOpacity={0.7}>
-          <Ionicons name="refresh-outline" size={18} color="#2C2320" />
-        </TouchableOpacity>
+
+        {/* Six controls beside a title leave it a few pixels wide on a phone,
+            so there they sit on their own row under it. */}
+        <View style={isPhone ? s.headerActionsPhone : s.headerActions}>
+          {pendingCount > 0 && (
+            <View style={s.pendingBadge}>
+              <Ionicons name="time-outline" size={13} color="#92400E" />
+              <Text style={s.pendingBadgeText}>{pendingCount}</Text>
+            </View>
+          )}
+          {/* Upload a document (admin/staff → any client, any folder) */}
+          <TouchableOpacity style={s.uploadHeaderBtn} onPress={() => setUploadOpen(true)} activeOpacity={0.85}>
+            <Ionicons name="cloud-upload-outline" size={16} color="#2C2320" />
+            <Text style={s.uploadHeaderText}>Upload</Text>
+          </TouchableOpacity>
+          {/* Browse by folder */}
+          <TouchableOpacity style={s.browseBtn} onPress={() => setBrowserOpen(true)} activeOpacity={0.75}>
+            <Ionicons name="folder-open-outline" size={18} color="#FFFFFF" />
+          </TouchableOpacity>
+          {/* Reply notification bell */}
+          <AdminReplyBell onMarkedRead={() => load()} />
+          <TouchableOpacity style={s.refreshBtn} onPress={() => load(true)} activeOpacity={0.7}>
+            <Ionicons name="refresh-outline" size={18} color="#2C2320" />
+          </TouchableOpacity>
+        </View>
       </LinearGradient>
 
       {/* ── Search Bar ── */}
@@ -815,12 +870,25 @@ export function AdminDocumentsScreen() {
           keyExtractor={d => d.id}
           renderItem={renderDoc}
           contentContainerStyle={s.list}
+          ListHeaderComponent={
+            filtered.length > 0 ? (
+              <DownloadSelectionBar
+                selection={dl}
+                /* Whatever the search box and filter pills currently leave. */
+                items={filtered}
+                zipName={filter === 'all' ? 'All documents' : `Documents — ${filter}`}
+                label="documents"
+              />
+            ) : null
+          }
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={() => load(true)} tintColor="#10B981" colors={['#10B981']} />
           }
           ListEmptyComponent={<EmptyState />}
         />
       )}
+
+      <DownloadNotice message={dl.notice} />
 
       {/* ── Modals ── */}
       {viewerDoc && (
@@ -877,6 +945,11 @@ const s = StyleSheet.create({
   headerOverlay: { ...StyleSheet.absoluteFillObject, opacity: 0.04 },
   decorCircle1: { position: 'absolute', width: 200, height: 200, borderRadius: 100, backgroundColor: 'rgba(232,185,35,0.06)', top: -60, right: -40 } as any,
   decorCircle2: { position: 'absolute', width: 120, height: 120, borderRadius: 60, backgroundColor: 'rgba(232,185,35,0.05)', bottom: -30, left: 60 } as any,
+  headerPhone:          { flexDirection: 'column', alignItems: 'stretch', gap: 12 },
+  headerTitleWrapPhone: { width: '100%' },
+  headerTitlePhone:     { fontSize: 19 },
+  headerActions:        { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  headerActionsPhone:   { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
   headerTitle: { color: '#FFFFFF', fontSize: 22, fontWeight: '800', letterSpacing: -0.5 },
   headerSub:   { color: 'rgba(255,255,255,0.5)', fontSize: 12, marginTop: 2, fontWeight: '500' },
 
@@ -935,6 +1008,17 @@ const s = StyleSheet.create({
     borderWidth: 1, borderColor: '#E5E7EB',
     shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 12, elevation: 3,
   },
+  cardTopContents: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 },
+  cardPhone:       { flexDirection: 'column', alignItems: 'stretch', gap: 12, padding: 14 },
+  cardPhoneTop:    { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  fileBadgePhone:  { width: 44, height: 44, borderRadius: 14 },
+  // Buttons get a full-width row of their own, so they can never ride over
+  // the file name or the folder pill.
+  actionsPhone: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end',
+    flexWrap: 'wrap', gap: 8,
+    borderTopWidth: 1, borderTopColor: 'rgba(0,0,0,0.06)', paddingTop: 11,
+  },
   cardPending:  { borderColor: '#F59E0B', borderLeftWidth: 3, backgroundColor: '#FFFBEB' },
   cardRejected: { borderColor: '#EF4444', borderLeftWidth: 3, backgroundColor: '#FFF5F5' },
 
@@ -965,6 +1049,8 @@ const s = StyleSheet.create({
   actionBtn:      { width: 32, height: 32, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   viewBtn:        { backgroundColor: '#E8B923' },
   notesBtn:       { backgroundColor: '#EADFCB' },
+  dlBtn: { backgroundColor: 'rgba(232,185,35,0.22)' },
+  cardMarked: { backgroundColor: 'rgba(232,185,35,0.10)', borderColor: 'rgba(232,185,35,0.55)' },
   deleteActionBtn:{ backgroundColor: '#DC2626' },
 
   loadingWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },

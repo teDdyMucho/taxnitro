@@ -18,6 +18,7 @@ import { ProfileScreen } from '../screens/main/ProfileScreen';
 import { AdminNavigator } from './AdminNavigator';
 import { getUnreadCount } from '../db/notifications';
 import { ClientUploadModal } from '../components/ClientUploadModal';
+import { IDLE_TIMEOUT_MS } from '../hooks/useIdleLogout';
 
 export type MainTabParamList = {
   Dashboard: undefined;
@@ -321,8 +322,98 @@ function MobileTabs({ onLogout }: { onLogout: () => void }) {
 
 // ── App Navigator ─────────────────────────────────────────────────────────────
 
+// ── Idle sign-out notice ─────────────────────────────────────────────────────
+// Shown over the signed-out screen so an unexplained return to the landing page
+// reads as a security measure rather than a bug.
+
+function IdleSignOutModal({ onDismiss }: { onDismiss: () => void }) {
+  const minutes = Math.round(IDLE_TIMEOUT_MS / 60000);
+  return (
+    <View style={idle.overlay}>
+      <View style={idle.card}>
+        <LinearGradient
+          colors={['rgba(232,185,35,0.18)', 'rgba(181,144,91,0.10)']}
+          style={idle.iconWrap}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+        >
+          <Ionicons name="lock-closed-outline" size={28} color="#E8B923" />
+        </LinearGradient>
+
+        <Text style={idle.title}>Signed out for your security</Text>
+        <Text style={idle.sub}>
+          There was no activity for {minutes} minutes, so we ended the session to keep
+          your financial documents private.
+        </Text>
+
+        <View style={idle.divider} />
+
+        <View style={idle.list}>
+          <View style={idle.listRow}>
+            <Ionicons name="shield-checkmark-outline" size={15} color="#B5905B" />
+            <Text style={idle.listText}>
+              This protects your documents on shared or unattended devices.
+            </Text>
+          </View>
+          <View style={idle.listRow}>
+            <Ionicons name="checkmark-circle-outline" size={15} color="#B5905B" />
+            <Text style={idle.listText}>
+              Nothing was lost — anything you already uploaded is saved.
+            </Text>
+          </View>
+          <View style={idle.listRow}>
+            <Ionicons name="time-outline" size={15} color="#B5905B" />
+            <Text style={idle.listText}>
+              Sign in again to pick up where you left off.
+            </Text>
+          </View>
+        </View>
+
+        <TouchableOpacity style={idle.btn} onPress={onDismiss} activeOpacity={0.85}>
+          <Ionicons name="log-in-outline" size={16} color="#3A3131" />
+          <Text style={idle.btnText}>Sign in again</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+}
+
+const idle = StyleSheet.create({
+  overlay: {
+    position: 'absolute' as any, top: 0, left: 0, right: 0, bottom: 0,
+    backgroundColor: 'rgba(20,16,13,0.72)',
+    alignItems: 'center', justifyContent: 'center',
+    padding: 24, zIndex: 1000,
+  },
+  card: {
+    backgroundColor: '#FFFFFF', borderRadius: 24, padding: 28,
+    width: '100%', maxWidth: 380, alignItems: 'center', gap: 10,
+    borderWidth: 1, borderColor: '#E8E0D0',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.28, shadowRadius: 30, elevation: 18,
+  },
+  iconWrap: {
+    width: 68, height: 68, borderRadius: 22,
+    alignItems: 'center', justifyContent: 'center', marginBottom: 2,
+  },
+  title: { color: '#1C1713', fontSize: 19, fontWeight: '800', textAlign: 'center' },
+  sub: { color: '#6B5E52', fontSize: 13, lineHeight: 19, textAlign: 'center' },
+  divider: { height: 1, backgroundColor: '#E8E0D0', width: '100%', marginVertical: 6 },
+  list: { gap: 9, width: '100%' },
+  listRow: { flexDirection: 'row', gap: 9, alignItems: 'flex-start' },
+  listText: { flex: 1, color: '#6B5E52', fontSize: 12.5, lineHeight: 18 },
+  btn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7,
+    backgroundColor: '#E8B923', borderRadius: 14, paddingVertical: 14,
+    width: '100%', marginTop: 8,
+    shadowColor: '#E8B923', shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.32, shadowRadius: 10, elevation: 5,
+  },
+  btnText: { color: '#3A3131', fontWeight: '800', fontSize: 14 },
+});
+
 export function AppNavigator() {
-  const { isAuthenticated, isLoading, logout, user } = useAuth();
+  const { isAuthenticated, isLoading, logout, user, signOutReason, clearSignOutReason } = useAuth();
   const [authView, setAuthView] = useState<'landing' | 'login' | 'register'>(
     Platform.OS === 'web' ? 'landing' : 'login'
   );
@@ -337,13 +428,33 @@ export function AppNavigator() {
   }
 
   if (!isAuthenticated) {
+    // Dismissing goes straight to the sign-in form — that is what they need next.
+    const notice = signOutReason === 'idle' ? (
+      <IdleSignOutModal onDismiss={() => { clearSignOutReason(); setAuthView('login'); }} />
+    ) : null;
+
     if (authView === 'landing') {
-      return <LandingScreen onGetStarted={() => setAuthView('login')} />;
+      return (
+        <View style={{ flex: 1 }}>
+          <LandingScreen onGetStarted={() => setAuthView('login')} />
+          {notice}
+        </View>
+      );
     }
     if (authView === 'login') {
-      return <LoginScreen onLoginSuccess={() => {}} onNavigateRegister={() => setAuthView('register')} />;
+      return (
+        <View style={{ flex: 1 }}>
+          <LoginScreen onLoginSuccess={() => {}} onNavigateRegister={() => setAuthView('register')} />
+          {notice}
+        </View>
+      );
     }
-    return <RegisterScreen onRegisterSuccess={() => setAuthView('login')} onNavigateLogin={() => setAuthView('login')} />;
+    return (
+      <View style={{ flex: 1 }}>
+        <RegisterScreen onRegisterSuccess={() => setAuthView('login')} onNavigateLogin={() => setAuthView('login')} />
+        {notice}
+      </View>
+    );
   }
 
   // Staff and admin get the admin portal

@@ -35,6 +35,9 @@ import {
 } from '../../db/documents';
 import { createCustomRequest } from '../../db/customRequests';
 import {
+  useDownloadSelection, DownloadSelectionBar, DownloadNotice, SelectCheckbox,
+} from '../../components/DownloadSelectionBar';
+import {
   monthOf, isStaffLabelFolder, staffLabelsForFolder,
   itemsForClient, requiredItemForDocName, stripRequirementPrefix,
   folderTableLabel, normalizeBankAccounts, RequiredItem, BANK_STATEMENTS_KEY,
@@ -510,6 +513,13 @@ export function ClientDocumentsScreen({ client, onBack }: Props) {
   const openFolder  = folders.find(f => f.key === activeFolderKey) ?? null;
   const unreadIn    = (rows: DocRow[]) => rows.filter(d => d.status !== 'viewed').length;
 
+  const dl = useDownloadSelection<DocRow>(
+    useCallback((d: DocRow) => ({ url: d.document_url, name: d.displayName || d.name }), []),
+  );
+  // Archives are named for the client and the folder, so several downloads
+  // don't all land as "documents.zip".
+  const clientSlug = client.full_name || client.email;
+
   // A folder that empties out (last file deleted) must not strand the view.
   useEffect(() => {
     if (activeFolderKey && !folders.some(f => f.key === activeFolderKey)) setActiveFolderKey(null);
@@ -538,34 +548,68 @@ export function ClientDocumentsScreen({ client, onBack }: Props) {
             <View style={[s.miniBarFill, { width: `${pct}%` as any }]} />
           </View>
         </View>
+
+        {/* Grab the whole folder without opening it. */}
+        <TouchableOpacity
+          style={[s.folderDlBtn, dl.busy && { opacity: 0.5 }]}
+          onPress={() => dl.download(item.data, `${clientSlug} — ${item.title}`)}
+          disabled={dl.busy}
+          activeOpacity={0.75}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
+          <Ionicons name="download-outline" size={16} color="#B5905B" />
+        </TouchableOpacity>
+
         <Ionicons name="chevron-forward" size={17} color={Colors.textMuted} />
       </TouchableOpacity>
     );
   };
 
-  const renderItem = ({ item }: { item: Document & { displayName: string } }) => (
-    <View style={s.docRow}>
-      <View style={s.docIcon}>
-        <Ionicons name="document-outline" size={20} color={Colors.primary} />
-      </View>
-      <View style={{ flex: 1 }}>
-        <Text style={s.docName} numberOfLines={1}>{item.displayName}</Text>
-        <Text style={[s.docMeta, { marginTop: 4 }]}>{fmtDate(item.created_at)}</Text>
-      </View>
-      <StatusBadge status={item.status} />
-      <View style={s.docActions}>
-        <TouchableOpacity style={s.actionBtn} onPress={() => handleView(item)}>
-          <Ionicons name="eye-outline" size={16} color={Colors.primary} />
-        </TouchableOpacity>
-        <TouchableOpacity style={s.actionBtn} onPress={() => setRenameDoc(item)}>
-          <Ionicons name="pencil-outline" size={16} color={Colors.textMuted} />
-        </TouchableOpacity>
-        <TouchableOpacity style={s.actionBtn} onPress={() => setDeleteDoc(item)}>
-          <Ionicons name="trash-outline" size={16} color={Colors.error} />
-        </TouchableOpacity>
-      </View>
-    </View>
-  );
+  const renderItem = ({ item }: { item: DocRow }) => {
+    const marked = dl.selected.has(item.id);
+    // While marking, the whole row is the checkbox — the per-row actions would
+    // only get in the way.
+    return (
+      <TouchableOpacity
+        style={[s.docRow, dl.selecting && marked && s.docRowMarked]}
+        activeOpacity={dl.selecting ? 0.7 : 1}
+        onPress={dl.selecting ? () => dl.toggle(item.id) : undefined}
+        disabled={!dl.selecting}
+      >
+        {dl.selecting ? (
+          <SelectCheckbox checked={marked} />
+        ) : (
+          <View style={s.docIcon}>
+            <Ionicons name="document-outline" size={20} color={Colors.primary} />
+          </View>
+        )}
+
+        <View style={{ flex: 1 }}>
+          <Text style={s.docName} numberOfLines={1}>{item.displayName}</Text>
+          <Text style={[s.docMeta, { marginTop: 4 }]}>{fmtDate(item.created_at)}</Text>
+        </View>
+
+        <StatusBadge status={item.status} />
+
+        {!dl.selecting && (
+          <View style={s.docActions}>
+            <TouchableOpacity style={s.actionBtn} onPress={() => handleView(item)}>
+              <Ionicons name="eye-outline" size={16} color={Colors.primary} />
+            </TouchableOpacity>
+            <TouchableOpacity style={s.actionBtn} onPress={() => dl.downloadSingle(item)}>
+              <Ionicons name="download-outline" size={16} color="#B5905B" />
+            </TouchableOpacity>
+            <TouchableOpacity style={s.actionBtn} onPress={() => setRenameDoc(item)}>
+              <Ionicons name="pencil-outline" size={16} color={Colors.textMuted} />
+            </TouchableOpacity>
+            <TouchableOpacity style={s.actionBtn} onPress={() => setDeleteDoc(item)}>
+              <Ionicons name="trash-outline" size={16} color={Colors.error} />
+            </TouchableOpacity>
+          </View>
+        )}
+      </TouchableOpacity>
+    );
+  };
 
   const mkInitials = (n: string) => (n ?? '?').split(' ').map(x => x[0]).join('').toUpperCase().slice(0, 2);
 
@@ -642,7 +686,17 @@ export function ClientDocumentsScreen({ client, onBack }: Props) {
             keyExtractor={d => d.id}
             renderItem={renderItem}
             contentContainerStyle={{ padding: 16, paddingBottom: 32 }}
-            ListHeaderComponent={<Text style={s.sectionLabel}>Documents</Text>}
+            ListHeaderComponent={
+              <>
+                <Text style={s.sectionLabel}>Documents</Text>
+                <DownloadSelectionBar
+                  selection={dl}
+                  items={openFolder.data}
+                  zipName={`${clientSlug} — ${openFolder.title}`}
+                  label="documents"
+                />
+              </>
+            }
             ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => load(true)} tintColor={Colors.primary} />}
             ListEmptyComponent={<Text style={s.empty}>This folder is empty.</Text>}
@@ -654,13 +708,29 @@ export function ClientDocumentsScreen({ client, onBack }: Props) {
             keyExtractor={f => f.key}
             renderItem={renderFolderCard}
             contentContainerStyle={{ padding: 16, paddingBottom: 32 }}
-            ListHeaderComponent={folders.length > 0 ? <Text style={s.sectionLabel}>Folders</Text> : null}
+            ListHeaderComponent={
+              folders.length > 0 ? (
+                <>
+                  <Text style={s.sectionLabel}>Folders</Text>
+                  {/* Everything this client has, in one archive. */}
+                  <DownloadSelectionBar
+                    selection={dl}
+                    items={folders.flatMap(f => f.data)}
+                    zipName={`${clientSlug} — All documents`}
+                    label="documents"
+                    allowSelect={false}
+                  />
+                </>
+              ) : null
+            }
             ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => load(true)} tintColor={Colors.primary} />}
             ListEmptyComponent={<Text style={s.empty}>No documents for this client.</Text>}
           />
         )
       )}
+
+      <DownloadNotice message={dl.notice} />
 
       {/* Modals */}
       {viewerUrl && <DocViewerModal url={viewerUrl} onClose={() => setViewerUrl(null)} />}
@@ -746,6 +816,10 @@ const s = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.border,
   },
+  docRowMarked: {
+    backgroundColor: 'rgba(232,185,35,0.08)',
+    borderColor: 'rgba(232,185,35,0.5)',
+  },
   docIcon: {
     width: 40,
     height: 40,
@@ -811,6 +885,12 @@ const s = StyleSheet.create({
     paddingHorizontal: 5, backgroundColor: '#E8B923',
   },
   fBadgeText: { color: '#2C2320', fontSize: 10, fontWeight: '800' },
+  folderDlBtn: {
+    width: 34, height: 34, borderRadius: 10,
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: 'rgba(232,185,35,0.12)',
+    borderWidth: 1, borderColor: 'rgba(232,185,35,0.35)',
+  },
   fMeta:      { color: '#A8998A', fontSize: 12, marginBottom: 8 },
   miniBar:    { height: 3, backgroundColor: '#F5F0E8', borderRadius: 2, overflow: 'hidden' },
   miniBarFill:{ height: '100%', borderRadius: 2, backgroundColor: '#E8B923' },
