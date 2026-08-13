@@ -229,9 +229,20 @@ export async function updateWorkflowStatus(id: string, status: WorkflowStatus): 
   return true;
 }
 
-export async function updateWorkflowSettings(id: string, updates: Partial<Pick<WorkflowInstance, 'accounting_software' | 'assigned_processor' | 'assigned_reviewer' | 'has_loans' | 'has_fixed_assets'>>): Promise<boolean> {
+export async function updateWorkflowSettings(id: string, updates: Partial<Pick<WorkflowInstance, 'month' | 'accounting_software' | 'assigned_processor' | 'assigned_reviewer' | 'has_loans' | 'has_fixed_assets'>>): Promise<boolean> {
   const { error } = await supabase.from('workflow_instances').update(updates).eq('id', id);
   if (error) { console.error('updateWorkflowSettings:', error.message); return false; }
+  return true;
+}
+
+/**
+ * Remove a workflow outright. Its checklist items, notes, query items, messages
+ * and drive links are all declared ON DELETE CASCADE, so they go with it — no
+ * manual cleanup, and nothing left orphaned.
+ */
+export async function deleteWorkflowInstance(id: string): Promise<boolean> {
+  const { error } = await supabase.from('workflow_instances').delete().eq('id', id);
+  if (error) { console.error('deleteWorkflowInstance:', error.message); return false; }
   return true;
 }
 

@@ -12,6 +12,7 @@ import { getAllClients, getAllStaff, Profile } from '../../db/profiles';
 import {
   WorkflowInstance, WorkflowStatus, AccountingSoftware,
   getWorkflowInstances, createWorkflowInstance, updateWorkflowStatus,
+  updateWorkflowSettings, deleteWorkflowInstance,
   STATUS_LABEL, STATUS_COLOR, currentMonth, formatMonth, NEXT_STATUS,
 } from '../../db/workflow';
 import { ProcessorScreen } from './workflow/ProcessorScreen';
@@ -52,8 +53,12 @@ export function WorkflowDashboardScreen() {
   const [loading, setLoading] = useState(true);
   const [filterStatus, setFilterStatus] = useState<WorkflowStatus | 'all'>('all');
 
-  // Create workflow modal
+  // Create / edit workflow modal — one form, two modes. `editing` holds the
+  // workflow being changed; null means the form is creating a new one.
   const [showCreate, setShowCreate] = useState(false);
+  const [editing, setEditing] = useState<WorkflowInstance | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<WorkflowInstance | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const [clients, setClients] = useState<Profile[]>([]);
   const [staff, setStaff] = useState<Profile[]>([]);
   const [newClient, setNewClient] = useState<Profile | null>(null);
@@ -77,26 +82,77 @@ export function WorkflowDashboardScreen() {
 
   useEffect(() => { load(); }, [load]);
 
-  const openCreateModal = async () => {
-    setShowCreate(true);
+  const loadPickers = async () => {
     const [c, s] = await Promise.all([getAllClients(), getAllStaff()]);
     setClients(c); setStaff(s);
+    return { c, s };
   };
 
-  const handleCreate = async () => {
-    if (!newClient || !user) return;
+  const openCreateModal = async () => {
+    setEditing(null);
+    setNewClient(null); setNewMonth(currentMonth()); setNewSoftware('QBO');
+    setNewProcessor(null); setNewReviewer(null);
+    setNewLoans(false); setNewFixedAssets(false);
+    setShowCreate(true);
+    await loadPickers();
+  };
+
+  const openEditModal = async (wf: WorkflowInstance) => {
+    setEditing(wf);
+    setNewMonth(wf.month);
+    setNewSoftware(wf.accounting_software);
+    setNewLoans(wf.has_loans);
+    setNewFixedAssets(wf.has_fixed_assets);
+    setShowCreate(true);
+    // The chips are Profile objects, so the saved ids are matched once the
+    // lists arrive — otherwise the current assignees would show as unset.
+    const { c, s } = await loadPickers();
+    setNewClient(c.find(p => p.id === wf.client_id) ?? null);
+    setNewProcessor(s.find(p => p.id === wf.assigned_processor) ?? null);
+    setNewReviewer(s.find(p => p.id === wf.assigned_reviewer) ?? null);
+  };
+
+  const closeModal = () => { setShowCreate(false); setEditing(null); };
+
+  const handleSubmit = async () => {
+    if (!user) return;
     setCreating(true);
-    await createWorkflowInstance({
-      client_id: newClient.id, month: newMonth,
-      accounting_software: newSoftware,
-      assigned_processor: newProcessor?.id ?? null,
-      assigned_reviewer: newReviewer?.id ?? null,
-      has_loans: newLoans, has_fixed_assets: newFixedAssets,
-      created_by: user.id,
-    });
+
+    if (editing) {
+      // The client is what a workflow IS — changing it would silently move a
+      // month's checklist and notes to someone else, so only settings change.
+      await updateWorkflowSettings(editing.id, {
+        month: newMonth,
+        accounting_software: newSoftware,
+        assigned_processor: newProcessor?.id ?? null,
+        assigned_reviewer: newReviewer?.id ?? null,
+        has_loans: newLoans,
+        has_fixed_assets: newFixedAssets,
+      });
+    } else {
+      if (!newClient) { setCreating(false); return; }
+      await createWorkflowInstance({
+        client_id: newClient.id, month: newMonth,
+        accounting_software: newSoftware,
+        assigned_processor: newProcessor?.id ?? null,
+        assigned_reviewer: newReviewer?.id ?? null,
+        has_loans: newLoans, has_fixed_assets: newFixedAssets,
+        created_by: user.id,
+      });
+    }
+
     setCreating(false);
-    setShowCreate(false);
+    closeModal();
     load();
+  };
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    const ok = await deleteWorkflowInstance(deleteTarget.id);
+    setDeleting(false);
+    setDeleteTarget(null);
+    if (ok) load();
   };
 
   const filtered = instances.filter(i => filterStatus === 'all' || i.status === filterStatus);
@@ -178,28 +234,44 @@ export function WorkflowDashboardScreen() {
           keyExtractor={i => i.id}
           contentContainerStyle={{ padding: 12, gap: 10 }}
           showsVerticalScrollIndicator={false}
-          renderItem={({ item }) => <WorkflowCard item={item} onOpen={() => setOpenWorkflow(item)} />}
+          renderItem={({ item }) => (
+            <WorkflowCard
+              item={item}
+              onOpen={() => setOpenWorkflow(item)}
+              onEdit={() => openEditModal(item)}
+              onDelete={() => setDeleteTarget(item)}
+            />
+          )}
         />
       )}
 
       {/* ── Create Modal ── */}
-      <Modal visible={showCreate} transparent animationType="slide" onRequestClose={() => setShowCreate(false)}>
+      <Modal visible={showCreate} transparent animationType="slide" onRequestClose={closeModal}>
         <View style={[s.modalOverlay, sheet.overlay]}>
           <View style={[s.modalCard, sheet.sheet]}>
             <View style={s.modalHeader}>
-              <Text style={s.modalTitle}>New Workflow</Text>
-              <TouchableOpacity onPress={() => setShowCreate(false)}><Ionicons name="close" size={22} color="#374151" /></TouchableOpacity>
+              <Text style={s.modalTitle}>{editing ? 'Edit Workflow' : 'New Workflow'}</Text>
+              <TouchableOpacity onPress={closeModal}><Ionicons name="close" size={22} color="#374151" /></TouchableOpacity>
             </View>
             <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 480 }}>
-              {/* Client */}
+              {/* Client — fixed once created: the workflow's checklist, notes and
+                  queries all belong to this client, so it is shown, not changed. */}
               <Text style={s.fieldLabel}>Client *</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12 }}>
-                {clients.map(c => (
-                  <TouchableOpacity key={c.id} style={[s.selectChip, newClient?.id === c.id && s.selectChipActive]} onPress={() => setNewClient(c)} activeOpacity={0.8}>
-                    <Text style={[s.selectChipText, newClient?.id === c.id && { color: '#FFFFFF' }]} numberOfLines={1}>{c.full_name}</Text>
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
+              {editing ? (
+                <View style={s.lockedField}>
+                  <Ionicons name="person-outline" size={15} color="#6B7280" />
+                  <Text style={s.lockedText} numberOfLines={1}>{editing.client_name || 'Client'}</Text>
+                  <Ionicons name="lock-closed" size={13} color="#94A3B8" />
+                </View>
+              ) : (
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12 }}>
+                  {clients.map(c => (
+                    <TouchableOpacity key={c.id} style={[s.selectChip, newClient?.id === c.id && s.selectChipActive]} onPress={() => setNewClient(c)} activeOpacity={0.8}>
+                      <Text style={[s.selectChipText, newClient?.id === c.id && { color: '#FFFFFF' }]} numberOfLines={1}>{c.full_name}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              )}
               {/* Month */}
               <Text style={s.fieldLabel}>Month *</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12 }}>
@@ -249,15 +321,60 @@ export function WorkflowDashboardScreen() {
               </View>
             </ScrollView>
             <TouchableOpacity
-              style={[s.createBtn, (!newClient || creating) && { opacity: 0.5 }]}
-              onPress={handleCreate}
-              disabled={!newClient || creating}
+              style={[s.createBtn, (!editing && !newClient) || creating ? { opacity: 0.5 } : null]}
+              onPress={handleSubmit}
+              disabled={(!editing && !newClient) || creating}
               activeOpacity={0.82}
             >
-              {creating ? <ActivityIndicator size="small" color="#1C1713" /> : <Text style={s.createBtnText}>Create Workflow</Text>}
+              {creating
+                ? <ActivityIndicator size="small" color="#1C1713" />
+                : <Text style={s.createBtnText}>{editing ? 'Save Changes' : 'Create Workflow'}</Text>}
             </TouchableOpacity>
           </View>
         </View>
+      </Modal>
+
+      {/* ── Delete confirmation ── */}
+      <Modal visible={!!deleteTarget} transparent animationType="fade" onRequestClose={() => setDeleteTarget(null)}>
+        <Pressable style={dl.overlay} onPress={() => !deleting && setDeleteTarget(null)}>
+          <Pressable style={dl.box} onPress={() => {}}>
+            <View style={dl.icon}>
+              <Ionicons name="trash-outline" size={26} color="#EF4444" />
+            </View>
+            <Text style={dl.title}>Delete this workflow?</Text>
+            <Text style={dl.sub}>
+              {deleteTarget?.client_name || 'This client'} · {deleteTarget ? formatMonth(deleteTarget.month) : ''}
+            </Text>
+            <View style={dl.warnBox}>
+              <Ionicons name="alert-circle-outline" size={15} color="#B45309" />
+              <Text style={dl.warnText}>
+                Its checklist, notes, query items, messages and drive links are deleted with it.
+                This cannot be undone.
+              </Text>
+            </View>
+            <View style={dl.row}>
+              <TouchableOpacity
+                style={dl.cancelBtn}
+                onPress={() => setDeleteTarget(null)}
+                disabled={deleting}
+                activeOpacity={0.75}
+              >
+                <Text style={dl.cancelText}>No, keep it</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[dl.confirmBtn, deleting && { opacity: 0.6 }]}
+                onPress={handleDelete}
+                disabled={deleting}
+                activeOpacity={0.85}
+              >
+                {deleting
+                  ? <ActivityIndicator size="small" color="#FFFFFF" />
+                  : <><Ionicons name="trash-outline" size={15} color="#FFFFFF" />
+                      <Text style={dl.confirmText}>Yes, delete</Text></>}
+              </TouchableOpacity>
+            </View>
+          </Pressable>
+        </Pressable>
       </Modal>
     </View>
   );
@@ -265,7 +382,12 @@ export function WorkflowDashboardScreen() {
 
 // ── Workflow Card ─────────────────────────────────────────────────────────────
 
-function WorkflowCard({ item, onOpen }: { item: WorkflowInstance; onOpen: () => void }) {
+function WorkflowCard({ item, onOpen, onEdit, onDelete }: {
+  item: WorkflowInstance;
+  onOpen: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
   const color = STATUS_COLOR[item.status];
   const stepIdx = PIPELINE_STEPS.indexOf(item.status);
 
@@ -308,7 +430,27 @@ function WorkflowCard({ item, onOpen }: { item: WorkflowInstance; onOpen: () => 
         )}
       </View>
 
-      <Ionicons name="chevron-forward" size={16} color="#94A3B8" style={{ alignSelf: 'center', marginRight: 14 }} />
+      {/* Edit / delete sit inside the card; their own press wins over the
+          card's, so neither opens the workflow. */}
+      <View style={ws.actions}>
+        <TouchableOpacity
+          style={ws.editBtn}
+          onPress={onEdit}
+          activeOpacity={0.75}
+          hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+        >
+          <Ionicons name="pencil-outline" size={15} color="#B5905B" />
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={ws.deleteBtn}
+          onPress={onDelete}
+          activeOpacity={0.75}
+          hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+        >
+          <Ionicons name="trash-outline" size={15} color="#EF4444" />
+        </TouchableOpacity>
+        <Ionicons name="chevron-forward" size={16} color="#94A3B8" />
+      </View>
     </TouchableOpacity>
   );
 }
@@ -361,6 +503,53 @@ const s = StyleSheet.create({
   toggleLabel: { color: '#374151', fontSize: 13 },
   createBtn:     { backgroundColor: '#E8B923', borderRadius: 14, paddingVertical: 14, alignItems: 'center', marginTop: 4 },
   createBtnText: { color: '#1C1713', fontSize: 15, fontWeight: '800' },
+  // Client shown but not editable while editing an existing workflow.
+  lockedField: {
+    flexDirection: 'row', alignItems: 'center', gap: 9,
+    backgroundColor: '#F1F5F9', borderRadius: 12,
+    borderWidth: 1, borderColor: '#E5E7EB',
+    paddingHorizontal: 12, paddingVertical: 11, marginBottom: 12,
+  },
+  lockedText: { flex: 1, color: '#374151', fontSize: 14, fontWeight: '700' },
+});
+
+const dl = StyleSheet.create({
+  overlay: {
+    flex: 1, backgroundColor: 'rgba(28,23,19,0.6)',
+    alignItems: 'center', justifyContent: 'center', padding: 24,
+  },
+  box: {
+    backgroundColor: '#FFFFFF', borderRadius: 22, padding: 24,
+    width: '100%', maxWidth: 360, alignItems: 'center', gap: 9,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.2, shadowRadius: 28, elevation: 16,
+  },
+  icon: {
+    width: 56, height: 56, borderRadius: 18, backgroundColor: '#FEF2F2',
+    alignItems: 'center', justifyContent: 'center', marginBottom: 2,
+  },
+  title: { color: '#111827', fontSize: 17, fontWeight: '800', textAlign: 'center' },
+  sub:   { color: '#6B7280', fontSize: 13, textAlign: 'center' },
+  warnBox: {
+    flexDirection: 'row', gap: 8, alignItems: 'flex-start',
+    backgroundColor: '#FFFBEB', borderRadius: 10,
+    borderWidth: 1, borderColor: '#FDE68A',
+    paddingHorizontal: 11, paddingVertical: 10, marginTop: 4,
+  },
+  warnText: { flex: 1, color: '#B45309', fontSize: 11.5, lineHeight: 16 },
+  row: { flexDirection: 'row', gap: 10, width: '100%', marginTop: 8 },
+  cancelBtn: {
+    flex: 1, backgroundColor: '#F1F5F9', borderRadius: 12,
+    paddingVertical: 13, alignItems: 'center',
+    borderWidth: 1, borderColor: '#E5E7EB',
+  },
+  cancelText: { color: '#6B7280', fontWeight: '700', fontSize: 14 },
+  confirmBtn: {
+    flex: 1, backgroundColor: '#EF4444', borderRadius: 12,
+    paddingVertical: 13, flexDirection: 'row',
+    alignItems: 'center', justifyContent: 'center', gap: 6,
+  },
+  confirmText: { color: '#FFFFFF', fontWeight: '800', fontSize: 14 },
 });
 
 const ws = StyleSheet.create({
@@ -382,4 +571,17 @@ const ws = StyleSheet.create({
   staffRow:      { flexDirection: 'row', gap: 12, flexWrap: 'wrap' },
   staffText:     { color: '#6B7280', fontSize: 11 },
   staffRole:     { fontWeight: '700', color: '#374151' },
+  actions:   { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'center', marginRight: 12 },
+  editBtn:   {
+    width: 30, height: 30, borderRadius: 9,
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: 'rgba(232,185,35,0.14)',
+    borderWidth: 1, borderColor: 'rgba(232,185,35,0.35)',
+  },
+  deleteBtn: {
+    width: 30, height: 30, borderRadius: 9,
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: 'rgba(239,68,68,0.09)',
+    borderWidth: 1, borderColor: 'rgba(239,68,68,0.25)',
+  },
 });
