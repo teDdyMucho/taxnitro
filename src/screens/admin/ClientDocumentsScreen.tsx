@@ -5,7 +5,6 @@ import {
   StyleSheet,
   TouchableOpacity,
   FlatList,
-  SectionList,
   ActivityIndicator,
   RefreshControl,
   Modal,
@@ -38,7 +37,7 @@ import { createCustomRequest } from '../../db/customRequests';
 import {
   monthOf, isStaffLabelFolder, staffLabelsForFolder,
   itemsForClient, requiredItemForDocName, stripRequirementPrefix,
-  folderTableLabel, normalizeBankAccounts, RequiredItem,
+  folderTableLabel, normalizeBankAccounts, RequiredItem, BANK_STATEMENTS_KEY,
 } from '../../db/requirements';
 
 interface Props {
@@ -425,6 +424,8 @@ export function ClientDocumentsScreen({ client, onBack }: Props) {
   const [deleteDoc, setDeleteDoc] = useState<Document | null>(null);
   const [uploadOpen, setUploadOpen] = useState(false);
   const [requestOpen, setRequestOpen] = useState(false);
+  // null → the folder list; otherwise the folder being looked inside.
+  const [activeFolderKey, setActiveFolderKey] = useState<string | null>(null);
 
   const load = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true); else setLoading(true);
@@ -474,25 +475,73 @@ export function ClientDocumentsScreen({ client, onBack }: Props) {
     [client.services, client.has_qbo_access, client.bank_accounts],
   );
 
-  const sections = useMemo(() => {
-    type Row = Document & { displayName: string };
-    const buckets = new Map<string, { title: string; order: number; data: Row[] }>();
+  type DocRow = Document & { displayName: string };
+  type FolderBucket = {
+    key: string;
+    title: string;
+    icon: keyof typeof Ionicons.glyphMap;
+    order: number;
+    data: DocRow[];
+  };
+
+  const folders = useMemo<FolderBucket[]>(() => {
+    const buckets = new Map<string, FolderBucket>();
 
     documents.forEach(doc => {
-      const item = requiredItemForDocName(doc.name, clientItems);
+      const item  = requiredItemForDocName(doc.name, clientItems);
       const key   = item ? `req:${item.service}:${item.key}` : `tbl:${doc.document_type ?? ''}`;
       const title = item ? item.label : folderTableLabel(doc.document_type);
       // Required items first, in checklist order; everything else after.
       const order = item ? clientItems.indexOf(item) : 1000;
+      const icon: keyof typeof Ionicons.glyphMap = !item
+        ? 'folder-outline'
+        : item.key.startsWith(BANK_STATEMENTS_KEY) ? 'business-outline' : 'document-text-outline';
 
-      const row: Row = { ...doc, displayName: stripRequirementPrefix(doc.name, item) };
+      const row: DocRow = { ...doc, displayName: stripRequirementPrefix(doc.name, item) };
       const bucket = buckets.get(key);
       if (bucket) bucket.data.push(row);
-      else buckets.set(key, { title, order, data: [row] });
+      else buckets.set(key, { key, title, icon, order, data: [row] });
     });
 
     return [...buckets.values()].sort((a, b) => a.order - b.order || a.title.localeCompare(b.title));
   }, [documents, clientItems]);
+
+  const totalDocs   = documents.length;
+  const openFolder  = folders.find(f => f.key === activeFolderKey) ?? null;
+  const unreadIn    = (rows: DocRow[]) => rows.filter(d => d.status !== 'viewed').length;
+
+  // A folder that empties out (last file deleted) must not strand the view.
+  useEffect(() => {
+    if (activeFolderKey && !folders.some(f => f.key === activeFolderKey)) setActiveFolderKey(null);
+  }, [folders, activeFolderKey]);
+
+  const renderFolderCard = ({ item }: { item: FolderBucket }) => {
+    const unread = unreadIn(item.data);
+    const pct    = totalDocs > 0 ? (item.data.length / totalDocs) * 100 : 0;
+    return (
+      <TouchableOpacity style={s.fCard} onPress={() => setActiveFolderKey(item.key)} activeOpacity={0.8}>
+        <View style={s.fIconBox}>
+          <Ionicons name={item.icon} size={24} color="#E8B923" />
+        </View>
+        <View style={{ flex: 1 }}>
+          <View style={s.fTitleRow}>
+            <Text style={s.fName} numberOfLines={1}>{item.title}</Text>
+            {unread > 0 && (
+              <View style={s.fBadge}><Text style={s.fBadgeText}>{unread}</Text></View>
+            )}
+          </View>
+          <Text style={s.fMeta}>
+            {item.data.length} document{item.data.length !== 1 ? 's' : ''}
+            {unread > 0 ? ` · ${unread} unread` : ' · All viewed'}
+          </Text>
+          <View style={s.miniBar}>
+            <View style={[s.miniBarFill, { width: `${pct}%` as any }]} />
+          </View>
+        </View>
+        <Ionicons name="chevron-forward" size={17} color={Colors.textMuted} />
+      </TouchableOpacity>
+    );
+  };
 
   const renderItem = ({ item }: { item: Document & { displayName: string } }) => (
     <View style={s.docRow}>
@@ -527,15 +576,47 @@ export function ClientDocumentsScreen({ client, onBack }: Props) {
         <View style={s.headerOverlay} pointerEvents="none" />
         <View style={s.decorCircle1} pointerEvents="none" />
         <View style={s.decorCircle2} pointerEvents="none" />
-        <TouchableOpacity style={s.backBtn} onPress={onBack}>
+        {/* Back steps out of a folder first, then off the screen. */}
+        <TouchableOpacity
+          style={s.backBtn}
+          onPress={() => (openFolder ? setActiveFolderKey(null) : onBack())}
+        >
           <Ionicons name="arrow-back" size={20} color={Colors.textPrimary} />
         </TouchableOpacity>
         <LinearGradient colors={[Colors.primary, Colors.accent]} style={s.avatar} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
           <Text style={s.avatarText}>{mkInitials(client.full_name)}</Text>
         </LinearGradient>
         <View style={{ flex: 1 }}>
-          <Text style={s.clientName}>{client.full_name || 'Client'}</Text>
-          <Text style={s.clientEmail}>{client.email}</Text>
+          <Text style={s.clientName} numberOfLines={1}>
+            {openFolder ? openFolder.title : (client.full_name || 'Client')}
+          </Text>
+          <Text style={s.clientEmail} numberOfLines={1}>
+            {openFolder ? client.full_name || client.email : client.email}
+          </Text>
+          {!loading && (
+            <View style={s.metaRow}>
+              {openFolder ? (
+                <View style={s.metaPill}>
+                  <Ionicons name="document-outline" size={11} color="rgba(255,255,255,0.6)" />
+                  <Text style={s.metaPillText}>
+                    {openFolder.data.length} document{openFolder.data.length !== 1 ? 's' : ''}
+                    {unreadIn(openFolder.data) > 0 ? ` · ${unreadIn(openFolder.data)} unread` : ''}
+                  </Text>
+                </View>
+              ) : (
+                <>
+                  <View style={s.metaPill}>
+                    <Ionicons name="folder-outline" size={11} color="rgba(255,255,255,0.6)" />
+                    <Text style={s.metaPillText}>{folders.length} folder{folders.length !== 1 ? 's' : ''}</Text>
+                  </View>
+                  <View style={s.metaPill}>
+                    <Ionicons name="document-outline" size={11} color="rgba(255,255,255,0.6)" />
+                    <Text style={s.metaPillText}>{totalDocs} document{totalDocs !== 1 ? 's' : ''}</Text>
+                  </View>
+                </>
+              )}
+            </View>
+          )}
         </View>
         <View style={{ gap: 6 }}>
           <TouchableOpacity style={s.sendFileBtn} onPress={() => setUploadOpen(true)} activeOpacity={0.85}>
@@ -554,24 +635,31 @@ export function ClientDocumentsScreen({ client, onBack }: Props) {
           <ActivityIndicator color={Colors.primary} size="large" />
         </View>
       ) : (
-        <SectionList
-          sections={sections}
-          keyExtractor={d => d.id}
-          renderItem={renderItem}
-          renderSectionHeader={({ section }) => (
-            <View style={s.folderHead}>
-              <Ionicons name="folder-open" size={16} color="#B5905B" />
-              <Text style={s.folderTitle} numberOfLines={1}>{section.title}</Text>
-              <Text style={s.folderCount}>{section.data.length}</Text>
-            </View>
-          )}
-          stickySectionHeadersEnabled={false}
-          contentContainerStyle={{ padding: 16, paddingBottom: 32 }}
-          SectionSeparatorComponent={() => <View style={{ height: 6 }} />}
-          ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => load(true)} tintColor={Colors.primary} />}
-          ListEmptyComponent={<Text style={s.empty}>No documents for this client.</Text>}
-        />
+        /* Level 2 — the documents inside one folder */
+        openFolder ? (
+          <FlatList
+            data={openFolder.data}
+            keyExtractor={d => d.id}
+            renderItem={renderItem}
+            contentContainerStyle={{ padding: 16, paddingBottom: 32 }}
+            ListHeaderComponent={<Text style={s.sectionLabel}>Documents</Text>}
+            ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
+            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => load(true)} tintColor={Colors.primary} />}
+            ListEmptyComponent={<Text style={s.empty}>This folder is empty.</Text>}
+          />
+        ) : (
+          /* Level 1 — a folder per document type the client uploaded under */
+          <FlatList
+            data={folders}
+            keyExtractor={f => f.key}
+            renderItem={renderFolderCard}
+            contentContainerStyle={{ padding: 16, paddingBottom: 32 }}
+            ListHeaderComponent={folders.length > 0 ? <Text style={s.sectionLabel}>Folders</Text> : null}
+            ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
+            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => load(true)} tintColor={Colors.primary} />}
+            ListEmptyComponent={<Text style={s.empty}>No documents for this client.</Text>}
+          />
+        )
       )}
 
       {/* Modals */}
@@ -679,29 +767,51 @@ const s = StyleSheet.create({
   },
   empty: { color: Colors.textMuted, fontSize: 14, textAlign: 'center', marginTop: 40 },
 
-  /* Folder headers — one per document type the client uploaded under */
-  folderHead: {
+  /* Header meta pills — folder / document counts */
+  metaRow:      { flexDirection: 'row', gap: 10, marginTop: 4 },
+  metaPill:     { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  metaPillText: { color: 'rgba(255,255,255,0.5)', fontSize: 11 },
+
+  sectionLabel: {
+    color: Colors.textMuted,
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+    marginBottom: 10,
+  },
+
+  /* Folder cards — one per document type the client uploaded under.
+     Mirrors the client's own Documents tab so both sides read the same. */
+  fCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 9,
-    marginTop: 14,
-    marginBottom: 8,
-    paddingHorizontal: 2,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#E8E0D0',
+    gap: 14,
+    shadowColor: '#3A3131',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 2,
   },
-  folderTitle: {
-    flex: 1,
-    color: Colors.textPrimary,
-    fontSize: 13.5,
-    fontWeight: '800',
+  fIconBox: {
+    width: 52, height: 52, borderRadius: 14,
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: 'rgba(232,185,35,0.12)',
   },
-  folderCount: {
-    color: '#B5905B',
-    fontSize: 11,
-    fontWeight: '800',
-    backgroundColor: 'rgba(232,185,35,0.16)',
-    borderRadius: 9,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    overflow: 'hidden',
+  fTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 },
+  fName:     { color: '#1C1713', fontSize: 15, fontWeight: '700', flex: 1 },
+  fBadge: {
+    minWidth: 20, height: 20, borderRadius: 10,
+    alignItems: 'center', justifyContent: 'center',
+    paddingHorizontal: 5, backgroundColor: '#E8B923',
   },
+  fBadgeText: { color: '#2C2320', fontSize: 10, fontWeight: '800' },
+  fMeta:      { color: '#A8998A', fontSize: 12, marginBottom: 8 },
+  miniBar:    { height: 3, backgroundColor: '#F5F0E8', borderRadius: 2, overflow: 'hidden' },
+  miniBarFill:{ height: '100%', borderRadius: 2, backgroundColor: '#E8B923' },
 });
