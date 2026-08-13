@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase';
+import { BankAccount, normalizeBankAccounts } from './requirements';
 
 export type UserRole = 'client' | 'staff' | 'admin';
 export type ClientService = 'BK' | 'TAX' | 'CFO';
@@ -14,16 +15,18 @@ export interface Profile {
   is_active: boolean;
   services: ClientService[];      // which categories/requirements the client sees
   has_qbo_access: boolean;        // true → hide "Prior Month Bookkeeping / QBO Access"
+  bank_accounts: BankAccount[];   // one required Bank Statements slot per account
   created_at: string;
   updated_at: string;
 }
 
-/** Normalise a profile row so services/has_qbo_access always have sane values. */
+/** Normalise a profile row so services/qbo/bank accounts always have sane values. */
 export function normalizeProfile(p: any): Profile {
   return {
     ...p,
     services: Array.isArray(p?.services) && p.services.length > 0 ? p.services : ['BK'],
     has_qbo_access: p?.has_qbo_access ?? false,
+    bank_accounts: normalizeBankAccounts(p?.bank_accounts),
   } as Profile;
 }
 
@@ -52,7 +55,7 @@ export async function updateProfile(userId: string, updates: Partial<Pick<Profil
 
 export async function updateClientProfile(
   userId: string,
-  updates: Partial<Pick<Profile, 'full_name' | 'plan' | 'is_active' | 'services' | 'has_qbo_access'>>,
+  updates: Partial<Pick<Profile, 'full_name' | 'plan' | 'is_active' | 'services' | 'has_qbo_access' | 'bank_accounts'>>,
 ): Promise<boolean> {
   const { error } = await supabase.from('profiles').update(updates).eq('id', userId);
   if (error) { console.error('updateClientProfile:', error.message); return false; }

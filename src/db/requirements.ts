@@ -36,6 +36,80 @@ export function itemsByService(service: RequirementService): RequiredItem[] {
   return REQUIRED_UPLOADS.filter(i => i.service === service);
 }
 
+// ── Bank accounts (per client) ───────────────────────────────────────────────
+// A client can be asked for statements from SEVERAL bank accounts. Staff/admin
+// configure the list on the client's profile (profiles.bank_accounts); each
+// account then becomes its OWN required item — its own upload slot, radio and
+// approve/reject — instead of one generic "Bank Statements (all accounts)" row.
+//
+// With NO accounts configured the generic item is kept, so clients created
+// before this feature behave exactly as before.
+
+export interface BankAccount {
+  id: string;      // stable — the requirement_key depends on it, never reuse
+  bank: string;    // e.g. 'BDO'
+  last4: string;   // last 4 digits of the account number
+}
+
+/** The base requirement key that per-account items expand from. */
+export const BANK_STATEMENTS_KEY = 'bank_statements';
+
+const BANK_KEY_SEP = '__';
+
+/** Requirement key for one account, e.g. 'bank_statements__ba_1a2b3c4d'. */
+export function bankAccountKey(accountId: string): string {
+  return `${BANK_STATEMENTS_KEY}${BANK_KEY_SEP}${accountId}`;
+}
+
+/** The account id inside a per-account key, or null if it isn't one. */
+export function bankAccountIdOf(requirementKey: string): string | null {
+  const prefix = BANK_STATEMENTS_KEY + BANK_KEY_SEP;
+  if (!requirementKey.startsWith(prefix)) return null;
+  return requirementKey.slice(prefix.length) || null;
+}
+
+/** Display label for one account, e.g. 'Bank Statements — BDO ••••4821'. */
+export function bankAccountLabel(acct: BankAccount): string {
+  const bank  = acct.bank?.trim() || 'Bank';
+  const last4 = acct.last4?.trim();
+  return last4 ? `Bank Statements — ${bank} ••••${last4}` : `Bank Statements — ${bank}`;
+}
+
+/** A fresh id for a new account row. Generated once, then stored forever. */
+export function newBankAccountId(): string {
+  return 'ba_' + Math.random().toString(16).slice(2, 10) + Date.now().toString(16).slice(-4);
+}
+
+/** Coerce whatever is stored in profiles.bank_accounts into a clean array. */
+export function normalizeBankAccounts(raw: any): BankAccount[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter(a => a && typeof a === 'object')
+    .map(a => ({
+      id:    String(a.id ?? '').trim(),
+      bank:  String(a.bank ?? '').trim(),
+      last4: String(a.last4 ?? '').trim(),
+    }))
+    .filter(a => a.id && a.bank);
+}
+
+/**
+ * Replace the generic `bank_statements` row with one row per configured
+ * account. Empty account list → items pass through untouched.
+ */
+function expandBankStatements(items: RequiredItem[], accounts: BankAccount[]): RequiredItem[] {
+  if (accounts.length === 0) return items;
+  return items.flatMap(item =>
+    item.key === BANK_STATEMENTS_KEY
+      ? accounts.map(a => ({
+          service: item.service,
+          key:     bankAccountKey(a.id),
+          label:   bankAccountLabel(a),
+        }))
+      : [item],
+  );
+}
+
 /** Display label for a service (used in checklist group headers). */
 export function serviceLabel(service: RequirementService): string {
   return service === 'BK' ? 'Bookkeeping' : service === 'TAX' ? 'Tax' : 'CFO';
@@ -51,6 +125,12 @@ const FOLDER_REQUIREMENT_ITEMS: Record<string, RequirementService> = {
 /** True if this folder is a required-docs collector (shows the item picker on upload). */
 export function isRequirementFolder(folderKey: string): boolean {
   return folderKey in FOLDER_REQUIREMENT_ITEMS;
+}
+
+/** The collector folder a service's required uploads land in (reverse lookup). */
+export function collectorFolderForService(service: RequirementService): string | null {
+  const hit = Object.entries(FOLDER_REQUIREMENT_ITEMS).find(([, svc]) => svc === service);
+  return hit ? hit[0] : null;
 }
 
 /** The required items a collector folder gathers (empty if not a collector folder). */
@@ -102,12 +182,14 @@ const QBO_DEPENDENT_KEYS = ['prior_month_bookkeeping'];
 export function itemsForClient(
   services: RequirementService[] | undefined,
   hasQboAccess: boolean | undefined,
+  bankAccounts: BankAccount[] = [],
 ): RequiredItem[] {
   const svc = (services && services.length > 0 ? services : ['BK']) as RequirementService[];
-  return REQUIRED_UPLOADS.filter(i =>
+  const base = REQUIRED_UPLOADS.filter(i =>
     svc.includes(i.service) &&
     !(hasQboAccess && QBO_DEPENDENT_KEYS.includes(i.key))
   );
+  return expandBankStatements(base, bankAccounts);
 }
 
 /** Items a collector folder gathers, narrowed to what applies to this client. */
@@ -115,16 +197,73 @@ export function itemsForFolderAndClient(
   folderKey: string,
   services: RequirementService[] | undefined,
   hasQboAccess: boolean | undefined,
+  bankAccounts: BankAccount[] = [],
 ): RequiredItem[] {
-  const folderItems = itemsForFolder(folderKey);
-  if (folderItems.length === 0) return [];
-  const applicable = new Set(itemsForClient(services, hasQboAccess).map(i => `${i.service}:${i.key}`));
-  return folderItems.filter(i => applicable.has(`${i.service}:${i.key}`));
+  const svc = FOLDER_REQUIREMENT_ITEMS[folderKey];
+  if (!svc) return [];
+  // itemsForClient is already expanded per bank account — just scope it to the
+  // service this collector folder gathers for.
+  return itemsForClient(services, hasQboAccess, bankAccounts).filter(i => i.service === svc);
 }
 
 /** Stable set-key for a fulfilled requirement. */
 export function reqKey(service: RequirementService, key: string): string {
   return `${service}:${key}`;
+}
+
+// ── Regrouping uploads by what the CLIENT chose ──────────────────────────────
+// Several distinct client-facing types land in ONE table: every BK required item
+// (each bank account, Credit Card, Loan, Payroll) is written to
+// bk_mr_required_info, CFO's to cfo_mr_required_info. Grouping by table would
+// erase exactly the distinction the client made, so staff regroup by the label
+// the client picked — which the upload prefixes onto the filename as
+// "<label> — <original filename>".
+
+/** Friendly name for a folder table, for anything that isn't a required item. */
+export const FOLDER_TABLE_LABELS: Record<string, string> = {
+  tax_client_uploads:      'Client Uploads',
+  tax_additional_docs:     'Additional Tax Docs',
+  tax_contracts:           'Tax Contracts',
+  tax_invoices:            'Tax Invoices',
+  tax_return_information:  'Tax Returns',
+  bk_contracts:            'BK Contracts',
+  bk_invoices:             'BK Invoices',
+  bk_final_pnl:            'Additional BK Docs',
+  bk_mr_required_info:     'Monthly Reporting (Required Info)',
+  bk_mr_client_review:     'Monthly Reporting (For Client Review)',
+  bk_mr_final_statements:  'Monthly Reporting (Final Statements)',
+  cfo_contracts:           'CFO Contracts',
+  cfo_invoices:            'CFO Invoices',
+  cfo_additional_docs:     'Additional CFO Docs',
+  cfo_mr_required_info:    'Monthly Reporting (Required Info)',
+  cfo_mr_client_review:    'Monthly Reporting (For Client Review)',
+  cfo_mr_final_statements: 'Monthly Reporting (Final Statements & Insights)',
+};
+
+export function folderTableLabel(table: string | null | undefined): string {
+  if (!table) return 'Uncategorised';
+  return FOLDER_TABLE_LABELS[table] ?? table.replace(/_/g, ' ');
+}
+
+/**
+ * The required item a document was uploaded against, found by matching the
+ * label the upload prefixed onto its name. Longest label first, so
+ * "Bank Statements — BDO ••••4821" wins over a plain "Bank Statements".
+ */
+export function requiredItemForDocName(
+  docName: string | null | undefined,
+  clientItems: RequiredItem[],
+): RequiredItem | null {
+  if (!docName) return null;
+  const candidates = [...clientItems].sort((a, b) => b.label.length - a.label.length);
+  return candidates.find(i => docName.startsWith(i.label)) ?? null;
+}
+
+/** Strip the item label the upload prefixed, leaving the client's own filename. */
+export function stripRequirementPrefix(docName: string, item: RequiredItem | null): string {
+  if (!item) return docName;
+  const rest = docName.slice(item.label.length);
+  return rest.startsWith(' — ') ? rest.slice(3) : (rest.trim() || docName);
 }
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -168,7 +307,11 @@ export async function getRequirementDocCounts(): Promise<Record<string, number>>
   if (error) { console.error('getRequirementDocCounts:', error.message); return {}; }
   const counts: Record<string, number> = {};
   for (const r of (data ?? []) as { service: string; requirement_key: string }[]) {
-    const k = `${r.service}:${r.requirement_key}`;
+    // Per-account keys roll up into the generic 'bank_statements' row: this view
+    // aggregates across ALL clients, where one client's individual accounts
+    // aren't meaningful — and the admin item list is the unexpanded one.
+    const base = bankAccountIdOf(r.requirement_key) ? BANK_STATEMENTS_KEY : r.requirement_key;
+    const k = `${r.service}:${base}`;
     counts[k] = (counts[k] ?? 0) + 1;
   }
   return counts;
@@ -190,12 +333,19 @@ export interface TaggedFile {
  * tag's document from its folder table so the admin can open them. Admin/staff only.
  */
 export async function getTaggedFilesForItem(service: RequirementService, key: string): Promise<TaggedFile[]> {
-  const { data: tags, error } = await supabase
+  let q = supabase
     .from('document_requirements')
     .select('document_id, document_table, client_email, status, month')
     .eq('service', service)
-    .eq('requirement_key', key)
     .not('document_id', 'is', null);
+
+  // The generic 'bank_statements' row stands for every client's per-account
+  // slots too (bank_statements__<id>), so match the whole family.
+  q = key === BANK_STATEMENTS_KEY
+    ? q.like('requirement_key', `${BANK_STATEMENTS_KEY}%`)
+    : q.eq('requirement_key', key);
+
+  const { data: tags, error } = await q;
   if (error) { console.error('getTaggedFilesForItem:', error.message); return []; }
 
   const rows = (tags ?? []) as { document_id: string; document_table: string; client_email: string; status: RequirementStatus; month: string }[];
@@ -364,12 +514,40 @@ export async function rejectRequirementForDocument(documentId: string, rejectedB
 export async function getRequirementForDocument(documentId: string): Promise<RequiredItem | null> {
   const { data, error } = await supabase
     .from('document_requirements')
-    .select('service, requirement_key')
+    .select('service, requirement_key, client_email')
     .eq('document_id', documentId)
     .maybeSingle();
   if (error) { console.error('getRequirementForDocument:', error.message); return null; }
   if (!data) return null;
-  return REQUIRED_UPLOADS.find(i => i.service === data.service && i.key === data.requirement_key) ?? null;
+
+  const service = data.service as RequirementService;
+
+  // Per-account bank item → name it from the client's configured accounts.
+  const acctId = bankAccountIdOf(data.requirement_key);
+  if (acctId) {
+    const accounts = await getBankAccountsByEmail(data.client_email);
+    const acct = accounts.find(a => a.id === acctId);
+    return {
+      service,
+      key:   data.requirement_key,
+      // Account removed since the upload → still name it, so the approve modal
+      // shows what the client tagged instead of falling back to the picker.
+      label: acct ? bankAccountLabel(acct) : 'Bank Statements — (removed account)',
+    };
+  }
+
+  return REQUIRED_UPLOADS.find(i => i.service === service && i.key === data.requirement_key) ?? null;
+}
+
+/** A client's configured bank accounts, by email. Used by the admin screens. */
+export async function getBankAccountsByEmail(email: string): Promise<BankAccount[]> {
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('bank_accounts')
+    .eq('email', email)
+    .maybeSingle();
+  if (error) { console.error('getBankAccountsByEmail:', error.message); return []; }
+  return normalizeBankAccounts(data?.bank_accounts);
 }
 
 /**

@@ -16,7 +16,11 @@ import {
 import {
   getRequirementCountsForMonth, getFulfilledRequirements,
   itemsForClient, reqKey, monthOf, formatMonthLabel, serviceLabel,
+  BankAccount, normalizeBankAccounts,
 } from '../../db/requirements';
+import {
+  BankAccountsField, cleanBankAccounts, hasIncompleteBankAccount,
+} from '../../components/BankAccountsField';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -122,6 +126,7 @@ function AddClientModal({
   const [plan, setPlan]             = useState<string>('Free');
   const [services, setServices]     = useState<ClientService[]>(['BK']);   // BK / CFO / both
   const [hasQbo, setHasQbo]         = useState(false);                      // already have QBO access?
+  const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);      // one required slot each
   const [step, setStep]             = useState<'form' | 'success' | 'error'>('form');
   const [loading, setLoading]       = useState(false);
   const [errorMsg, setErrorMsg]     = useState('');
@@ -134,15 +139,21 @@ function AddClientModal({
 
   const reset = () => {
     setFullName(''); setEmail(''); setPassword(''); setPlan('Free');
-    setServices(['BK']); setHasQbo(false);
+    setServices(['BK']); setHasQbo(false); setBankAccounts([]);
     setStep('form'); setErrorMsg(''); setShowPass(false);
   };
+
+  // A half-filled bank row would be silently dropped on save — block instead.
+  const bankIncomplete = hasIncompleteBankAccount(bankAccounts);
+  const canSubmit =
+    !!fullName.trim() && !!email.trim() && password.length >= 8 &&
+    services.length > 0 && !bankIncomplete && !loading;
 
   const handleClose = () => { reset(); onClose(); };
   const handleDone  = () => { reset(); onDone(); };
 
   const handleSubmit = async () => {
-    if (!fullName.trim() || !email.trim() || password.length < 8 || services.length === 0) return;
+    if (!canSubmit) return;
     setLoading(true);
     setErrorMsg('');
     try {
@@ -195,6 +206,7 @@ function AddClientModal({
             is_active: true,
             services,                    // BK / CFO / both — drives what they see
             has_qbo_access: hasQbo,      // hides "Prior Month Bookkeeping / QBO Access" when true
+            bank_accounts: cleanBankAccounts(bankAccounts),  // one Bank Statements slot each
           }),
         });
         if (!profileRes.ok) {
@@ -256,6 +268,8 @@ function AddClientModal({
               <Text style={ac.title}>Add New Client</Text>
               <Text style={ac.subtitle}>Create a client account directly — no email verification needed.</Text>
 
+              {/* Fields scroll; the title and action buttons stay pinned. */}
+              <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ gap: 16 }}>
               {/* Full Name */}
               <View style={ac.fieldGroup}>
                 <Text style={ac.label}>Full Name</Text>
@@ -336,6 +350,9 @@ function AddClientModal({
                 </View>
               </View>
 
+              {/* Bank accounts — one required "Bank Statements" slot per account */}
+              <BankAccountsField value={bankAccounts} onChange={setBankAccounts} />
+
               {/* QBO access (only relevant when CFO is selected) */}
               {services.includes('CFO') && (
                 <View style={ac.fieldGroup}>
@@ -361,6 +378,7 @@ function AddClientModal({
                   </View>
                 </View>
               )}
+              </ScrollView>
 
               {/* Error */}
               {!!errorMsg && (
@@ -376,9 +394,9 @@ function AddClientModal({
                   <Text style={ac.cancelText}>Cancel</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  style={[ac.primaryBtn, { flex: 2 }, (!fullName.trim() || !email.trim() || password.length < 8 || services.length === 0 || loading) && ac.primaryBtnDisabled]}
+                  style={[ac.primaryBtn, { flex: 2 }, !canSubmit && ac.primaryBtnDisabled]}
                   onPress={handleSubmit}
-                  disabled={!fullName.trim() || !email.trim() || password.length < 8 || services.length === 0 || loading}
+                  disabled={!canSubmit}
                   activeOpacity={0.85}
                 >
                   {loading
@@ -408,6 +426,9 @@ const ac = StyleSheet.create({
     padding: 24,
     paddingBottom: Platform.OS === 'ios' ? 36 : 28,
     gap: 16,
+    // The form scrolls inside — cap the sheet so a long list of bank accounts
+    // can't push the action buttons off-screen on a phone.
+    maxHeight: '92%',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: -6 },
     shadowOpacity: 0.14,
@@ -570,6 +591,9 @@ function ManageModal({
     Array.isArray(client.services) && client.services.length > 0 ? client.services : ['BK']
   );
   const [hasQbo, setHasQbo]       = useState(client.has_qbo_access ?? false);
+  const [bankAccounts, setBankAccounts] = useState<BankAccount[]>(
+    normalizeBankAccounts(client.bank_accounts)
+  );
   const [saving, setSaving]       = useState(false);
 
   const toggleService = (svc: ClientService) => {
@@ -589,14 +613,21 @@ function ManageModal({
 
   const handleSave = async () => {
     if (services.length === 0) { showToast('Select at least one service (BK or TAX)'); return; }
+    // Half-filled bank rows would be silently dropped — say so instead of saving.
+    if (hasIncompleteBankAccount(bankAccounts)) {
+      showToast('Finish every bank account: bank name + 4 digits');
+      return;
+    }
+    const banks = cleanBankAccounts(bankAccounts);
     setSaving(true);
     const ok = await updateClientProfile(client.id, {
       full_name: name, plan, is_active: active, services, has_qbo_access: hasQbo,
+      bank_accounts: banks,
     });
     setSaving(false);
     if (ok) {
       showToast('Client updated successfully');
-      onSave({ ...client, full_name: name, plan, is_active: active, services, has_qbo_access: hasQbo });
+      onSave({ ...client, full_name: name, plan, is_active: active, services, has_qbo_access: hasQbo, bank_accounts: banks });
     } else {
       showToast('Failed to update client');
     }
@@ -711,6 +742,9 @@ function ManageModal({
                 })}
               </View>
             </View>
+
+            {/* Bank accounts — one required "Bank Statements" slot per account */}
+            <BankAccountsField value={bankAccounts} onChange={setBankAccounts} />
 
             {/* QBO access — only relevant when CFO is on */}
             {services.includes('CFO') && (
@@ -1028,8 +1062,9 @@ function ProgressDetailModal({ client, onClose, onViewDocs }: {
     return () => { alive = false; };
   }, [client.email]);
 
-  // Only the items that apply to THIS client (their services + QBO access).
-  const clientItems = itemsForClient(client.services, client.has_qbo_access);
+  // Only the items that apply to THIS client (services + QBO access + one row
+  // per configured bank account).
+  const clientItems = itemsForClient(client.services, client.has_qbo_access, normalizeBankAccounts(client.bank_accounts));
   const total = clientItems.length;
   const done  = clientItems.filter(i => fulfilled.has(reqKey(i.service, i.key))).length;
   const pct   = total > 0 ? (done / total) * 100 : 0;
@@ -1211,7 +1246,7 @@ export function ClientListScreen({ onSelectClient }: Props) {
     const pc   = PLAN_COLORS[item.plan] ?? PLAN_COLORS.Free;
 
     const reqDone  = reqCounts[item.email] ?? 0;
-    const reqTotal = itemsForClient(item.services, item.has_qbo_access).length;
+    const reqTotal = itemsForClient(item.services, item.has_qbo_access, normalizeBankAccounts(item.bank_accounts)).length;
     const reqPct   = reqTotal > 0 ? (reqDone / reqTotal) * 100 : 0;
     const reqColor = reqPct >= 100 ? '#16A34A' : reqPct >= 50 ? '#E8B923' : '#B5905B';
 

@@ -37,6 +37,11 @@ import {
 import {
   REQUIRED_UPLOADS,
   RequiredItem,
+  BankAccount,
+  BANK_STATEMENTS_KEY,
+  bankAccountKey,
+  bankAccountLabel,
+  getBankAccountsByEmail,
   tagDocumentRequirement,
   approveRequirementForDocument,
   clearPendingRequirementForDocument,
@@ -186,6 +191,7 @@ function ApproveTagModal({ visible, doc, onConfirm, onCancel }: {
   const [clientTag, setClientTag]   = useState<RequiredItem | null>(null); // what the client chose
   const [loadingTag, setLoadingTag] = useState(false);
   const [clientNote, setClientNote] = useState<string | null>(null); // the client's upload note (first message)
+  const [banks, setBanks]           = useState<BankAccount[]>([]);   // this client's bank accounts
   // The doc id the loaded clientTag belongs to — guards against showing a stale
   // tag from the previously-approved doc while the new lookup is in flight.
   const [tagDocId, setTagDocId]     = useState<string | null>(null);
@@ -196,12 +202,19 @@ function ApproveTagModal({ visible, doc, onConfirm, onCancel }: {
     setSelected(null);
     setClientTag(null);
     setClientNote(null);
+    setBanks([]);
     setTagDocId(null);
     if (visible && doc) {
       setLoadingTag(true);
       getRequirementForDocument(doc.id)
         .then(item => { if (!cancelled) { setClientTag(item); setTagDocId(doc.id); } })
         .finally(() => { if (!cancelled) setLoadingTag(false); });
+      // The manual picker offers one row per bank account this client was set up
+      // with, so an untagged upload can be tagged to a specific account.
+      if (doc.email) {
+        getBankAccountsByEmail(doc.email)
+          .then(list => { if (!cancelled) setBanks(list); });
+      }
       // First message on the file from the client = the note they left on upload.
       supabase
         .from('file_conversations')
@@ -225,6 +238,18 @@ function ApproveTagModal({ visible, doc, onConfirm, onCancel }: {
   // groups (both services' items). Each item is keyed by service+key so BK and CFO
   // items with the same key (e.g. bank_statements) don't select together.
   const services: Array<RequiredItem['service']> = ['BK', 'CFO'];
+
+  // Items offered by the manual picker, with the generic "Bank Statements" row
+  // replaced by one row per account this client was set up with. No accounts
+  // configured → the generic row stays.
+  const pickerItems = (svc: RequiredItem['service']): RequiredItem[] =>
+    REQUIRED_UPLOADS
+      .filter(i => i.service === svc)
+      .flatMap(i =>
+        i.key === BANK_STATEMENTS_KEY && banks.length > 0
+          ? banks.map(a => ({ service: i.service, key: bankAccountKey(a.id), label: bankAccountLabel(a) }))
+          : [i],
+      );
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
@@ -291,7 +316,7 @@ function ApproveTagModal({ visible, doc, onConfirm, onCancel }: {
                 {services.map(svc => (
                   <View key={svc} style={{ marginBottom: 6 }}>
                     <Text style={at.groupLabel}>{serviceLabel(svc)}</Text>
-                    {REQUIRED_UPLOADS.filter(i => i.service === svc).map(item => {
+                    {pickerItems(svc).map(item => {
                       const active = selected?.key === item.key && selected?.service === item.service;
                       return (
                         <TouchableOpacity

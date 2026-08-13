@@ -757,7 +757,7 @@ function UploadModal({ visible, sf, root, userId, userEmail, onClose, onUploaded
                 <View style={up.reqPick}>
                   <Text style={up.reqPickTitle}>What are you uploading?</Text>
                   <Text style={up.reqPickSub}>Choose the required item this file is for</Text>
-                  {itemsForFolderAndClient(sf.key, user?.services, user?.hasQboAccess).map(item => (
+                  {itemsForFolderAndClient(sf.key, user?.services, user?.hasQboAccess, user?.bankAccounts).map(item => (
                     <TouchableOpacity key={item.key} style={up.reqItem} activeOpacity={0.75} onPress={() => setRequirement(item)}>
                       <Ionicons name="ellipse-outline" size={18} color={sf.color} />
                       <Text style={up.reqItemText}>{item.label}</Text>

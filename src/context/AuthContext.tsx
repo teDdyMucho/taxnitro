@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
+import { BankAccount, normalizeBankAccounts } from '../db/requirements';
 
 export type UserRole = 'client' | 'staff' | 'admin';
 export type ClientService = 'BK' | 'TAX' | 'CFO';
@@ -13,6 +14,7 @@ export interface AuthUser {
   role: UserRole;
   services: ClientService[];    // which categories/requirements this client sees
   hasQboAccess: boolean;        // true → hide "Prior Month Bookkeeping / QBO Access"
+  bankAccounts: BankAccount[];  // one required Bank Statements slot per account
 }
 
 interface AuthContextValue {
@@ -31,30 +33,49 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 
 // Builds a minimal AuthUser immediately from the session — no DB call needed
 function sessionUser(userId: string, email: string): AuthUser {
-  return { id: userId, email, name: 'User', role: 'client', services: ['BK'], hasQboAccess: false };
+  return { id: userId, email, name: 'User', role: 'client', services: ['BK'], hasQboAccess: false, bankAccounts: [] };
 }
 
-// Enriches AuthUser with profile data from DB (called in background)
-async function fetchProfile(userId: string, email: string): Promise<AuthUser> {
+// Enriches AuthUser with profile data from DB (called in background).
+//
+// Returns null when the profile can't be read — the caller must then KEEP the
+// user it already has. Falling through to the defaults below instead would sign
+// an admin in as a nameless 'client' and hand them the client portal, which is
+// exactly what happens on any query error (bad column, RLS, offline): supabase-js
+// resolves with { data: null, error } rather than throwing, so a try/catch does
+// not catch it and every `?? fallback` quietly fires at once.
+//
+// `select('*')` for the same reason: naming columns explicitly means a column
+// this build doesn't know about yet — or one whose migration hasn't been run —
+// fails the WHOLE query (PostgREST 42703) instead of just being absent.
+async function fetchProfile(userId: string, email: string): Promise<AuthUser | null> {
   try {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('profiles')
-      .select('full_name, client_id, plan, role, services, has_qbo_access')
+      .select('*')
       .eq('id', userId)
       .single();
+
+    if (error || !data) {
+      console.error('fetchProfile:', error?.message ?? 'no profile row for user');
+      return null;
+    }
 
     return {
       id: userId,
       email,
-      name: data?.full_name ?? 'User',
-      clientId: data?.client_id,
-      plan: data?.plan ?? 'Free',
-      role: (data?.role as UserRole) ?? 'client',
-      services: (Array.isArray(data?.services) && data.services.length > 0 ? data.services : ['BK']) as ClientService[],
-      hasQboAccess: data?.has_qbo_access ?? false,
+      name: data.full_name ?? 'User',
+      clientId: data.client_id,
+      plan: data.plan ?? 'Free',
+      role: (data.role as UserRole) ?? 'client',
+      services: (Array.isArray(data.services) && data.services.length > 0 ? data.services : ['BK']) as ClientService[],
+      hasQboAccess: data.has_qbo_access ?? false,
+      // Absent until database/profiles_bank_accounts.sql is run → no accounts.
+      bankAccounts: normalizeBankAccounts(data.bank_accounts),
     };
-  } catch {
-    return sessionUser(userId, email);
+  } catch (err: any) {
+    console.error('fetchProfile:', err?.message ?? err);
+    return null;
   }
 }
 
@@ -73,9 +94,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(minimal);
         setIsAuthenticated(true);
 
-        // Step 2: Enrich with profile data in background (non-blocking)
+        // Step 2: Enrich with profile data in background (non-blocking).
+        // On failure keep the minimal user rather than overwriting it.
         fetchProfile(session.user.id, session.user.email ?? '').then(profile => {
-          setUser(profile);
+          if (profile) setUser(profile);
         });
       }
       // Clear loading immediately after session check — don't wait for profile
@@ -94,7 +116,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           // briefly reset role to 'client', which would unmount AdminNavigator.
           setUser(prev => {
             fetchProfile(session.user.id, session.user.email ?? '').then(profile => {
-              setUser(profile);
+              // Never clobber a good user with a failed lookup — that would drop
+              // an admin back to the client portal on a transient error.
+              if (profile) setUser(profile);
             });
             // Fresh login — show minimal user immediately while profile loads
             if (!prev) return sessionUser(session.user.id, session.user.email ?? '');

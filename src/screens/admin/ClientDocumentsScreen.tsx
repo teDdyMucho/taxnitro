@@ -1,10 +1,11 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
   FlatList,
+  SectionList,
   ActivityIndicator,
   RefreshControl,
   Modal,
@@ -34,7 +35,11 @@ import {
   Document,
 } from '../../db/documents';
 import { createCustomRequest } from '../../db/customRequests';
-import { monthOf, isStaffLabelFolder, staffLabelsForFolder } from '../../db/requirements';
+import {
+  monthOf, isStaffLabelFolder, staffLabelsForFolder,
+  itemsForClient, requiredItemForDocName, stripRequirementPrefix,
+  folderTableLabel, normalizeBankAccounts, RequiredItem,
+} from '../../db/requirements';
 
 interface Props {
   client: Profile;
@@ -459,18 +464,44 @@ export function ClientDocumentsScreen({ client, onBack }: Props) {
 
   const fmtDate = (iso: string) => new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 
-  const renderItem = ({ item }: { item: Document }) => (
+  // ── Folders, mirroring what the client picked when they uploaded ───────────
+  // Required items all share one collector table, so grouping by table would
+  // merge every bank account and item into one heap. Regroup by the label the
+  // client chose (carried in the filename), falling back to the folder table
+  // for staff-delivered and non-required documents.
+  const clientItems = useMemo<RequiredItem[]>(
+    () => itemsForClient(client.services, client.has_qbo_access, normalizeBankAccounts(client.bank_accounts)),
+    [client.services, client.has_qbo_access, client.bank_accounts],
+  );
+
+  const sections = useMemo(() => {
+    type Row = Document & { displayName: string };
+    const buckets = new Map<string, { title: string; order: number; data: Row[] }>();
+
+    documents.forEach(doc => {
+      const item = requiredItemForDocName(doc.name, clientItems);
+      const key   = item ? `req:${item.service}:${item.key}` : `tbl:${doc.document_type ?? ''}`;
+      const title = item ? item.label : folderTableLabel(doc.document_type);
+      // Required items first, in checklist order; everything else after.
+      const order = item ? clientItems.indexOf(item) : 1000;
+
+      const row: Row = { ...doc, displayName: stripRequirementPrefix(doc.name, item) };
+      const bucket = buckets.get(key);
+      if (bucket) bucket.data.push(row);
+      else buckets.set(key, { title, order, data: [row] });
+    });
+
+    return [...buckets.values()].sort((a, b) => a.order - b.order || a.title.localeCompare(b.title));
+  }, [documents, clientItems]);
+
+  const renderItem = ({ item }: { item: Document & { displayName: string } }) => (
     <View style={s.docRow}>
       <View style={s.docIcon}>
         <Ionicons name="document-outline" size={20} color={Colors.primary} />
       </View>
       <View style={{ flex: 1 }}>
-        <Text style={s.docName} numberOfLines={1}>{item.name}</Text>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4 }}>
-          <Text style={s.docMeta}>{item.document_type?.replace(/_/g, ' ')}</Text>
-          <Text style={s.docMeta}>·</Text>
-          <Text style={s.docMeta}>{fmtDate(item.created_at)}</Text>
-        </View>
+        <Text style={s.docName} numberOfLines={1}>{item.displayName}</Text>
+        <Text style={[s.docMeta, { marginTop: 4 }]}>{fmtDate(item.created_at)}</Text>
       </View>
       <StatusBadge status={item.status} />
       <View style={s.docActions}>
@@ -523,11 +554,21 @@ export function ClientDocumentsScreen({ client, onBack }: Props) {
           <ActivityIndicator color={Colors.primary} size="large" />
         </View>
       ) : (
-        <FlatList
-          data={documents}
+        <SectionList
+          sections={sections}
           keyExtractor={d => d.id}
           renderItem={renderItem}
-          contentContainerStyle={{ padding: 16, gap: 10 }}
+          renderSectionHeader={({ section }) => (
+            <View style={s.folderHead}>
+              <Ionicons name="folder-open" size={16} color="#B5905B" />
+              <Text style={s.folderTitle} numberOfLines={1}>{section.title}</Text>
+              <Text style={s.folderCount}>{section.data.length}</Text>
+            </View>
+          )}
+          stickySectionHeadersEnabled={false}
+          contentContainerStyle={{ padding: 16, paddingBottom: 32 }}
+          SectionSeparatorComponent={() => <View style={{ height: 6 }} />}
+          ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => load(true)} tintColor={Colors.primary} />}
           ListEmptyComponent={<Text style={s.empty}>No documents for this client.</Text>}
         />
@@ -637,4 +678,30 @@ const s = StyleSheet.create({
     justifyContent: 'center',
   },
   empty: { color: Colors.textMuted, fontSize: 14, textAlign: 'center', marginTop: 40 },
+
+  /* Folder headers — one per document type the client uploaded under */
+  folderHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 9,
+    marginTop: 14,
+    marginBottom: 8,
+    paddingHorizontal: 2,
+  },
+  folderTitle: {
+    flex: 1,
+    color: Colors.textPrimary,
+    fontSize: 13.5,
+    fontWeight: '800',
+  },
+  folderCount: {
+    color: '#B5905B',
+    fontSize: 11,
+    fontWeight: '800',
+    backgroundColor: 'rgba(232,185,35,0.16)',
+    borderRadius: 9,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    overflow: 'hidden',
+  },
 });

@@ -387,7 +387,7 @@ export function DashboardScreen() {
 
   // ── Required-upload progress (only items that apply to THIS client) ──
   // Scoped by the client's services (BK/CFO) and QBO access.
-  const clientItems = itemsForClient(user?.services, user?.hasQboAccess);
+  const clientItems = itemsForClient(user?.services, user?.hasQboAccess, user?.bankAccounts);
   const reqDone   = clientItems.filter(i => fulfilled.has(reqKey(i.service, i.key))).length;
   const reqTotal  = clientItems.length;
   const reqPct    = reqTotal > 0 ? (reqDone / reqTotal) * 100 : 0;
