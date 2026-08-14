@@ -101,3 +101,74 @@ export async function setStaffActive(userId: string, is_active: boolean): Promis
   if (error) { console.error('setStaffActive:', error.message); return false; }
   return true;
 }
+
+// ── Deleting a staff member ──────────────────────────────────────────────────
+// The workflow tables reference profiles(id) with NO `on delete` clause, so
+// Postgres defaults to NO ACTION: a profile still named by a workflow, note,
+// query item, message or drive link CANNOT be deleted, and the attempt fails
+// with a foreign-key error. Rather than surface that raw, the references are
+// counted first so the UI can say what is holding the account and offer
+// deactivation instead.
+
+export interface StaffReferences {
+  /** Workflows where they are the processor, reviewer or creator. */
+  workflows: number;
+  /** Notes, query items, checklist ticks, messages and drive links they authored. */
+  activity: number;
+  total: number;
+}
+
+export async function countStaffReferences(userId: string): Promise<StaffReferences> {
+  const head = { count: 'exact' as const, head: true };
+
+  const [wf, notes, queries, checks, msgs, links] = await Promise.all([
+    supabase.from('workflow_instances').select('id', head)
+      .or(`assigned_processor.eq.${userId},assigned_reviewer.eq.${userId},created_by.eq.${userId}`),
+    supabase.from('workflow_notes').select('id', head)
+      .or(`created_by.eq.${userId},resolved_by.eq.${userId}`),
+    supabase.from('workflow_query_items').select('id', head)
+      .or(`flagged_by.eq.${userId},resolved_by.eq.${userId}`),
+    supabase.from('workflow_checklist_items').select('id', head).eq('checked_by', userId),
+    supabase.from('workflow_messages').select('id', head).eq('sender_id', userId),
+    supabase.from('workflow_drive_links').select('id', head).eq('saved_by', userId),
+  ]);
+
+  const workflows = wf.count ?? 0;
+  const activity =
+    (notes.count ?? 0) + (queries.count ?? 0) + (checks.count ?? 0) +
+    (msgs.count ?? 0) + (links.count ?? 0);
+
+  return { workflows, activity, total: workflows + activity };
+}
+
+/**
+ * Permanently remove a staff member.
+ *
+ * Deletes the auth user, which cascades to their profile. Needs the service
+ * role — the anon key cannot touch the admin API — and will fail if anything
+ * still references them, so call countStaffReferences first.
+ */
+export async function deleteStaffMember(userId: string): Promise<{ ok: boolean; error?: string }> {
+  const url = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
+  const key = process.env.EXPO_PUBLIC_SUPABASE_SERVICE_ROLE_KEY ?? '';
+  if (!url || !key) return { ok: false, error: 'Service role key not configured.' };
+
+  try {
+    const res = await fetch(`${url}/auth/v1/admin/users/${userId}`, {
+      method: 'DELETE',
+      headers: { apikey: key, Authorization: `Bearer ${key}` },
+    });
+    if (res.ok) return { ok: true };
+
+    const body = await res.text();
+    console.error('deleteStaffMember:', body);
+    // A foreign-key violation here means something still points at them.
+    if (/foreign key|violates/i.test(body)) {
+      return { ok: false, error: 'This member is still linked to workflow records and cannot be deleted.' };
+    }
+    return { ok: false, error: 'Could not delete this member.' };
+  } catch (e: any) {
+    console.error('deleteStaffMember:', e?.message ?? e);
+    return { ok: false, error: 'Network error. Please try again.' };
+  }
+}

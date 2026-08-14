@@ -18,7 +18,11 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors } from '../../constants/colors';
 import { useAuth } from '../../context/AuthContext';
 import { useSheetStyles } from '../../hooks/useSheetStyles';
-import { getAllStaff, updateStaffRole, setStaffActive, Profile, UserRole } from '../../db/profiles';
+import {
+  getAllStaff, updateStaffRole, setStaffActive,
+  countStaffReferences, deleteStaffMember, StaffReferences,
+  Profile, UserRole,
+} from '../../db/profiles';
 import { supabase } from '../../lib/supabase';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -481,13 +485,24 @@ export function StaffManagementScreen() {
   const [toastMsg, setToastMsg]     = useState('');
   const [toastVisible, setToastVisible] = useState(false);
 
+  // Promoting to admin is one press away and, since the admin pill is locked,
+  // cannot be undone from this screen — so it asks first.
+  const [roleTarget, setRoleTarget]   = useState<Profile | null>(null);
+  const [rolePending, setRolePending] = useState(false);
+
+  // Delete confirmation. `refs` is null while the reference count is loading.
+  const [deleteTarget, setDeleteTarget] = useState<Profile | null>(null);
+  const [refs, setRefs]                 = useState<StaffReferences | null>(null);
+  const [deleting, setDeleting]         = useState(false);
+  const [deleteError, setDeleteError]   = useState<string | null>(null);
+
   const showToast = (msg: string) => {
     setToastMsg(msg);
     setToastVisible(true);
     setTimeout(() => setToastVisible(false), 2600);
   };
 
-  const { isLoading: authLoading } = useAuth();
+  const { isLoading: authLoading, user } = useAuth();
 
   const load = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
@@ -505,13 +520,19 @@ export function StaffManagementScreen() {
 
   useEffect(() => { if (!authLoading) load(); }, [authLoading]);
 
-  const toggleRole = async (member: Profile) => {
-    const newRole: UserRole = member.role === 'admin' ? 'staff' : 'admin';
-    const ok = await updateStaffRole(member.id, newRole);
+  const confirmRole = async () => {
+    if (!roleTarget) return;
+    const newRole: UserRole = roleTarget.role === 'admin' ? 'staff' : 'admin';
+    setRolePending(true);
+    const ok = await updateStaffRole(roleTarget.id, newRole);
+    setRolePending(false);
     if (ok) {
-      setStaff(prev => prev.map(s => s.id === member.id ? { ...s, role: newRole } : s));
-      showToast(`${member.full_name || 'Member'} is now ${newRole}`);
+      setStaff(prev => prev.map(s => s.id === roleTarget.id ? { ...s, role: newRole } : s));
+      showToast(`${roleTarget.full_name || 'Member'} is now ${newRole}`);
+    } else {
+      showToast('Could not change the role');
     }
+    setRoleTarget(null);
   };
 
   const toggleActive = async (member: Profile) => {
@@ -520,6 +541,30 @@ export function StaffManagementScreen() {
     if (ok) {
       setStaff(prev => prev.map(s => s.id === member.id ? { ...s, is_active: next } : s));
       showToast(next ? 'Account activated' : 'Account deactivated');
+    }
+  };
+
+  // ── Delete ────────────────────────────────────────────────────────────────
+  const askDelete = async (member: Profile) => {
+    setDeleteTarget(member);
+    setRefs(null);
+    setDeleteError(null);
+    // Workflow tables reference profiles with NO on-delete rule, so a linked
+    // member simply cannot be removed — find out before offering the button.
+    setRefs(await countStaffReferences(member.id));
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    const res = await deleteStaffMember(deleteTarget.id);
+    setDeleting(false);
+    if (res.ok) {
+      setStaff(prev => prev.filter(m => m.id !== deleteTarget.id));
+      showToast(`${deleteTarget.full_name || 'Member'} deleted`);
+      setDeleteTarget(null);
+    } else {
+      setDeleteError(res.error ?? 'Could not delete this member.');
     }
   };
 
@@ -576,7 +621,7 @@ export function StaffManagementScreen() {
           ) : (
             <TouchableOpacity
               style={[s.rolePill, { backgroundColor: rc.pillBg, borderColor: rc.pillBorder }]}
-              onPress={() => toggleRole(item)}
+              onPress={() => setRoleTarget(item)}
               activeOpacity={0.7}
             >
               <Ionicons name="person" size={11} color={rc.pillText} />
@@ -600,6 +645,18 @@ export function StaffManagementScreen() {
                 size={19}
                 color={item.is_active ? '#E8B923' : '#A8998A'}
               />
+            </TouchableOpacity>
+          )}
+
+          {/* Delete — admins and your own account are not removable here, for
+              the same reason their role and active state are locked. */}
+          {safeRole !== 'admin' && item.id !== user?.id && (
+            <TouchableOpacity
+              style={s.deleteBtn}
+              onPress={() => askDelete(item)}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="trash-outline" size={17} color="#DC2626" />
             </TouchableOpacity>
           )}
         </View>
@@ -732,6 +789,141 @@ export function StaffManagementScreen() {
         }}
       />
 
+      {/* Promote to admin confirmation */}
+      <Modal visible={!!roleTarget} transparent animationType="fade" onRequestClose={() => !rolePending && setRoleTarget(null)}>
+        <Pressable style={dc.overlay} onPress={() => !rolePending && setRoleTarget(null)}>
+          <Pressable style={dc.box} onPress={() => {}}>
+            <View style={dc.roleIcon}>
+              <Ionicons name="shield-checkmark-outline" size={26} color="#B5905B" />
+            </View>
+            <Text style={dc.title}>Make this member an admin?</Text>
+            <Text style={dc.sub} numberOfLines={2}>
+              {roleTarget?.full_name || 'Staff member'} · {roleTarget?.email}
+            </Text>
+
+            <View style={dc.warnBox}>
+              <Ionicons name="alert-circle-outline" size={15} color="#B45309" />
+              <Text style={dc.warnText}>
+                Admins can manage every client, add and remove staff, and see all documents.
+                This cannot be undone from this screen.
+              </Text>
+            </View>
+
+            <View style={dc.row}>
+              <TouchableOpacity
+                style={dc.cancelBtn}
+                onPress={() => setRoleTarget(null)}
+                disabled={rolePending}
+                activeOpacity={0.75}
+              >
+                <Text style={dc.cancelText}>No, keep it</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[dc.altBtn, rolePending && { opacity: 0.6 }]}
+                onPress={confirmRole}
+                disabled={rolePending}
+                activeOpacity={0.85}
+              >
+                {rolePending
+                  ? <ActivityIndicator size="small" color="#1C1713" />
+                  : <><Ionicons name="shield-checkmark" size={15} color="#1C1713" />
+                      <Text style={dc.altText}>Yes, make admin</Text></>}
+              </TouchableOpacity>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* Delete confirmation */}
+      <Modal visible={!!deleteTarget} transparent animationType="fade" onRequestClose={() => !deleting && setDeleteTarget(null)}>
+        <Pressable style={dc.overlay} onPress={() => !deleting && setDeleteTarget(null)}>
+          <Pressable style={dc.box} onPress={() => {}}>
+            <View style={dc.icon}>
+              <Ionicons name="trash-outline" size={26} color="#DC2626" />
+            </View>
+            <Text style={dc.title}>Delete this member?</Text>
+            <Text style={dc.sub} numberOfLines={2}>
+              {deleteTarget?.full_name || 'Staff member'} · {deleteTarget?.email}
+            </Text>
+
+            {refs === null ? (
+              <View style={{ paddingVertical: 18 }}>
+                <ActivityIndicator color="#B5905B" />
+              </View>
+            ) : refs.total > 0 ? (
+              /* Blocked — the database will refuse, so don't offer the button. */
+              <>
+                <View style={dc.blockBox}>
+                  <Ionicons name="lock-closed-outline" size={15} color="#B45309" />
+                  <View style={{ flex: 1, gap: 3 }}>
+                    <Text style={dc.blockTitle}>This member can't be deleted</Text>
+                    <Text style={dc.blockText}>
+                      They are still attached to{' '}
+                      {refs.workflows > 0 && `${refs.workflows} workflow${refs.workflows !== 1 ? 's' : ''}`}
+                      {refs.workflows > 0 && refs.activity > 0 ? ' and ' : ''}
+                      {refs.activity > 0 && `${refs.activity} record${refs.activity !== 1 ? 's' : ''}`}
+                      . Deleting them would break that history.
+                    </Text>
+                  </View>
+                </View>
+                <View style={dc.row}>
+                  <TouchableOpacity style={dc.cancelBtn} onPress={() => setDeleteTarget(null)} activeOpacity={0.75}>
+                    <Text style={dc.cancelText}>Close</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={dc.altBtn}
+                    onPress={() => {
+                      if (deleteTarget) toggleActive(deleteTarget);
+                      setDeleteTarget(null);
+                    }}
+                    activeOpacity={0.85}
+                  >
+                    <Ionicons name="ban-outline" size={15} color="#1C1713" />
+                    <Text style={dc.altText}>Deactivate instead</Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            ) : (
+              <>
+                <View style={dc.warnBox}>
+                  <Ionicons name="alert-circle-outline" size={15} color="#B45309" />
+                  <Text style={dc.warnText}>
+                    Their sign-in and profile are removed for good. This cannot be undone.
+                  </Text>
+                </View>
+                {!!deleteError && (
+                  <View style={dc.errBox}>
+                    <Ionicons name="close-circle-outline" size={14} color="#DC2626" />
+                    <Text style={dc.errText}>{deleteError}</Text>
+                  </View>
+                )}
+                <View style={dc.row}>
+                  <TouchableOpacity
+                    style={dc.cancelBtn}
+                    onPress={() => setDeleteTarget(null)}
+                    disabled={deleting}
+                    activeOpacity={0.75}
+                  >
+                    <Text style={dc.cancelText}>No, keep it</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[dc.confirmBtn, deleting && { opacity: 0.6 }]}
+                    onPress={confirmDelete}
+                    disabled={deleting}
+                    activeOpacity={0.85}
+                  >
+                    {deleting
+                      ? <ActivityIndicator size="small" color="#FFFFFF" />
+                      : <><Ionicons name="trash-outline" size={15} color="#FFFFFF" />
+                          <Text style={dc.confirmText}>Yes, delete</Text></>}
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
+          </Pressable>
+        </Pressable>
+      </Modal>
+
       {/* Toast */}
       <Toast message={toastMsg} visible={toastVisible} />
     </View>
@@ -843,6 +1035,12 @@ const s = StyleSheet.create({
     borderRadius: 20, borderWidth: 1,
   },
   rolePillText: { fontSize: 11, fontWeight: '800' },
+  deleteBtn: {
+    width: 34, height: 34, borderRadius: 10,
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: 'rgba(220,38,38,0.08)',
+    borderWidth: 1, borderColor: 'rgba(220,38,38,0.22)',
+  },
   activeBtn: {
     width: 36, height: 36, borderRadius: 11,
     alignItems: 'center', justifyContent: 'center',
@@ -869,4 +1067,75 @@ const s = StyleSheet.create({
     shadowOpacity: 0.35, shadowRadius: 10, elevation: 4,
   },
   emptyActionText: { color: '#3A3131', fontSize: 14, fontWeight: '800' },
+});
+
+// ── Delete-confirmation styles ───────────────────────────────────────────────
+
+const dc = StyleSheet.create({
+  overlay: {
+    flex: 1, backgroundColor: 'rgba(28,23,19,0.6)',
+    alignItems: 'center', justifyContent: 'center', padding: 24,
+  },
+  box: {
+    backgroundColor: '#FFFFFF', borderRadius: 22, padding: 24,
+    width: '100%', maxWidth: 380, alignItems: 'center', gap: 9,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.2, shadowRadius: 28, elevation: 16,
+  },
+  icon: {
+    width: 56, height: 56, borderRadius: 18, backgroundColor: '#FEF2F2',
+    alignItems: 'center', justifyContent: 'center', marginBottom: 2,
+  },
+  // Granting a privilege, not destroying something — gold rather than red.
+  roleIcon: {
+    width: 56, height: 56, borderRadius: 18, backgroundColor: 'rgba(232,185,35,0.14)',
+    alignItems: 'center', justifyContent: 'center', marginBottom: 2,
+  },
+  title: { color: '#1C1713', fontSize: 17, fontWeight: '800', textAlign: 'center' },
+  sub:   { color: '#6B5E52', fontSize: 12.5, textAlign: 'center', lineHeight: 18 },
+
+  warnBox: {
+    flexDirection: 'row', gap: 8, alignItems: 'flex-start',
+    backgroundColor: '#FFFBEB', borderRadius: 10,
+    borderWidth: 1, borderColor: '#FDE68A',
+    paddingHorizontal: 11, paddingVertical: 10, marginTop: 4, width: '100%',
+  },
+  warnText: { flex: 1, color: '#B45309', fontSize: 11.5, lineHeight: 16 },
+
+  blockBox: {
+    flexDirection: 'row', gap: 9, alignItems: 'flex-start',
+    backgroundColor: '#FFFBEB', borderRadius: 10,
+    borderWidth: 1, borderColor: '#FDE68A',
+    paddingHorizontal: 12, paddingVertical: 11, marginTop: 4, width: '100%',
+  },
+  blockTitle: { color: '#92400E', fontSize: 12.5, fontWeight: '800' },
+  blockText:  { color: '#B45309', fontSize: 11.5, lineHeight: 16 },
+
+  errBox: {
+    flexDirection: 'row', gap: 7, alignItems: 'center',
+    backgroundColor: '#FEF2F2', borderRadius: 9,
+    borderWidth: 1, borderColor: '#FECACA',
+    paddingHorizontal: 11, paddingVertical: 9, width: '100%',
+  },
+  errText: { flex: 1, color: '#DC2626', fontSize: 11.5, lineHeight: 16 },
+
+  row: { flexDirection: 'row', gap: 10, width: '100%', marginTop: 8 },
+  cancelBtn: {
+    flex: 1, backgroundColor: '#F5F0E8', borderRadius: 12,
+    paddingVertical: 13, alignItems: 'center',
+    borderWidth: 1, borderColor: '#E8E0D0',
+  },
+  cancelText: { color: '#6B5E52', fontWeight: '700', fontSize: 14 },
+  confirmBtn: {
+    flex: 1, backgroundColor: '#DC2626', borderRadius: 12,
+    paddingVertical: 13, flexDirection: 'row',
+    alignItems: 'center', justifyContent: 'center', gap: 6,
+  },
+  confirmText: { color: '#FFFFFF', fontWeight: '800', fontSize: 14 },
+  altBtn: {
+    flex: 1.4, backgroundColor: '#E8B923', borderRadius: 12,
+    paddingVertical: 13, flexDirection: 'row',
+    alignItems: 'center', justifyContent: 'center', gap: 6,
+  },
+  altText: { color: '#1C1713', fontWeight: '800', fontSize: 13.5 },
 });
