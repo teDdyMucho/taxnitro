@@ -11,6 +11,9 @@ import { useAuth } from '../context/AuthContext';
 import { useSheetStyles } from '../hooks/useSheetStyles';
 import { uploadDocumentToStorage, createDocumentRecord, Document } from '../db/documents';
 import { getAllClients, Profile } from '../db/profiles';
+import {
+  listSubfolders, createSubfolder, moveDocumentToSubfolder, Subfolder,
+} from '../db/subfolders';
 
 // Every folder an admin/staff can upload into, grouped by suite. Full access.
 const UPLOAD_FOLDERS: { title: string; folders: { key: string; label: string }[] }[] = [
@@ -51,6 +54,9 @@ const FOLDER_LABEL: Record<string, string> = Object.fromEntries(
 type PickedFile = {
   id: string;
   folderKey: string;
+  /** Subfolder within that folder, or null for the folder root. */
+  subfolderId: string | null;
+  subfolderName: string | null;
   uri: string;
   name: string;
   mimeType: string;
@@ -60,11 +66,17 @@ type PickedFile = {
 let fileSeq = 0;
 const nextFileId = () => `af${++fileSeq}`;
 
-/** Browser File objects (from a drop) → queue entries under one folder. */
-function fromDomFiles(files: File[], folderKey: string): PickedFile[] {
+/** Browser File objects (from a drop) → queue entries under one destination. */
+function fromDomFiles(
+  files: File[],
+  folderKey: string,
+  sub: Subfolder | null,
+): PickedFile[] {
   return files.map(f => ({
     id: nextFileId(),
     folderKey,
+    subfolderId: sub?.id ?? null,
+    subfolderName: sub?.name ?? null,
     // uploadDocumentToStorage fetches this URI on web, and fetch reads blob: URLs.
     uri: URL.createObjectURL(f),
     name: f.name,
@@ -94,6 +106,14 @@ export function AdminUploadModal({ visible, onClose, onUploaded }: {
   const [clientQuery, setClientQuery] = useState('');
   const [client, setClient] = useState<Profile | null>(null);
   const [folderKey, setFolderKey] = useState<string | null>(null);
+  // Subfolders belong to one client inside one folder, so the list reloads
+  // whenever either changes. `subfolder` null = the folder's root.
+  const [subfolders, setSubfolders]   = useState<Subfolder[]>([]);
+  const [subfolder, setSubfolder]     = useState<Subfolder | null>(null);
+  const [subLoading, setSubLoading]   = useState(false);
+  const [newSubName, setNewSubName]   = useState('');
+  const [creatingSub, setCreatingSub] = useState(false);
+  const [subError, setSubError]       = useState<string | null>(null);
   const [picked, setPicked] = useState<PickedFile[]>([]);
   const [dragOver, setDragOver] = useState(false);
   const [sent, setSent] = useState(0);
@@ -124,9 +144,46 @@ export function AdminUploadModal({ visible, onClose, onUploaded }: {
 
   useEffect(() => { if (visible) getAllClients().then(setClients); }, [visible]);
 
+  // Reload the subfolder list whenever the destination changes.
+  useEffect(() => {
+    let alive = true;
+    setSubfolder(null);
+    setNewSubName('');
+    setSubError(null);
+    if (!client?.email || !folderKey) { setSubfolders([]); return; }
+    setSubLoading(true);
+    listSubfolders(folderKey, client.email)
+      .then(list => { if (alive) setSubfolders(list); })
+      .finally(() => { if (alive) setSubLoading(false); });
+    return () => { alive = false; };
+  }, [client?.email, folderKey]);
+
+  const handleCreateSubfolder = async () => {
+    const name = newSubName.trim();
+    if (!name || !client?.email || !folderKey) return;
+    // The unique index is per (table, owner, lower(name)) — say so here rather
+    // than letting the insert fail with a raw constraint error.
+    if (subfolders.some(sf => sf.name.toLowerCase() === name.toLowerCase())) {
+      setSubError(`"${name}" already exists in this folder.`);
+      return;
+    }
+    setCreatingSub(true);
+    setSubError(null);
+    const created = await createSubfolder(folderKey, name, user?.email ?? null, client.email);
+    setCreatingSub(false);
+    if (created) {
+      setSubfolders(prev => [...prev, created].sort((a, b) => a.name.localeCompare(b.name)));
+      setSubfolder(created);
+      setNewSubName('');
+    } else {
+      setSubError('Could not create that subfolder.');
+    }
+  };
+
   const reset = () => {
     picked.forEach(revoke);
     setClient(null); setClientQuery(''); setFolderKey(null); setPicked([]);
+    setSubfolders([]); setSubfolder(null); setNewSubName(''); setSubError(null);
     setDragOver(false); setSent(0); setBusy(false); setDone(false);
     setUploadedCount(0); setConfirmRemove(null);
     setOverflow({ up: false, down: false });
@@ -140,17 +197,37 @@ export function AdminUploadModal({ visible, onClose, onUploaded }: {
         (c.email ?? '').toLowerCase().includes(clientQuery.toLowerCase()))
     : clients;
 
-  /** The queue, split into one bucket per folder, in picker order. */
+  /**
+   * The queue, split into one bucket per DESTINATION — folder plus subfolder,
+   * so two batches sent to the same folder but different subfolders stay apart.
+   */
   const queued = useMemo(() => {
-    const byFolder = new Map<string, PickedFile[]>();
+    type Bucket = {
+      key: string; folderKey: string; folderLabel: string;
+      subfolderId: string | null; subfolderName: string | null;
+      files: PickedFile[];
+    };
+    const byDest = new Map<string, Bucket>();
+    const order = UPLOAD_FOLDERS.flatMap(g => g.folders).map(f => f.key);
+
     picked.forEach(f => {
-      const bucket = byFolder.get(f.folderKey);
-      if (bucket) bucket.push(f); else byFolder.set(f.folderKey, [f]);
+      const key = `${f.folderKey}::${f.subfolderId ?? ''}`;
+      const bucket = byDest.get(key);
+      if (bucket) bucket.files.push(f);
+      else byDest.set(key, {
+        key,
+        folderKey: f.folderKey,
+        folderLabel: FOLDER_LABEL[f.folderKey] ?? f.folderKey,
+        subfolderId: f.subfolderId,
+        subfolderName: f.subfolderName,
+        files: [f],
+      });
     });
-    return UPLOAD_FOLDERS
-      .flatMap(g => g.folders)
-      .filter(f => byFolder.has(f.key))
-      .map(f => ({ key: f.key, label: f.label, files: byFolder.get(f.key)! }));
+
+    return [...byDest.values()].sort((a, b) =>
+      order.indexOf(a.folderKey) - order.indexOf(b.folderKey) ||
+      (a.subfolderName ?? '').localeCompare(b.subfolderName ?? ''),
+    );
   }, [picked]);
 
   // ── Files ──────────────────────────────────────────────────────────────────
@@ -163,9 +240,11 @@ export function AdminUploadModal({ visible, onClose, onUploaded }: {
     return prev.filter(f => f.id !== id);
   });
 
+  /** Drop a whole destination bucket — key is `${folderKey}::${subfolderId}`. */
   const removeGroup = (key: string) => setPicked(prev => {
-    prev.filter(f => f.folderKey === key).forEach(revoke);
-    return prev.filter(f => f.folderKey !== key);
+    const inBucket = (f: PickedFile) => `${f.folderKey}::${f.subfolderId ?? ''}` === key;
+    prev.filter(inBucket).forEach(revoke);
+    return prev.filter(f => !inBucket(f));
   });
 
   const clearFiles = () => { picked.forEach(revoke); setPicked([]); };
@@ -178,6 +257,8 @@ export function AdminUploadModal({ visible, onClose, onUploaded }: {
       addFiles(r.assets.map(a => ({
         id: nextFileId(),
         folderKey,
+        subfolderId: subfolder?.id ?? null,
+        subfolderName: subfolder?.name ?? null,
         uri: a.uri,
         name: a.name,
         mimeType: a.mimeType ?? 'application/octet-stream',
@@ -199,7 +280,7 @@ export function AdminUploadModal({ visible, onClose, onUploaded }: {
       setDragOver(false);
       if (!canAddFiles || !folderKey) return;
       const files: File[] = Array.from(e.dataTransfer?.files ?? []);
-      if (files.length) addFiles(fromDomFiles(files, folderKey));
+      if (files.length) addFiles(fromDomFiles(files, folderKey, subfolder));
     },
   } : {};
 
@@ -219,7 +300,7 @@ export function AdminUploadModal({ visible, onClose, onUploaded }: {
       // the whole batch down with it.
       for (const bucket of queued) {
         for (const file of bucket.files) {
-          const url = await uploadDocumentToStorage(client.id, bucket.key, file.uri, file.name, file.mimeType);
+          const url = await uploadDocumentToStorage(client.id, bucket.folderKey, file.uri, file.name, file.mimeType);
           if (!url) { failed.push(file.name); setSent(n => n + 1); continue; }
 
           const doc = await createDocumentRecord({
@@ -227,11 +308,19 @@ export function AdminUploadModal({ visible, onClose, onUploaded }: {
             email: client.email,
             name: file.name,
             documentUrl: url,
-            documentType: bucket.key,
+            documentType: bucket.folderKey,
             uploadedByRole: (user?.role === 'admin' ? 'admin' : 'staff'),
             uploadedBy: user?.email ?? 'staff',
           });
-          if (doc) uploaded.push(doc); else failed.push(file.name);
+          if (doc) {
+            uploaded.push(doc);
+            // File it into the subfolder. createDocumentRecord has no
+            // subfolder_id parameter, so this is a follow-up update; a failure
+            // here leaves the file in the folder root rather than losing it.
+            if (bucket.subfolderId) {
+              await moveDocumentToSubfolder(bucket.folderKey, doc.id, bucket.subfolderId);
+            }
+          } else failed.push(file.name);
           setSent(n => n + 1);
         }
       }
@@ -353,7 +442,88 @@ export function AdminUploadModal({ visible, onClose, onUploaded }: {
                   </>
                 )}
 
-                {/* Step 3: files (after folder) */}
+                {/* Step 3: subfolder (after folder) — optional, per client */}
+                {client && folderKey && (
+                  <>
+                    <Text style={s.label}>Subfolder <Text style={s.optional}>(optional)</Text></Text>
+                    <Text style={s.subHint}>
+                      Only for {client.full_name || client.email}. Other clients never see it.
+                    </Text>
+
+                    {subLoading ? (
+                      <View style={{ paddingVertical: 12 }}>
+                        <ActivityIndicator size="small" color="#B5905B" />
+                      </View>
+                    ) : (
+                      <View style={s.subRow}>
+                        <TouchableOpacity
+                          style={[s.subChip, !subfolder && s.subChipOn]}
+                          onPress={() => setSubfolder(null)}
+                          activeOpacity={0.8}
+                        >
+                          <Ionicons name="folder-outline" size={13} color={!subfolder ? '#2C2320' : Colors.textMuted} />
+                          <Text style={[s.subChipText, !subfolder && s.subChipTextOn]}>Folder root</Text>
+                        </TouchableOpacity>
+
+                        {subfolders.map(sf => {
+                          const on = subfolder?.id === sf.id;
+                          return (
+                            <TouchableOpacity
+                              key={sf.id}
+                              style={[s.subChip, on && s.subChipOn]}
+                              onPress={() => setSubfolder(sf)}
+                              activeOpacity={0.8}
+                            >
+                              <Ionicons name="folder" size={13} color={on ? '#2C2320' : '#B5905B'} />
+                              <Text style={[s.subChipText, on && s.subChipTextOn]} numberOfLines={1}>
+                                {sf.name}
+                              </Text>
+                              {/* Shared rows predate per-client subfolders. */}
+                              {!sf.owner_email && (
+                                <Ionicons name="globe-outline" size={11} color={on ? '#6B4A1A' : Colors.textMuted} />
+                              )}
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </View>
+                    )}
+
+                    {/* Create a new one without leaving the upload */}
+                    <View style={s.newSubRow}>
+                      <View style={s.newSubInput}>
+                        <Ionicons name="add" size={15} color={Colors.textMuted} />
+                        <TextInput
+                          style={[s.newSubText, { outlineWidth: 0 } as any]}
+                          placeholder="New subfolder name…"
+                          placeholderTextColor={Colors.textMuted}
+                          value={newSubName}
+                          onChangeText={t => { setNewSubName(t); setSubError(null); }}
+                          onSubmitEditing={handleCreateSubfolder}
+                          returnKeyType="done"
+                        />
+                      </View>
+                      <TouchableOpacity
+                        style={[s.newSubBtn, (!newSubName.trim() || creatingSub) && { opacity: 0.5 }]}
+                        onPress={handleCreateSubfolder}
+                        disabled={!newSubName.trim() || creatingSub}
+                        activeOpacity={0.85}
+                      >
+                        {creatingSub
+                          ? <ActivityIndicator size="small" color="#3A3131" />
+                          : <Text style={s.newSubBtnText}>Create</Text>}
+                      </TouchableOpacity>
+                    </View>
+
+                    {!!subError && (
+                      <View style={s.subErrBox}>
+                        <Ionicons name="alert-circle-outline" size={13} color="#DC2626" />
+                        <Text style={s.subErrText}>{subError}</Text>
+                      </View>
+                    )}
+                  </>
+                )}
+
+                {/* Step 4: files (after folder) */}
                 {client && (
                   <>
                     <View style={s.fileHead}>
@@ -397,7 +567,8 @@ export function AdminUploadModal({ visible, onClose, onUploaded }: {
                               <Text style={s.dropSub}>or click to browse</Text>
                             )}
                             <Text style={s.dropHint} numberOfLines={1}>
-                              Files go to “{FOLDER_LABEL[folderKey]}”
+                              Files go to “{FOLDER_LABEL[folderKey]}
+                              {subfolder ? ` › ${subfolder.name}` : ''}”
                             </Text>
                           </>
                         ) : (
@@ -418,11 +589,14 @@ export function AdminUploadModal({ visible, onClose, onUploaded }: {
                           <View key={bucket.key} style={s.folderGroup}>
                             <View style={s.folderGroupHead}>
                               <Ionicons name="folder-open" size={15} color="#B5905B" />
-                              <Text style={s.folderGroupTitle} numberOfLines={1}>{bucket.label}</Text>
+                              <Text style={s.folderGroupTitle} numberOfLines={1}>
+                                {bucket.folderLabel}
+                                {bucket.subfolderName ? ` › ${bucket.subfolderName}` : ''}
+                              </Text>
                               <Text style={s.folderGroupCount}>{bucket.files.length}</Text>
                               {!busy && (
                                 <TouchableOpacity
-                                  onPress={() => setConfirmRemove({ kind: 'group', id: bucket.key, name: bucket.label })}
+                                  onPress={() => setConfirmRemove({ kind: 'group', id: bucket.key, name: bucket.subfolderName ? `${bucket.folderLabel} › ${bucket.subfolderName}` : bucket.folderLabel })}
                                   hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                                 >
                                   <Ionicons name="close" size={15} color={Colors.textMuted} />
@@ -518,7 +692,7 @@ export function AdminUploadModal({ visible, onClose, onUploaded }: {
                   {confirmRemove.kind === 'all'
                     ? `${picked.length} file${picked.length !== 1 ? 's' : ''} will be removed from this upload. You'll need to add them again.`
                     : confirmRemove.kind === 'group'
-                      ? `${picked.filter(f => f.folderKey === confirmRemove.id).length} file(s) queued for "${confirmRemove.name}" will be removed.`
+                      ? `${picked.filter(f => `${f.folderKey}::${f.subfolderId ?? ''}` === confirmRemove.id).length} file(s) queued for "${confirmRemove.name}" will be removed.`
                       : `"${confirmRemove.name}" will be removed from this upload.`}
                 </Text>
 
@@ -572,6 +746,42 @@ const s = StyleSheet.create({
   // Count of files already queued for a folder, so it's visible from the list.
   folderQueuedPill: { minWidth: 20, paddingHorizontal: 6, paddingVertical: 1, borderRadius: 9, backgroundColor: 'rgba(232,185,35,0.22)', alignItems: 'center' },
   folderQueuedText: { color: '#B5905B', fontSize: 10, fontWeight: '800' },
+
+  /* Subfolder picker */
+  optional: { color: Colors.textMuted, fontSize: 10, fontWeight: '600', letterSpacing: 0.5, textTransform: 'none' },
+  subHint:  { color: Colors.textMuted, fontSize: 11, lineHeight: 15, marginTop: -2, marginBottom: 4 },
+  subRow:   { flexDirection: 'row', flexWrap: 'wrap', gap: 7 },
+  subChip: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    paddingHorizontal: 11, paddingVertical: 8,
+    borderRadius: 10, backgroundColor: Colors.bgMid,
+    borderWidth: 1, borderColor: Colors.border,
+    maxWidth: 220,
+  },
+  subChipOn:     { backgroundColor: 'rgba(232,185,35,0.16)', borderColor: 'rgba(232,185,35,0.55)' },
+  subChipText:   { color: Colors.textSecondary, fontSize: 12, fontWeight: '600', flexShrink: 1 },
+  subChipTextOn: { color: '#2C2320', fontWeight: '800' },
+
+  newSubRow: { flexDirection: 'row', gap: 8, marginTop: 8 },
+  newSubInput: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: Colors.white, borderRadius: 10,
+    borderWidth: 1, borderColor: Colors.border,
+    paddingHorizontal: 11, paddingVertical: 9,
+  },
+  newSubText: { flex: 1, color: Colors.textPrimary, fontSize: 13, padding: 0 },
+  newSubBtn: {
+    paddingHorizontal: 16, borderRadius: 10, backgroundColor: '#E8B923',
+    alignItems: 'center', justifyContent: 'center', minWidth: 74,
+  },
+  newSubBtnText: { color: '#3A3131', fontSize: 12.5, fontWeight: '800' },
+  subErrBox: {
+    flexDirection: 'row', alignItems: 'center', gap: 7,
+    backgroundColor: '#FEF2F2', borderRadius: 9,
+    borderWidth: 1, borderColor: '#FECACA',
+    paddingHorizontal: 10, paddingVertical: 8, marginTop: 6,
+  },
+  subErrText: { flex: 1, color: '#DC2626', fontSize: 11.5 },
 
   fileHead: { flexDirection: 'row', alignItems: 'center', marginTop: 8 },
   clearText: { color: Colors.textMuted, fontSize: 11, fontWeight: '700', marginTop: 10 },

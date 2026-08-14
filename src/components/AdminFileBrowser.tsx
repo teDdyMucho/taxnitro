@@ -245,7 +245,9 @@ export function AdminFileBrowser({ visible, onClose }: Props) {
     setFileFilter('all');
     setActiveSubfolder('all');
     setLoading(true);
-    listSubfolders(folder.table).then(subs => { if (mountedRef.current) setSubfolders(subs); });
+    // Subfolders belong to a client, so this list is theirs plus the legacy
+    // shared ones — see database/subfolders_per_client.sql.
+    listSubfolders(folder.table, client.email).then(subs => { if (mountedRef.current) setSubfolders(subs); });
     const base = supabase.from(folder.table).select('id, name, status, approval_status, approval_note, document_url, created_at, email, subfolder_id').order('created_at', { ascending: false });
     const { data } = client.user_id ? await base.eq('user_id', client.user_id) : await base.eq('email', client.email);
     const rawFiles = (data ?? []) as FileRow[];
@@ -336,11 +338,15 @@ export function AdminFileBrowser({ visible, onClose }: Props) {
   const currentFolderTable =
     nav.kind === 'clients' || nav.kind === 'files' || nav.kind === 'detail' ? nav.folder.table : null;
 
+  // Whose files are open, if any — a subfolder made here belongs to them.
+  const currentClientEmail =
+    nav.kind === 'files' || nav.kind === 'detail' ? nav.client.email : null;
+
   const handleCreateSubfolder = async () => {
     const name = newSubName.trim();
     if (!name || !currentFolderTable || subBusy) return;
     setSubBusy(true);
-    const created = await createSubfolder(currentFolderTable, name, user?.email ?? null);
+    const created = await createSubfolder(currentFolderTable, name, user?.email ?? null, currentClientEmail);
     setSubBusy(false);
     if (created) {
       setSubfolders(prev => [...prev, created].sort((a, b) => a.name.localeCompare(b.name)));

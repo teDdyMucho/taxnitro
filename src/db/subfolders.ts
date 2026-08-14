@@ -1,37 +1,63 @@
 import { supabase } from '../lib/supabase';
 
 // Staff/admin-created subfolders that live inside an existing folder table.
-// Global per folder table (not per client). A document is filed into one via
-// its `subfolder_id` column.
+// Scoped to ONE client via `owner_email` — see database/subfolders_per_client.sql.
+// A document is filed into one via its `subfolder_id` column.
+//
+// Rows predating that migration have owner_email = null: shared folders that
+// every client still sees. New ones are always owned.
 
 export interface Subfolder {
   id: string;
   parent_table: string;
+  /** Client this folder belongs to; null on the legacy shared rows. */
+  owner_email: string | null;
   name: string;
   created_by: string | null;
   created_at: string;
 }
 
-// List subfolders for a folder table (alphabetical).
-export async function listSubfolders(parentTable: string): Promise<Subfolder[]> {
-  const { data, error } = await supabase
+/**
+ * Subfolders inside a folder table (alphabetical).
+ *
+ * With an owner, returns that client's folders plus the legacy shared ones.
+ * Without, returns every subfolder in the table — staff-wide views only.
+ */
+export async function listSubfolders(
+  parentTable: string,
+  ownerEmail?: string | null,
+): Promise<Subfolder[]> {
+  let q = supabase
     .from('custom_subfolders')
     .select('*')
     .eq('parent_table', parentTable)
     .order('name', { ascending: true });
+
+  if (ownerEmail) q = q.or(`owner_email.eq.${ownerEmail},owner_email.is.null`);
+
+  const { data, error } = await q;
   if (error) { console.error('listSubfolders:', error.message); return []; }
   return (data ?? []) as Subfolder[];
 }
 
-// Create a subfolder. Returns the row, or null on failure (e.g. duplicate name).
+/**
+ * Create a subfolder for one client. Returns the row, or null on failure —
+ * most often a duplicate name, which is unique per (table, owner).
+ */
 export async function createSubfolder(
   parentTable: string,
   name: string,
   createdBy: string | null,
+  ownerEmail: string | null,
 ): Promise<Subfolder | null> {
   const { data, error } = await supabase
     .from('custom_subfolders')
-    .insert({ parent_table: parentTable, name: name.trim(), created_by: createdBy })
+    .insert({
+      parent_table: parentTable,
+      name: name.trim(),
+      created_by: createdBy,
+      owner_email: ownerEmail,
+    })
     .select('*')
     .single();
   if (error) { console.error('createSubfolder:', error.message); return null; }
