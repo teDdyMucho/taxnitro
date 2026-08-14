@@ -581,6 +581,10 @@ export function StaffManagementScreen() {
   const renderItem = ({ item }: { item: Profile }) => {
     const safeRole = (item.role === 'admin' ? 'admin' : 'staff') as 'admin' | 'staff';
     const rc = ROLE_CONFIG[safeRole];
+    const isSelf = item.id === user?.id;
+    // An admin can be moved back to staff — except yourself (you would lose
+    // this screen mid-session) and the last admin (nobody could promote again).
+    const canDemote = safeRole === 'admin' && !isSelf && adminCount > 1;
     return (
       <View style={s.card}>
         {/* Left accent bar for admin */}
@@ -611,13 +615,23 @@ export function StaffManagementScreen() {
 
         {/* Actions */}
         <View style={s.actions}>
-          {/* Role pill — admins are read-only (role can't be changed here) */}
-          {safeRole === 'admin' ? (
+          {/* Role pill — tap to change, both directions. It stays locked only
+              where a change would strand the system or the person pressing. */}
+          {safeRole === 'admin' && !canDemote ? (
             <View style={[s.rolePill, { backgroundColor: rc.pillBg, borderColor: rc.pillBorder }]}>
               <Ionicons name="shield-checkmark" size={11} color={rc.pillText} />
               <Text style={[s.rolePillText, { color: rc.pillText }]}>{rc.label}</Text>
               <Ionicons name="lock-closed" size={9} color={rc.pillText} style={{ marginLeft: 1 }} />
             </View>
+          ) : safeRole === 'admin' ? (
+            <TouchableOpacity
+              style={[s.rolePill, { backgroundColor: rc.pillBg, borderColor: rc.pillBorder }]}
+              onPress={() => setRoleTarget(item)}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="shield-checkmark" size={11} color={rc.pillText} />
+              <Text style={[s.rolePillText, { color: rc.pillText }]}>{rc.label}</Text>
+            </TouchableOpacity>
           ) : (
             <TouchableOpacity
               style={[s.rolePill, { backgroundColor: rc.pillBg, borderColor: rc.pillBorder }]}
@@ -793,43 +807,59 @@ export function StaffManagementScreen() {
       <Modal visible={!!roleTarget} transparent animationType="fade" onRequestClose={() => !rolePending && setRoleTarget(null)}>
         <Pressable style={dc.overlay} onPress={() => !rolePending && setRoleTarget(null)}>
           <Pressable style={dc.box} onPress={() => {}}>
-            <View style={dc.roleIcon}>
-              <Ionicons name="shield-checkmark-outline" size={26} color="#B5905B" />
-            </View>
-            <Text style={dc.title}>Make this member an admin?</Text>
-            <Text style={dc.sub} numberOfLines={2}>
-              {roleTarget?.full_name || 'Staff member'} · {roleTarget?.email}
-            </Text>
+            {(() => {
+              const demoting = roleTarget?.role === 'admin';
+              return (
+                <>
+                  <View style={dc.roleIcon}>
+                    <Ionicons
+                      name={demoting ? 'person-outline' : 'shield-checkmark-outline'}
+                      size={26}
+                      color="#B5905B"
+                    />
+                  </View>
+                  <Text style={dc.title}>
+                    {demoting ? 'Move this admin back to staff?' : 'Make this member an admin?'}
+                  </Text>
+                  <Text style={dc.sub} numberOfLines={2}>
+                    {roleTarget?.full_name || 'Member'} · {roleTarget?.email}
+                  </Text>
 
-            <View style={dc.warnBox}>
-              <Ionicons name="alert-circle-outline" size={15} color="#B45309" />
-              <Text style={dc.warnText}>
-                Admins can manage every client, add and remove staff, and see all documents.
-                This cannot be undone from this screen.
-              </Text>
-            </View>
+                  <View style={dc.warnBox}>
+                    <Ionicons name="alert-circle-outline" size={15} color="#B45309" />
+                    <Text style={dc.warnText}>
+                      {demoting
+                        ? 'They lose the Staff page and admin-only actions. Their staff access and history stay intact, and you can promote them again later.'
+                        : 'Admins can manage every client, add and remove staff, and see all documents.'}
+                    </Text>
+                  </View>
 
-            <View style={dc.row}>
-              <TouchableOpacity
-                style={dc.cancelBtn}
-                onPress={() => setRoleTarget(null)}
-                disabled={rolePending}
-                activeOpacity={0.75}
-              >
-                <Text style={dc.cancelText}>No, keep it</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[dc.altBtn, rolePending && { opacity: 0.6 }]}
-                onPress={confirmRole}
-                disabled={rolePending}
-                activeOpacity={0.85}
-              >
-                {rolePending
-                  ? <ActivityIndicator size="small" color="#1C1713" />
-                  : <><Ionicons name="shield-checkmark" size={15} color="#1C1713" />
-                      <Text style={dc.altText}>Yes, make admin</Text></>}
-              </TouchableOpacity>
-            </View>
+                  <View style={dc.row}>
+                    <TouchableOpacity
+                      style={dc.cancelBtn}
+                      onPress={() => setRoleTarget(null)}
+                      disabled={rolePending}
+                      activeOpacity={0.75}
+                    >
+                      <Text style={dc.cancelText}>No, keep it</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[dc.altBtn, rolePending && { opacity: 0.6 }]}
+                      onPress={confirmRole}
+                      disabled={rolePending}
+                      activeOpacity={0.85}
+                    >
+                      {rolePending
+                        ? <ActivityIndicator size="small" color="#1C1713" />
+                        : <><Ionicons name={demoting ? 'person' : 'shield-checkmark'} size={15} color="#1C1713" />
+                            <Text style={dc.altText}>
+                              {demoting ? 'Yes, make staff' : 'Yes, make admin'}
+                            </Text></>}
+                    </TouchableOpacity>
+                  </View>
+                </>
+              );
+            })()}
           </Pressable>
         </Pressable>
       </Modal>
