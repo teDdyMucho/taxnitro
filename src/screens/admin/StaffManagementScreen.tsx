@@ -485,6 +485,12 @@ export function StaffManagementScreen() {
   const [toastMsg, setToastMsg]     = useState('');
   const [toastVisible, setToastVisible] = useState(false);
 
+  // Which role's page is showing.
+  const [tab, setTab] = useState<'admin' | 'staff'>('admin');
+
+  const [deactivateTarget, setDeactivateTarget] = useState<Profile | null>(null);
+  const [deactivating, setDeactivating]         = useState(false);
+
   // Promoting to admin is one press away and, since the admin pill is locked,
   // cannot be undone from this screen — so it asks first.
   const [roleTarget, setRoleTarget]   = useState<Profile | null>(null);
@@ -541,7 +547,26 @@ export function StaffManagementScreen() {
     if (ok) {
       setStaff(prev => prev.map(s => s.id === member.id ? { ...s, is_active: next } : s));
       showToast(next ? 'Account activated' : 'Account deactivated');
+    } else {
+      showToast('Could not change the account status');
     }
+  };
+
+  /**
+   * Deactivating locks someone out, so it asks first. Reactivating gives access
+   * back and needs no confirmation — there is nothing to lose by it.
+   */
+  const pressActive = (member: Profile) => {
+    if (member.is_active) setDeactivateTarget(member);
+    else toggleActive(member);
+  };
+
+  const confirmDeactivate = async () => {
+    if (!deactivateTarget) return;
+    setDeactivating(true);
+    await toggleActive(deactivateTarget);
+    setDeactivating(false);
+    setDeactivateTarget(null);
   };
 
   // ── Delete ────────────────────────────────────────────────────────────────
@@ -572,11 +597,10 @@ export function StaffManagementScreen() {
   const staffCount  = staff.filter(s => s.role === 'staff').length;
   const activeCount = staff.filter(s => s.is_active).length;
 
-  // Admins first, then staff (each already name-sorted from the query).
-  const sortedStaff = [...staff].sort((a, b) => {
-    if (a.role === b.role) return 0;
-    return a.role === 'admin' ? -1 : 1;
-  });
+  // One page per role. Already name-sorted from the query.
+  const visibleStaff = staff.filter(m =>
+    tab === 'admin' ? m.role === 'admin' : m.role !== 'admin'
+  );
 
   const renderItem = ({ item }: { item: Profile }) => {
     const safeRole = (item.role === 'admin' ? 'admin' : 'staff') as 'admin' | 'staff';
@@ -651,7 +675,7 @@ export function StaffManagementScreen() {
           ) : (
             <TouchableOpacity
               style={[s.activeBtn, item.is_active ? s.activeBtnOn : s.activeBtnOff]}
-              onPress={() => toggleActive(item)}
+              onPress={() => pressActive(item)}
               activeOpacity={0.7}
             >
               <Ionicons
@@ -742,9 +766,39 @@ export function StaffManagementScreen() {
         </View>
       </View>
 
-      {/* Section label */}
+      {/* Section label + tabs. The two roles are managed differently — admins
+          have locks staff don't — so they get a page each rather than one list. */}
       {!loading && staff.length > 0 && (
-        <Text style={s.sectionLabel}>Team Members</Text>
+        <>
+          <Text style={s.sectionLabel}>Team Members</Text>
+          <View style={s.tabBar}>
+            {(['admin', 'staff'] as const).map(t => {
+              const on = tab === t;
+              return (
+                <TouchableOpacity
+                  key={t}
+                  style={[s.tab, on && s.tabOn]}
+                  onPress={() => setTab(t)}
+                  activeOpacity={0.8}
+                >
+                  <Ionicons
+                    name={t === 'admin' ? 'shield-checkmark' : 'person'}
+                    size={13}
+                    color={on ? '#B5905B' : '#A8998A'}
+                  />
+                  <Text style={[s.tabText, on && s.tabTextOn]}>
+                    {t === 'admin' ? 'Admins' : 'Staff'}
+                  </Text>
+                  <View style={[s.tabCount, on && s.tabCountOn]}>
+                    <Text style={[s.tabCountText, on && s.tabCountTextOn]}>
+                      {t === 'admin' ? adminCount : staffCount}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </>
       )}
 
       {/* List */}
@@ -754,7 +808,7 @@ export function StaffManagementScreen() {
         </View>
       ) : (
         <FlatList
-          data={sortedStaff}
+          data={visibleStaff}
           keyExtractor={i => i.id}
           renderItem={renderItem}
           contentContainerStyle={s.listContent}
@@ -772,11 +826,21 @@ export function StaffManagementScreen() {
                 style={s.emptyIconBg}
                 start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
               >
-                <Ionicons name="shield-outline" size={34} color="#94A3B8" />
+                <Ionicons
+                  name={tab === 'admin' ? 'shield-outline' : 'person-outline'}
+                  size={34}
+                  color="#94A3B8"
+                />
               </LinearGradient>
-              <Text style={s.emptyTitle}>No staff members yet</Text>
+              {/* The empty text follows the tab — "no staff members" on the
+                  Admins page would read as though the whole team were missing. */}
+              <Text style={s.emptyTitle}>
+                {tab === 'admin' ? 'No admins yet' : 'No staff members yet'}
+              </Text>
               <Text style={s.emptySub}>
-                Assign staff roles to existing users using the button above.
+                {tab === 'admin'
+                  ? 'Promote a team member from the Staff tab to give them admin access.'
+                  : 'Assign staff roles to existing users using the button above.'}
               </Text>
               <TouchableOpacity
                 style={s.emptyAction}
@@ -802,6 +866,51 @@ export function StaffManagementScreen() {
           load(true);
         }}
       />
+
+      {/* Deactivate confirmation — reactivating needs none, so this is one-way */}
+      <Modal visible={!!deactivateTarget} transparent animationType="fade" onRequestClose={() => !deactivating && setDeactivateTarget(null)}>
+        <Pressable style={dc.overlay} onPress={() => !deactivating && setDeactivateTarget(null)}>
+          <Pressable style={dc.box} onPress={() => {}}>
+            <View style={dc.banIcon}>
+              <Ionicons name="ban-outline" size={26} color="#B45309" />
+            </View>
+            <Text style={dc.title}>Deactivate this member?</Text>
+            <Text style={dc.sub} numberOfLines={2}>
+              {deactivateTarget?.full_name || 'Member'} · {deactivateTarget?.email}
+            </Text>
+
+            <View style={dc.warnBox}>
+              <Ionicons name="information-circle-outline" size={15} color="#B45309" />
+              <Text style={dc.warnText}>
+                They won't be able to sign in until reactivated. Their account, documents
+                and workflow history stay intact.
+              </Text>
+            </View>
+
+            <View style={dc.row}>
+              <TouchableOpacity
+                style={dc.cancelBtn}
+                onPress={() => setDeactivateTarget(null)}
+                disabled={deactivating}
+                activeOpacity={0.75}
+              >
+                <Text style={dc.cancelText}>No, keep it</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[dc.altBtn, deactivating && { opacity: 0.6 }]}
+                onPress={confirmDeactivate}
+                disabled={deactivating}
+                activeOpacity={0.85}
+              >
+                {deactivating
+                  ? <ActivityIndicator size="small" color="#1C1713" />
+                  : <><Ionicons name="ban-outline" size={15} color="#1C1713" />
+                      <Text style={dc.altText}>Yes, deactivate</Text></>}
+              </TouchableOpacity>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       {/* Promote to admin confirmation */}
       <Modal visible={!!roleTarget} transparent animationType="fade" onRequestClose={() => !rolePending && setRoleTarget(null)}>
@@ -1017,6 +1126,48 @@ const s = StyleSheet.create({
     paddingHorizontal: 20, marginTop: 18, marginBottom: 6,
   },
 
+  /* ── Role tabs ── one joined control, not two loose buttons.
+     Sized to its labels: stretched edge to edge on a wide screen it reads as
+     a heavy slab rather than a switch. */
+  tabBar: {
+    flexDirection: 'row',
+    alignSelf: 'flex-start',
+    marginHorizontal: 20,
+    marginBottom: 14,
+    padding: 4,
+    gap: 4,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#E8E0D0',
+    backgroundColor: '#F5F0E8',
+  },
+  tab: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    paddingHorizontal: 16,
+    paddingVertical: 9,
+    borderRadius: 10,
+  },
+  // The selected half lifts out of the track rather than filling it.
+  tabOn: {
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#3A3131',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.12,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  tabText:     { color: '#A8998A', fontSize: 13, fontWeight: '700' },
+  tabTextOn:   { color: '#2C2320', fontWeight: '800' },
+  tabCount: {
+    minWidth: 20, paddingHorizontal: 6, paddingVertical: 1,
+    borderRadius: 9, backgroundColor: '#E8E0D0', alignItems: 'center',
+  },
+  tabCountOn:      { backgroundColor: 'rgba(232,185,35,0.3)' },
+  tabCountText:    { color: '#A8998A', fontSize: 10, fontWeight: '800' },
+  tabCountTextOn:  { color: '#6B4A1A' },
+
   /* ── List ── */
   listContent: { paddingHorizontal: 16, paddingTop: 4, paddingBottom: 32 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
@@ -1119,6 +1270,11 @@ const dc = StyleSheet.create({
   // Granting a privilege, not destroying something — gold rather than red.
   roleIcon: {
     width: 56, height: 56, borderRadius: 18, backgroundColor: 'rgba(232,185,35,0.14)',
+    alignItems: 'center', justifyContent: 'center', marginBottom: 2,
+  },
+  // Locking someone out — a caution, not a deletion.
+  banIcon: {
+    width: 56, height: 56, borderRadius: 18, backgroundColor: '#FFFBEB',
     alignItems: 'center', justifyContent: 'center', marginBottom: 2,
   },
   title: { color: '#1C1713', fontSize: 17, fontWeight: '800', textAlign: 'center' },
