@@ -1126,12 +1126,10 @@ const s = StyleSheet.create({
     paddingHorizontal: 20, marginTop: 18, marginBottom: 6,
   },
 
-  /* ── Role tabs ── one joined control, not two loose buttons.
-     Sized to its labels: stretched edge to edge on a wide screen it reads as
-     a heavy slab rather than a switch. */
+  /* ── Role tabs ── one joined control, not two loose buttons. Full width,
+     each half an even split of it. */
   tabBar: {
     flexDirection: 'row',
-    alignSelf: 'flex-start',
     marginHorizontal: 20,
     marginBottom: 14,
     padding: 4,
@@ -1142,8 +1140,10 @@ const s = StyleSheet.create({
     backgroundColor: '#F5F0E8',
   },
   tab: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: 7,
     paddingHorizontal: 16,
     paddingVertical: 9,
