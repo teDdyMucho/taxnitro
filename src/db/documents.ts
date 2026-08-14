@@ -19,6 +19,8 @@ export interface Document {
   approved_at: string | null;
   uploaded_by_role?: 'client' | 'staff' | 'admin';   // who placed this file
   uploaded_by?: string | null;
+  /** Subfolder this file was filed into by staff, or null for the folder root. */
+  subfolder_id?: string | null;
   created_at: string;
   updated_at?: string;
 }

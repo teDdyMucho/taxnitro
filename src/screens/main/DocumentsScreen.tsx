@@ -21,6 +21,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   useDownloadSelection, DownloadSelectionBar, DownloadNotice, SelectCheckbox,
 } from '../../components/DownloadSelectionBar';
+import { listSubfolders, Subfolder } from '../../db/subfolders';
 import * as DocumentPicker from 'expo-document-picker';
 import * as WebBrowser from 'expo-web-browser';
 import WebView from 'react-native-webview';
@@ -412,6 +413,37 @@ function DocListView({ sf, root, rootColor, documents, refreshing, onRefresh, on
   // is read-only here (view / approve / reject — no per-folder upload button).
   const readOnly = true;
 
+  // ── Subfolders ─────────────────────────────────────────────────────────────
+  // Staff file documents into subfolders; clients can browse them but never
+  // create or delete — that stays staff-only in RLS, and nothing here writes.
+  const [subfolders, setSubfolders] = useState<Subfolder[]>([]);
+  const [activeSub, setActiveSub]   = useState<Subfolder | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    setActiveSub(null);
+    if (!userEmail) { setSubfolders([]); return; }
+    listSubfolders(sf.key, userEmail).then(list => { if (alive) setSubfolders(list); });
+    return () => { alive = false; };
+  }, [sf.key, userEmail]);
+
+  /** Subfolders that actually hold something — an empty one is just noise. */
+  const subWithCounts = useMemo(() => subfolders
+    .map(sub => {
+      const files = documents.filter(d => d.subfolder_id === sub.id);
+      return { sub, total: files.length, unread: files.filter(d => d.status !== 'viewed').length };
+    })
+    .filter(x => x.total > 0),
+  [subfolders, documents]);
+
+  /** Files for the level being shown: inside the open subfolder, or the root. */
+  const scoped = useMemo(
+    () => documents.filter(d =>
+      activeSub ? d.subfolder_id === activeSub.id : !d.subfolder_id
+    ),
+    [documents, activeSub],
+  );
+
   const dl = useDownloadSelection<Document>(
     useCallback((d: Document) => ({ url: d.document_url, name: displayName(d) }), []),
   );
@@ -419,11 +451,13 @@ function DocListView({ sf, root, rootColor, documents, refreshing, onRefresh, on
   const unread = documents.filter(d => d.status !== 'viewed').length;
 
   const filtered = useMemo(() => {
-    let items = [...documents];
+    // Search reaches across subfolders — when you're looking for a file by name
+    // you don't want to open each one in turn.
+    let items = search ? [...documents] : [...scoped];
     if (search) items = items.filter(d => displayName(d).toLowerCase().includes(search.toLowerCase()));
     if (filter !== 'all') items = items.filter(d => d.status === filter);
     return items.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-  }, [documents, search, filter]);
+  }, [documents, scoped, search, filter]);
 
   // Required Info folders group their docs by month (JUL 2026 …) via section headers.
   const groupByMonth = isRequirementFolder(sf.key);
@@ -453,19 +487,26 @@ function DocListView({ sf, root, rootColor, documents, refreshing, onRefresh, on
         style={[s.docHeader, { paddingTop: pt }]}
       >
         <View style={s.docHeaderTop}>
-          <TouchableOpacity style={s.backBtn} onPress={onBack}>
+          {/* Back steps out of a subfolder first, then off the folder. */}
+          <TouchableOpacity
+            style={s.backBtn}
+            onPress={() => (activeSub ? setActiveSub(null) : onBack())}
+          >
             <Ionicons name="chevron-back" size={20} color="rgba(255,255,255,0.9)" />
           </TouchableOpacity>
 
           <View style={[s.docFolderIcon, { backgroundColor: 'rgba(232,185,35,0.2)' }]}>
-            <Ionicons name={sf.icon} size={18} color="#E8B923" />
+            <Ionicons name={activeSub ? 'folder' : sf.icon} size={18} color="#E8B923" />
           </View>
 
           <View style={s.docHeaderMid}>
-            <Text style={s.docHeaderTitle} numberOfLines={1}>{sf.label}</Text>
-            <Text style={s.docHeaderSub}>
-              {documents.length} file{documents.length !== 1 ? 's' : ''}
-              {unread > 0 ? ` · ${unread} unread` : ''}
+            <Text style={s.docHeaderTitle} numberOfLines={1}>
+              {activeSub ? activeSub.name : sf.label}
+            </Text>
+            <Text style={s.docHeaderSub} numberOfLines={1}>
+              {activeSub
+                ? `${sf.label} · ${scoped.length} file${scoped.length !== 1 ? 's' : ''}`
+                : `${documents.length} file${documents.length !== 1 ? 's' : ''}${unread > 0 ? ` · ${unread} unread` : ''}`}
             </Text>
           </View>
 
@@ -516,15 +557,55 @@ function DocListView({ sf, root, rootColor, documents, refreshing, onRefresh, on
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor='#E8B923' />}
         showsVerticalScrollIndicator={false}
         ListHeaderComponent={
-          filtered.length > 0 ? (
-            <DownloadSelectionBar
-              selection={dl}
-              // Whatever search and the filter pills currently leave visible.
-              items={filtered}
-              zipName={sf.label}
-              label="files"
-            />
-          ) : null
+          <>
+            {/* Subfolders sit above the loose files, and only at the folder
+                root — search spans everything, so they'd be misleading there. */}
+            {!activeSub && !search && subWithCounts.length > 0 && (
+              <View style={{ marginBottom: 14 }}>
+                <Text style={s.subSectionLabel}>Folders</Text>
+                {subWithCounts.map(({ sub, total, unread: sUnread }) => (
+                  <TouchableOpacity
+                    key={sub.id}
+                    style={s.subCard}
+                    onPress={() => setActiveSub(sub)}
+                    activeOpacity={0.8}
+                  >
+                    <View style={s.subCardIcon}>
+                      <Ionicons name="folder" size={20} color="#E8B923" />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={s.subCardName} numberOfLines={1}>{sub.name}</Text>
+                      <Text style={s.subCardMeta}>
+                        {total} document{total !== 1 ? 's' : ''}
+                        {sUnread > 0 ? ` · ${sUnread} unread` : ''}
+                      </Text>
+                    </View>
+                    {sUnread > 0 && (
+                      <View style={s.subCardBadge}>
+                        <Text style={s.subCardBadgeText}>{sUnread}</Text>
+                      </View>
+                    )}
+                    <Ionicons name="chevron-forward" size={16} color={Colors.textMuted} />
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+
+            {filtered.length > 0 && (
+              <>
+                {!activeSub && !search && subWithCounts.length > 0 && (
+                  <Text style={s.subSectionLabel}>Documents</Text>
+                )}
+                <DownloadSelectionBar
+                  selection={dl}
+                  // Whatever search and the filter pills currently leave visible.
+                  items={filtered}
+                  zipName={activeSub ? `${sf.label} — ${activeSub.name}` : sf.label}
+                  label="files"
+                />
+              </>
+            )}
+          </>
         }
         renderItem={({ item }) =>
           item.type === 'header'
@@ -540,7 +621,13 @@ function DocListView({ sf, root, rootColor, documents, refreshing, onRefresh, on
               />
             )
         }
-        ListEmptyComponent={<EmptyDocs sf={sf} />}
+        ListEmptyComponent={
+          // Folder cards are rendered in the header, so "no files yet" below
+          // them would be wrong — there are files, just inside the subfolders.
+          !activeSub && !search && subWithCounts.length > 0
+            ? null
+            : <EmptyDocs sf={sf} inSubfolder={!!activeSub} />
+        }
       />
 
       <DownloadNotice message={dl.notice} />
@@ -560,15 +647,17 @@ function DocListView({ sf, root, rootColor, documents, refreshing, onRefresh, on
 
 // ── Empty state ───────────────────────────────────────────────────────────────
 
-function EmptyDocs({ sf }: { sf: SubFolder }) {
+function EmptyDocs({ sf, inSubfolder = false }: { sf: SubFolder; inSubfolder?: boolean }) {
   return (
     <View style={s.empty}>
       <View style={[s.emptyIcon, { backgroundColor: sf.bg }]}>
-        <Ionicons name={sf.icon} size={36} color={sf.color} />
+        <Ionicons name={inSubfolder ? 'folder-open-outline' : sf.icon} size={36} color={sf.color} />
       </View>
-      <Text style={s.emptyTitle}>No files yet</Text>
+      <Text style={s.emptyTitle}>{inSubfolder ? 'This folder is empty' : 'No files yet'}</Text>
       <Text style={s.emptySub}>
-        Documents will appear here once uploaded. Use the “Upload” button in the sidebar to add files.
+        {inSubfolder
+          ? 'Nothing has been filed here yet.'
+          : 'Documents will appear here once uploaded. Use the “Upload” button in the sidebar to add files.'}
       </Text>
     </View>
   );
@@ -1540,6 +1629,31 @@ const s = StyleSheet.create({
   sfMeta:    { color: '#A8998A', fontSize: 12, marginBottom: 8 },
   miniBar:   { height: 3, backgroundColor: '#F5F0E8', borderRadius: 2, overflow: 'hidden' },
   miniBarFill: { height: '100%', borderRadius: 2 },
+  /* Subfolder cards inside a folder — read-only for the client */
+  subSectionLabel: {
+    color: Colors.textMuted, fontSize: 11, fontWeight: '700',
+    letterSpacing: 1.2, textTransform: 'uppercase', marginBottom: 8,
+  },
+  subCard: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    backgroundColor: '#FFFFFF', borderRadius: 14, padding: 13, marginBottom: 8,
+    borderWidth: 1, borderColor: '#E8E0D0',
+    shadowColor: '#3A3131', shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05, shadowRadius: 6, elevation: 1,
+  },
+  subCardIcon: {
+    width: 42, height: 42, borderRadius: 12,
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: 'rgba(232,185,35,0.12)',
+  },
+  subCardName: { color: '#1C1713', fontSize: 14, fontWeight: '700' },
+  subCardMeta: { color: '#A8998A', fontSize: 11.5, marginTop: 2 },
+  subCardBadge: {
+    minWidth: 20, height: 20, borderRadius: 10, paddingHorizontal: 6,
+    backgroundColor: '#E8B923', alignItems: 'center', justifyContent: 'center',
+  },
+  subCardBadgeText: { color: '#2C2320', fontSize: 10, fontWeight: '800' },
+
   folderDlBtn: {
     width: 34, height: 34, borderRadius: 10,
     alignItems: 'center', justifyContent: 'center',
