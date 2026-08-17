@@ -5,141 +5,186 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Uniquely Enough — Financial Report</title>
 <style>
+  /* ── Typography and palette ───────────────────────────────────────────────
+     A financial statement, not a dashboard: serif for headings, one accent
+     used sparingly, hairline rules in place of borders and drop shadows. */
   :root{
-    --gold:#E8B923; --bronze:#B5905B; --brown:#3A3131; --deep:#2C2320;
-    --cream:#F5F0E8; --line:#E8E0D0; --soft:#F2EDE3; --ink:#1C1713; --mute:#A8998A;
-    --sub:#6B5E52; --green:#16A34A; --red:#DC2626; --amber:#B45309; --blue:#4C6FBF;
-    --card:#FFFFFF; --bg:#FAFAF8;
+    --ink:#14100D; --body:#3D3630; --mute:#8A7E73; --faint:#ABA093;
+    --rule:#E2DCD2; --rule-mid:#CFC6B9; --rule-dark:#221C18;
+    --paper:#FFFFFF; --canvas:#F7F5F1; --tint:#FBF9F5;
+    --gold:#E8B923; --bronze:#8A6D1F; --brass:#B5905B;
+    --neg:#9E2B2B; --pos:#2E6B4F; --warn:#8A5A15;
+    --serif:Georgia,"Iowan Old Style","Times New Roman",serif;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
   }
   *{box-sizing:border-box}
-  body{margin:0;background:var(--bg);color:var(--ink);
-       font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+  body{margin:0;background:var(--canvas);color:var(--body);
+       font:14px/1.55 var(--sans);-webkit-font-smoothing:antialiased}
   .app{display:flex;min-height:100vh}
+  td.num,th.num{font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}
 
   /* ── Sidebar ── */
-  .side{width:230px;flex:none;background:var(--brown);color:#fff;padding:20px 0;position:sticky;top:0;height:100vh;overflow:auto}
-  .side .logo{display:flex;align-items:center;gap:10px;padding:0 20px 16px;border-bottom:1px solid rgba(255,255,255,.1);margin-bottom:14px}
-  .side .logo b{font-size:15px;letter-spacing:.4px}
-  .side .logo span{display:block;font-size:10px;color:rgba(255,255,255,.5);margin-top:2px}
-  .side .lbl{padding:0 20px;font-size:9.5px;letter-spacing:1.5px;color:rgba(232,185,35,.6);font-weight:800;margin-bottom:8px}
-  .side a{display:flex;align-items:center;gap:10px;padding:11px 20px;color:#A89880;text-decoration:none;
-          font-size:13.5px;font-weight:600;cursor:pointer;border-left:3px solid transparent}
-  .side a:hover{background:rgba(255,255,255,.04);color:#fff}
-  .side a.on{background:rgba(232,185,35,.14);color:#fff;font-weight:800;border-left-color:var(--gold)}
-  .side a .dot{width:6px;height:6px;border-radius:3px;background:currentColor;opacity:.55;flex:none}
+  .side{width:212px;flex:none;background:var(--rule-dark);color:#CFC6B9;
+        padding:26px 0 30px;position:sticky;top:0;height:100vh;overflow:auto}
+  .side .logo{padding:0 22px 20px;margin-bottom:20px;border-bottom:1px solid rgba(255,255,255,.09)}
+  .side .logo b{display:block;font:400 17px/1.2 var(--serif);color:#fff;letter-spacing:.2px}
+  .side .logo span{display:block;font-size:10px;color:#7C7268;margin-top:6px;letter-spacing:.4px}
+  .side .lbl{padding:0 22px;font-size:9px;letter-spacing:1.6px;color:#6E6459;
+             font-weight:700;text-transform:uppercase;margin:0 0 6px}
+  .side a+.lbl{margin-top:22px}
+  .side a{display:block;padding:8px 22px;color:#B3A99D;text-decoration:none;font-size:13px;
+          cursor:pointer;border-left:2px solid transparent;letter-spacing:.1px}
+  .side a:hover{color:#fff}
+  .side a.on{color:#fff;border-left-color:var(--gold);background:rgba(255,255,255,.035)}
 
-  /* ── Main ── */
-  .main{flex:1;min-width:0;padding:22px 26px 60px}
+  /* ── Page ── */
+  .main{flex:1;min-width:0;padding:34px 40px 80px;max-width:1400px}
   .page{display:none} .page.on{display:block}
-  h1{font-size:20px;margin:0 0 3px;letter-spacing:-.3px}
-  .lead{color:var(--sub);font-size:12.5px;margin:0 0 18px;max-width:960px;line-height:1.6}
 
-  .topbar{display:grid;grid-template-columns:1fr auto 1fr auto;gap:12px;align-items:center;margin-bottom:20px}
-  .brand{background:var(--deep);color:#fff;font-weight:800;padding:13px 20px;border-radius:6px;text-align:center;white-space:nowrap;font-size:13px}
-  .title{background:var(--bronze);color:#fff;font-weight:800;letter-spacing:1px;padding:13px 20px;border-radius:6px;text-align:center;font-size:13px}
-  .monthbox{display:flex;align-items:center;gap:8px;background:#fff;border:2px solid var(--line);border-radius:6px;padding:7px 11px}
-  .monthbox select,.pick{border:0;background:transparent;font:inherit;font-weight:700;color:var(--ink);outline:none;cursor:pointer}
+  /* Report masthead */
+  .masthead{border-bottom:2px solid var(--rule-dark);padding-bottom:14px;margin-bottom:26px;
+            display:flex;align-items:flex-end;justify-content:space-between;gap:24px;flex-wrap:wrap}
+  .masthead h1{margin:0;font:400 25px/1.15 var(--serif);color:var(--ink);letter-spacing:-.2px}
+  .masthead .meta{font-size:11.5px;color:var(--mute);margin-top:6px;letter-spacing:.2px}
+  .masthead .right{text-align:right;font-size:11px;color:var(--mute);line-height:1.7}
+  .masthead .right b{display:block;color:var(--body);font-weight:600;font-size:12px}
+  .periodpick{display:inline-flex;align-items:baseline;gap:7px;border-bottom:1px solid var(--rule-mid);padding:2px 0}
+  .periodpick select{border:0;background:transparent;font:600 13px/1 var(--sans);color:var(--ink);
+                     outline:none;cursor:pointer;padding:2px 0}
 
-  .grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:18px}
-  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:18px}
-  .kpi{background:var(--card);border:2px solid var(--line);border-radius:10px;overflow:hidden}
-  .kpi h3{margin:0;background:var(--bronze);color:#fff;font-size:11px;font-weight:800;letter-spacing:1.1px;
-          text-transform:uppercase;padding:10px;text-align:center}
-  .kpi .val{padding:20px 10px;text-align:center;font-size:27px;font-weight:800;letter-spacing:-.5px}
-  .kpi .sub{padding:0 13px 10px;text-align:center;font-size:11px;color:var(--sub);line-height:1.45}
-  .kpi .note{padding:0 13px 15px;text-align:center;font-size:10.5px;color:var(--mute);line-height:1.5}
-  .pos{color:var(--green)} .neg{color:var(--red)}
+  h1.plain{margin:0 0 4px;font:400 23px/1.2 var(--serif);color:var(--ink)}
+  .lead{color:var(--mute);font-size:12.5px;margin:0 0 24px;max-width:74ch;line-height:1.65}
 
-  .panel{background:var(--card);border:2px solid var(--line);border-radius:10px;overflow:hidden;margin-bottom:18px}
-  .panel h3{margin:0;background:var(--bronze);color:#fff;font-size:11px;font-weight:800;letter-spacing:1.1px;
-            text-transform:uppercase;padding:10px;text-align:center}
-  .panel .body{padding:13px}
+  /* Section rule — replaces the coloured banner */
+  .rule-head{display:flex;align-items:center;gap:14px;margin:34px 0 14px}
+  .rule-head span{font-size:10px;letter-spacing:1.8px;text-transform:uppercase;color:var(--bronze);
+                  font-weight:700;white-space:nowrap}
+  .rule-head:after{content:"";flex:1;height:1px;background:var(--rule)}
+
+  /* ── KPI band — one sheet, hairline columns ── */
+  .band{display:grid;grid-template-columns:repeat(4,1fr);background:var(--paper);
+        border:1px solid var(--rule);margin-bottom:26px}
+  .band .cell{padding:18px 20px;border-left:1px solid var(--rule)}
+  .band .cell:first-child{border-left:0}
+  .band .k{font-size:9.5px;letter-spacing:1.5px;text-transform:uppercase;color:var(--mute);font-weight:700}
+  .band .v{font:400 27px/1.2 var(--serif);color:var(--ink);margin-top:9px;font-variant-numeric:tabular-nums}
+  .band .d{font-size:11px;color:var(--mute);margin-top:6px}
+  .neg{color:var(--neg)} .pos{color:var(--pos)}
+
+  /* ── Metric cards — flat, no header bar ── */
+  .cards{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--rule);
+         border:1px solid var(--rule);margin-bottom:26px}
+  .card{background:var(--paper);padding:16px 18px 18px}
+  .card .k{font-size:9.5px;letter-spacing:1.4px;text-transform:uppercase;color:var(--mute);font-weight:700}
+  .card .v{font:400 23px/1.2 var(--serif);color:var(--ink);margin:9px 0 7px;font-variant-numeric:tabular-nums}
+  .card .s{font-size:11px;color:var(--body);padding-top:7px;border-top:1px solid var(--rule)}
+  .card .n{font-size:11px;color:var(--mute);line-height:1.6;margin-top:6px}
+
+  /* ── Panels ── */
+  .panel{background:var(--paper);border:1px solid var(--rule);margin-bottom:22px}
+  .panel-head{font-size:10px;letter-spacing:1.6px;text-transform:uppercase;color:var(--bronze);
+              font-weight:700;padding:13px 18px;border-bottom:1px solid var(--rule)}
+  .panel .body{padding:16px 18px}
   .scroll{overflow-x:auto}
+  .duo{display:grid;grid-template-columns:1fr 1fr;gap:22px;margin-bottom:22px}
+  .duo>.panel{margin-bottom:0}
 
-  table{width:100%;border-collapse:collapse;font-size:12px}
-  th{background:var(--cream);color:var(--sub);font-size:10.5px;font-weight:800;text-align:left;
-     padding:8px 9px;border-bottom:1px solid var(--line);white-space:nowrap}
-  td{padding:7px 9px;border-bottom:1px solid var(--soft);vertical-align:top}
-  tr:last-child td{border-bottom:0}
-  td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
-  tr.strong td{font-weight:800;background:#FDFBF6}
-  tr.sec td{background:var(--deep);color:var(--gold);font-weight:800;font-size:10.5px;letter-spacing:1.2px;text-transform:uppercase}
-  .fc{background:#FBFAFF}                      /* forecast column tint */
-  .commentary{background:#fff;border:2px solid var(--line);border-radius:10px;padding:13px 15px;
-              font-size:12.5px;line-height:1.65;color:var(--sub)}
-  .section{background:var(--deep);color:var(--gold);font-weight:800;letter-spacing:1.3px;text-transform:uppercase;
-           font-size:11.5px;padding:11px 15px;border-radius:8px;margin:24px 0 14px}
-  .flag{display:inline-block;padding:3px 9px;border-radius:20px;font-size:10px;font-weight:800;letter-spacing:.5px}
-  .flag.CRITICAL{background:#FEF2F2;color:var(--red);border:1px solid #FECACA}
-  .flag.HIGH{background:#FFF7ED;color:#C2410C;border:1px solid #FED7AA}
-  .flag.WATCH,.flag.MEDIUM{background:#FFFBEB;color:var(--amber);border:1px solid #FDE68A}
-  .flag.OK,.flag.LOW{background:#F0FDF4;color:var(--green);border:1px solid #BBF7D0}
-  .legend{display:flex;gap:15px;justify-content:center;padding:4px 0 8px;font-size:10.5px;color:var(--sub)}
-  .legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px}
+  /* ── Tables ── */
+  table{width:100%;border-collapse:collapse;font-size:12.5px}
+  th{font-size:9.5px;letter-spacing:1.1px;text-transform:uppercase;color:var(--mute);font-weight:700;
+     text-align:left;padding:11px 14px;border-bottom:1px solid var(--rule-mid);white-space:nowrap;background:var(--tint)}
+  td{padding:9px 14px;border-bottom:1px solid var(--rule);vertical-align:top;color:var(--body)}
+  table tr:last-child td{border-bottom:0}
+  tr.strong td{font-weight:600;color:var(--ink);background:var(--tint)}
+  tr.sec td{padding-top:18px;padding-bottom:7px;border-bottom:1px solid var(--rule-mid);background:transparent;
+            font-size:9.5px;letter-spacing:1.6px;text-transform:uppercase;color:var(--bronze);font-weight:700}
+  td.fc,th.fc{background:#FBFAF7}
 
-  /* editable scenario inputs */
-  input.cell{width:96px;padding:6px 8px;border:1px solid #E3D08A;background:#FFFCEF;border-radius:6px;
-             font:inherit;font-weight:700;text-align:right;font-variant-numeric:tabular-nums}
-  input.cell:focus{outline:2px solid var(--gold);outline-offset:-1px}
-  select.cell{padding:7px 10px;border:1px solid #E3D08A;background:#FFFCEF;border-radius:6px;font:inherit;font-weight:800}
-  .hint{font-size:11px;color:var(--mute)}
-  .banner{display:flex;gap:9px;align-items:flex-start;background:#EFF6FF;border:1px solid #BFDBFE;
-          border-radius:9px;padding:11px 13px;font-size:11.5px;color:#1D4ED8;line-height:1.55;margin-bottom:16px}
+  /* Flags — set as type, not pills */
+  .flag{font-size:10px;letter-spacing:.9px;font-weight:700;text-transform:uppercase;white-space:nowrap}
+  .flag.CRITICAL{color:var(--neg)} .flag.HIGH{color:#A85A1E}
+  .flag.WATCH,.flag.MEDIUM{color:var(--warn)} .flag.OK,.flag.LOW{color:var(--pos)}
 
-  @media (max-width:1100px){ .grid4{grid-template-columns:repeat(2,1fr)} .grid2{grid-template-columns:1fr} }
-  @media (max-width:760px){ .app{flex-direction:column} .side{width:100%;height:auto;position:static}
-    .side a{display:inline-flex} .grid4{grid-template-columns:1fr} .topbar{grid-template-columns:1fr}
-    .main{padding:16px} }
+  .prose{background:var(--paper);border:1px solid var(--rule);border-left:2px solid var(--brass);
+         padding:15px 18px;font-size:12.5px;line-height:1.75;color:var(--body)}
+  .legend{display:flex;gap:18px;padding:0 18px 12px;font-size:10.5px;color:var(--mute)}
+  .legend i{display:inline-block;width:16px;height:3px;margin-right:6px;vertical-align:2px}
+
+  .note{display:flex;gap:10px;align-items:flex-start;border-left:2px solid var(--brass);
+        background:var(--tint);padding:12px 16px;font-size:11.5px;color:var(--body);
+        line-height:1.65;margin-bottom:20px}
+  .note b{color:var(--ink)}
+
+  /* Editable scenario inputs — quiet, not highlighter yellow */
+  input.cell{width:104px;padding:6px 9px;border:1px solid var(--rule-mid);background:#FFFDF7;
+             border-radius:0;font:600 12.5px var(--sans);text-align:right;
+             font-variant-numeric:tabular-nums;color:var(--ink)}
+  input.cell:focus{outline:0;border-color:var(--brass);background:#fff}
+  select.cell{padding:7px 11px;border:1px solid var(--rule-mid);background:#FFFDF7;border-radius:0;
+              font:600 13px var(--sans);color:var(--ink)}
+  .hint{font-size:11px;color:var(--faint)}
+
+  @media (max-width:1180px){ .band,.cards{grid-template-columns:repeat(2,1fr)} .duo{grid-template-columns:1fr} }
+  @media (max-width:820px){
+    .app{flex-direction:column}
+    .side{width:100%;height:auto;position:static;padding:16px 0}
+    .side a{display:inline-block;border-left:0;border-bottom:2px solid transparent}
+    .side a.on{border-left:0;border-bottom-color:var(--gold)}
+    .band,.cards{grid-template-columns:1fr}
+    .main{padding:20px 16px 60px}
+  }
 </style>
 </head>
 <body>
 <div class="app">
   <nav class="side">
-    <div class="logo"><div><b>UNIQUELY ENOUGH</b><span>Finance Therapy Group</span></div></div>
-    <div class="lbl">REPORT</div>
-    <a data-tab="dash" class="on"><i class="dot"></i>Dashboard</a>
-    <a data-tab="findings"><i class="dot"></i>Findings for Review</a>
-    <a data-tab="tldr"><i class="dot"></i>TL;DR</a>
-    <a data-tab="assum"><i class="dot"></i>Assumptions</a>
-    <div class="lbl" style="margin-top:14px">STATEMENTS</div>
-    <a data-tab="fsr"><i class="dot"></i>FS-R</a>
-    <a data-tab="fsa"><i class="dot"></i>FS-A</a>
-    <a data-tab="bs"><i class="dot"></i>UE BS</a>
-    <a data-tab="pl"><i class="dot"></i>UE PL</a>
+    <div class="logo"><b>Uniquely Enough</b><span>Behavioral Health LLC</span></div>
+    <div class="lbl">Report</div>
+    <a data-tab="dash" class="on">Dashboard</a>
+    <a data-tab="findings">Findings for Review</a>
+    <a data-tab="tldr">TL;DR</a>
+    <a data-tab="assum">Assumptions</a>
+    <div class="lbl">Statements</div>
+    <a data-tab="fsr">FS-R</a>
+    <a data-tab="fsa">FS-A</a>
+    <a data-tab="bs">UE BS</a>
+    <a data-tab="pl">UE PL</a>
   </nav>
 
   <main class="main">
     <!-- ── Dashboard ── -->
     <section class="page on" id="p-dash">
-      <div class="topbar">
-        <div class="brand">UNIQUELY ENOUGH</div>
-        <div class="title">MONTHLY FINANCIAL REPORT</div>
-        <div class="monthbox"><select id="month"></select></div>
-        <div class="brand">Finance Therapy Group</div>
+      <div class="masthead">
+        <div>
+          <h1>Monthly Financial Report</h1>
+          <div class="meta">Uniquely Enough Behavioral Health LLC &nbsp;·&nbsp;
+            <span class="periodpick"><select id="month"></select></span></div>
+        </div>
+        <div class="right"><b>Prepared by Finance Therapy Group</b>Restated from client books</div>
       </div>
-      <div class="grid4">
-        <div class="kpi"><h3>Total Income</h3><div class="val" id="kInc">–</div></div>
-        <div class="kpi"><h3>Total Expense</h3><div class="val" id="kExp">–</div></div>
-        <div class="kpi"><h3>Net Income</h3><div class="val" id="kNet">–</div></div>
-        <div class="kpi"><h3>Net Income %</h3><div class="val" id="kPct">–</div></div>
+      <div class="band">
+        <div class="cell"><div class="k">Total Income</div><div class="v" id="kInc">–</div><div class="d" id="dInc"></div></div>
+        <div class="cell"><div class="k">Total Expense</div><div class="v" id="kExp">–</div><div class="d" id="dExp"></div></div>
+        <div class="cell"><div class="k">Net Income</div><div class="v" id="kNet">–</div><div class="d" id="dNet"></div></div>
+        <div class="cell"><div class="k">Net Margin</div><div class="v" id="kPct">–</div><div class="d" id="dPct"></div></div>
       </div>
-      <div class="grid2">
-        <div class="panel"><h3>Income Monthly Movement</h3>
-          <div class="legend"><span><i style="background:#E8B923"></i>2026</span><span><i style="background:#C9BCA8"></i>2025</span><span><i style="background:#8C8073"></i>Trend (3-mo avg)</span></div>
-          <div class="body" id="chartInc"></div></div>
-        <div class="panel"><h3>Expense Monthly Movement</h3>
-          <div class="legend"><span><i style="background:#4C6FBF"></i>2026</span><span><i style="background:#C9BCA8"></i>2025</span><span><i style="background:#8C8073"></i>Trend</span></div>
-          <div class="body" id="chartExp"></div></div>
+      <div class="duo">
+        <div class="panel"><div class="panel-head">Income · monthly movement</div>
+          <div class="legend"><span><i style="background:#8A6D1F"></i>2026</span><span><i style="background:#CFC6B9"></i>2025</span><span><i style="background:#9E948A"></i>Trend, 3-mo avg</span></div>
+          <div class="body" id="chartInc" style="padding-top:0"></div></div>
+        <div class="panel"><div class="panel-head">Expense · monthly movement</div>
+          <div class="legend"><span><i style="background:#4A5B70"></i>2026</span><span><i style="background:#CFC6B9"></i>2025</span><span><i style="background:#9E948A"></i>Trend</span></div>
+          <div class="body" id="chartExp" style="padding-top:0"></div></div>
       </div>
-      <div class="grid2">
-        <div class="panel"><h3 id="incTitle">Income Analysis</h3><table id="tblInc"></table></div>
-        <div class="panel"><h3 id="expTitle">Expense Analysis</h3><table id="tblExp"></table></div>
+      <div class="duo">
+        <div class="panel"><div class="panel-head" id="incTitle">Income analysis</div><table id="tblInc"></table></div>
+        <div class="panel"><div class="panel-head" id="expTitle">Expense analysis</div><table id="tblExp"></table></div>
       </div>
-      <div class="grid2"><div class="commentary" id="cmtInc"></div><div class="commentary" id="cmtExp"></div></div>
-      <div class="section">Balance Sheet Details</div>
-      <div class="grid4" id="bsCards"></div>
-      <div class="grid4" id="ratioCards"></div>
-      <div class="section">Our Top Recommendations</div>
+      <div class="duo"><div class="prose" id="cmtInc"></div><div class="prose" id="cmtExp"></div></div>
+      <div class="rule-head"><span>Balance sheet</span></div>
+      <div class="cards" id="bsCards"></div>
+      <div class="cards" id="ratioCards"></div>
+      <div class="rule-head"><span>Recommendations</span></div>
       <div class="panel"><table id="tblRec"></table></div>
     </section>
 
@@ -148,7 +193,7 @@
 
     <!-- ── Assumptions (live) ── -->
     <section class="page" id="p-assum">
-      <h1>Scenario Assumptions</h1>
+      <h1 class="plain">Scenario Assumptions</h1>
       <p class="lead">Edit the yellow cells. Picking a scenario updates the Aug–Dec 2026 forecast on FS-R,
         and the Dashboard along with it. The historical basis is live from FS-A actuals.</p>
       <div id="assumBody"></div>
@@ -294,43 +339,50 @@ function drivers(m) {
 }
 
 function chart(el, cur, prior, trend, color) {
-  const W = 640, H = 250, pl = 44, pr = 10, pt = 14, pb = 28;
+  const W = 640, H = 236, pl = 46, pr = 8, pt = 12, pb = 26;
   const iw = W - pl - pr, ih = H - pt - pb;
   const max = Math.max(...cur, ...prior, ...trend, 1);
   const y = v => pt + ih - (v / max) * ih, slot = iw / 12, bw = Math.min(13, slot / 3);
   let g = "";
   for (let i = 0; i <= 4; i++) {
     const gy = pt + (ih / 4) * i;
-    g += `<line x1="${pl}" y1="${gy}" x2="${W - pr}" y2="${gy}" stroke="#F2EDE3"/>
-          <text x="${pl - 6}" y="${gy + 3}" text-anchor="end" font-size="9" fill="#A8998A">${Math.round(max * (1 - i / 4) / 1000)}K</text>`;
+    g += `<line x1="${pl}" y1="${gy}" x2="${W - pr}" y2="${gy}" stroke="${i === 4 ? "#CFC6B9" : "#EFEAE2"}"/>
+          <text x="${pl - 8}" y="${gy + 3}" text-anchor="end" font-size="9" fill="#ABA093">${Math.round(max * (1 - i / 4) / 1000)}K</text>`;
   }
   MONTHS.forEach((mo, i) => {
     const cx = pl + slot * i + slot / 2;
-    if (cur[i] > 0) g += `<rect x="${cx - bw - 1}" y="${y(cur[i])}" width="${bw}" height="${pt + ih - y(cur[i])}" fill="${color}" rx="1"/>
-      <text x="${cx - bw / 2 - 1}" y="${y(cur[i]) - 4}" text-anchor="middle" font-size="8" fill="#6B5E52">${Math.round(cur[i] / 1000)}K</text>`;
-    if (prior[i] > 0) g += `<rect x="${cx + 1}" y="${y(prior[i])}" width="${bw}" height="${pt + ih - y(prior[i])}" fill="#C9BCA8" rx="1"/>`;
-    g += `<text x="${cx}" y="${H - 9}" text-anchor="middle" font-size="10" fill="#6B5E52">${mo}</text>`;
+    if (cur[i] > 0) g += `<rect x="${cx - bw - 1}" y="${y(cur[i])}" width="${bw}" height="${pt + ih - y(cur[i])}" fill="${color}"/>`;
+    if (prior[i] > 0) g += `<rect x="${cx + 1}" y="${y(prior[i])}" width="${bw}" height="${pt + ih - y(prior[i])}" fill="#CFC6B9"/>`;
+    g += `<text x="${cx}" y="${H - 8}" text-anchor="middle" font-size="9.5" fill="#8A7E73">${mo}</text>`;
   });
   const p = trend.map((v, i) => v > 0 ? `${pl + slot * i + slot / 2},${y(v)}` : null).filter(Boolean);
-  if (p.length > 1) g += `<polyline points="${p.join(" ")}" fill="none" stroke="#8C8073" stroke-width="1.6"/>`;
+  if (p.length > 1) g += `<polyline points="${p.join(" ")}" fill="none" stroke="#9E948A" stroke-width="1.4"/>`;
   el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="100%">${g}</svg>`;
 }
 
 function renderDash(m) {
   const inc = income26(m), exp = expense26(m), net = inc - exp;
+  const pI = priorIncome(m), pE = priorExpense(m), pN = pI - pE;
   kInc.textContent = money(inc); kExp.textContent = money(exp);
-  kNet.textContent = money(net); kNet.className = "val " + cls(net);
-  kPct.textContent = pct(div(net, inc)); kPct.className = "val " + cls(net);
+  kNet.textContent = money(net); kNet.className = "v " + cls(net);
+  kPct.textContent = pct(div(net, inc)); kPct.className = "v " + cls(net);
+  // A figure on its own says little; each carries its move on the prior month.
+  const delta = (el, cur, prev) => {
+    const d = cur - prev;
+    el.innerHTML = prev ? `<span class="${cls(d)}">${d >= 0 ? "▲" : "▼"} ${pct(Math.abs(div(d, prev)))}</span> vs ${priorLabel(m)}` : "";
+  };
+  delta(dInc, inc, pI); delta(dExp, exp, pE); delta(dNet, net, pN);
+  dPct.textContent = "Prior month " + pct(div(pN, pI));
 
   const i26 = MONTHS.map((_, i) => i <= m ? income26(i) : 0);
   const e26 = MONTHS.map((_, i) => i <= m ? expense26(i) : 0);
   chart(chartInc, i26, MONTHS.map((_, i) => income25(i)),
-        i26.map((v, i) => i > m ? 0 : i < 2 ? v : (i26[i] + i26[i - 1] + i26[i - 2]) / 3), "#E8B923");
-  chart(chartExp, e26, MONTHS.map((_, i) => expense25(i)), e26.map(v => v * 1.4), "#4C6FBF");
+        i26.map((v, i) => i > m ? 0 : i < 2 ? v : (i26[i] + i26[i - 1] + i26[i - 2]) / 3), "#8A6D1F");
+  chart(chartExp, e26, MONTHS.map((_, i) => expense25(i)), e26.map(v => v * 1.4), "#4A5B70");
 
   const label = MONTHS[m] + " 2026";
-  incTitle.textContent = "Income Analysis – " + label;
-  expTitle.textContent = "Expense Analysis – " + label;
+  incTitle.textContent = "Income analysis · " + label;
+  expTitle.textContent = "Expense analysis · " + label;
   const y26i = sumTo(income26, m), y25i = sumTo(income25, m);
   const y26e = sumTo(expense26, m), y25e = sumTo(expense25, m);
 
@@ -390,7 +442,8 @@ function renderDash(m) {
     ["Payroll Cost (Month)", money(pay), `Revenue ${money(inc)}   |   Target 50%`,
       `Payroll, benefits and contract labour are ${pct(div(pay, inc))} of this month's revenue. ` + (div(pay, inc) > 0.6
         ? "Well above the 50% goal — the main margin lever." : "At or near the 50% goal.")],
-  ].map(c => `<div class="kpi"><h3>${c[0]}</h3><div class="val">${c[1]}</div><div class="sub">${c[2]}</div><div class="note">${c[3]}</div></div>`).join("");
+  ].map(c => `<div class="card"><div class="k">${c[0]}</div><div class="v">${c[1]}</div>
+      <div class="s">${c[2]}</div><div class="n">${c[3]}</div></div>`).join("");
 
   ratioCards.innerHTML = [
     ["Current Ratio", div(ca, cl).toFixed(2) + "x", `Prior month ${div(prev(78), prev(86)).toFixed(2)}x   |   Target 1.20x`,
@@ -405,7 +458,8 @@ function renderDash(m) {
                    : "Positive — hold at least one month of payroll here.")],
     ["Days of Payroll Covered", days.toFixed(1), `Monthly payroll ${money(pay)}   |   Target 15 days`,
       "How long the bank balance would cover payroll at this month's payroll cost."],
-  ].map(c => `<div class="kpi"><h3>${c[0]}</h3><div class="val">${c[1]}</div><div class="sub">${c[2]}</div><div class="note">${c[3]}</div></div>`).join("");
+  ].map(c => `<div class="card"><div class="k">${c[0]}</div><div class="v">${c[1]}</div>
+      <div class="s">${c[2]}</div><div class="n">${c[3]}</div></div>`).join("");
 }
 
 const RECS = [
@@ -461,8 +515,8 @@ function gridTable(rows, opts = {}) {
 
 // Statement renderer for FS-R / FS-A / UE BS / UE PL
 function statement(rows, { forecastFrom = null, title, lead } = {}) {
-  let h = `<h1>${esc(title)}</h1><p class="lead">${esc(lead)}</p>`;
-  if (forecastFrom != null) h += `<div class="banner"><span>ℹ</span><span>Jan–Jul 2026 are booked actuals.
+  let h = `<h1 class="plain">${esc(title)}</h1><p class="lead">${esc(lead)}</p>`;
+  if (forecastFrom != null) h += `<div class="note"><span>Jan–Jul 2026 are booked actuals.
     <b>Aug–Dec 2026 are forecast</b>, shaded below, and move with the scenario on the Assumptions tab.</span></div>`;
   h += '<div class="panel"><div class="scroll"><table><tr><th>Account</th>' +
        MONTHS.map(m => `<th class="num">${m} 25</th>`).join("") + '<th class="num">2025</th>' +
@@ -490,12 +544,12 @@ function renderAssumptions() {
     [0, 1, 2].map(i => `<td class="num">${num(k, i, step, isPct)}</td>`).join("") + "</tr>";
 
   assumBody.innerHTML = `
-    <div class="panel"><h3>Selected Scenario</h3><div class="body">
+    <div class="panel"><div class="panel-head">Selected Scenario</div><div class="body">
       <select class="cell" id="scen">${SCEN.map(s => `<option${s === A.scenario ? " selected" : ""}>${s}</option>`).join("")}</select>
       <span class="hint" style="margin-left:10px">Conservative / Target / Stretch</span>
     </div></div>
 
-    <div class="panel"><h3>1 · Historical basis — last 6 actual months (Feb–Jul 2026)</h3>
+    <div class="panel"><div class="panel-head">1 · Historical basis — last 6 actual months (Feb–Jul 2026)</div>
     <table><tr><th>Item</th><th class="num">$ / month</th><th class="num">% of revenue</th></tr>
       ${[["Fee for service revenue", m.baseRev, null],
          ["Payroll block (wages, taxes, benefits, contract labor)", m.payBlock, div(m.payBlock, m.baseRev)],
@@ -506,7 +560,7 @@ function renderAssumptions() {
         .map(r => `<tr><td>${r[0]}</td><td class="num">${money(r[1])}</td><td class="num">${r[2] == null ? "" : pct(r[2])}</td></tr>`).join("")}
     </table></div>
 
-    <div class="panel"><h3>3 · Scenario levers — edit the yellow cells</h3>
+    <div class="panel"><div class="panel-head">3 · Scenario levers — edit the yellow cells</div>
     <table><tr><th>Driver</th><th>Unit</th><th class="num">Conservative</th><th class="num">Target</th><th class="num">Stretch</th></tr>
       ${row("A · % of unbilled clinician hours recovered", "%", "recovered", 1, "1")}
       ${row("A · supervisors to hire", "count", "supervisors", 0, "1")}
@@ -516,7 +570,7 @@ function renderAssumptions() {
       ${row("E · non-payroll cost growth", "%/mo", "costGrowth", 1, "0.1")}
     </table></div>
 
-    <div class="panel"><h3>4 · Shared inputs</h3>
+    <div class="panel"><div class="panel-head">4 · Shared inputs</div>
     <table>
       <tr><td>Blended billable rate ($/hr)</td><td class="num">${shared("rate", "1")}</td></tr>
       <tr><td>Unbilled clinician hours / week</td><td class="num">${shared("unbilledHrs", "1")}</td></tr>
@@ -524,7 +578,7 @@ function renderAssumptions() {
       <tr><td>Loaded cost per supervisor ($/yr)</td><td class="num">${shared("supervisorCost", "1000")}</td></tr>
     </table></div>
 
-    <div class="panel"><h3>5 · Monthly impact by scenario (auto)</h3>
+    <div class="panel"><div class="panel-head">5 · Monthly impact by scenario (auto)</div>
     <table><tr><th>Metric</th><th class="num">Conservative</th><th class="num">Target</th><th class="num">Stretch</th></tr>
       ${[["Unlocked billing / month", i => A.recovered[i] * A.unbilledHrs * A.weeks * A.rate],
          ["Capture recovery / month", i => A.capture[i] / 12],
@@ -536,7 +590,7 @@ function renderAssumptions() {
           <td>${r[0]}</td>${[0, 1, 2].map(i => `<td class="num">${money(r[1](i))}</td>`).join("")}</tr>`).join("")}
     </table></div>
 
-    <div class="panel"><h3>6 · Applied to forecast — these feed FS-R (Aug–Dec 2026)</h3>
+    <div class="panel"><div class="panel-head">6 · Applied to forecast — these feed FS-R (Aug–Dec 2026)</div>
     <table>
       <tr><td>Revenue uplift / month — applied</td><td class="num">${money(m.revUplift)}</td></tr>
       <tr><td>Added payroll / month — applied</td><td class="num">${money(m.addedPayroll)}</td></tr>
@@ -545,7 +599,7 @@ function renderAssumptions() {
       <tr><td>Non-payroll cost growth — applied</td><td class="num">${pct(m.costGrowth)}</td></tr>
     </table></div>
 
-    <div class="panel"><h3>8 · Forecast outcome — live from FS-R</h3>
+    <div class="panel"><div class="panel-head">8 · Forecast outcome — live from FS-R</div>
     <table>
       <tr><td>Jan–Jul 2026 net income (actual, already booked)</td><td class="num">${money(sumRange(72, 0, 6))}</td></tr>
       <tr><td>Aug–Dec 2026 revenue (forecast)</td><td class="num">${money(sumRange(34, 7, 11))}</td></tr>
@@ -570,16 +624,16 @@ const sumRange = (row, a, b) => { let s = 0; for (let i = a; i <= b; i++) s += r
 // ── Static tabs ──────────────────────────────────────────────────────────────
 function renderStatic() {
   document.getElementById("p-findings").innerHTML =
-    `<h1>Findings for Review</h1><p class="lead">CFO / controller findings and recommendations, sourced from the UE PL and UE BS tabs.</p>` +
+    `<h1 class="plain">Findings for Review</h1><p class="lead">CFO / controller findings and recommendations, sourced from the UE PL and UE BS tabs.</p>` +
     gridTable(SHEETS["Findings for Review"], { flagCol: 6 });
   document.getElementById("p-tldr").innerHTML =
-    `<h1>TL;DR</h1><p class="lead">Monthly / YTD financial summary prepared by Finance Therapy Group.</p>` +
+    `<h1 class="plain">TL;DR</h1><p class="lead">Monthly / YTD financial summary prepared by Finance Therapy Group.</p>` +
     gridTable(SHEETS["TL;DR"].map(r => r.slice(0, 6)));
   document.getElementById("p-bs").innerHTML =
-    `<h1>UE BS</h1><p class="lead">Balance sheet as provided — the source behind the restated statements.</p>` +
+    `<h1 class="plain">UE BS</h1><p class="lead">Balance sheet as provided — the source behind the restated statements.</p>` +
     gridTable(SHEETS["UE BS"]);
   document.getElementById("p-pl").innerHTML =
-    `<h1>UE PL</h1><p class="lead">Profit and loss as provided — the source behind the restated statements.</p>` +
+    `<h1 class="plain">UE PL</h1><p class="lead">Profit and loss as provided — the source behind the restated statements.</p>` +
     gridTable(SHEETS["UE PL"]);
   document.getElementById("p-fsa").innerHTML = statement(SHEETS["FS-A"], {
     title: "FS-A — Actuals", lead: "Actuals only, with no forecast. This is the historical basis the scenario model averages from." });
