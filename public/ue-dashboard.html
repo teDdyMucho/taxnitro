@@ -1,0 +1,422 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Uniquely Enough — Monthly Financial Report</title>
+<style>
+  :root{
+    --gold:#E8B923; --bronze:#B5905B; --brown:#3A3131; --deep:#2C2320;
+    --cream:#F5F0E8; --line:#E8E0D0; --ink:#1C1713; --mute:#A8998A;
+    --sub:#6B5E52; --green:#16A34A; --red:#DC2626; --amber:#B45309;
+    --card:#FFFFFF; --bg:#FAFAF8;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+       font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+  .wrap{max-width:1400px;margin:0 auto;padding:20px}
+
+  /* ── Title bar ── */
+  .topbar{display:grid;grid-template-columns:auto 1fr auto 1fr auto;gap:12px;align-items:center;margin-bottom:20px}
+  .brand{background:var(--deep);color:#fff;font-weight:800;letter-spacing:.5px;
+         padding:14px 22px;border-radius:6px;text-align:center;white-space:nowrap}
+  .title{background:var(--bronze);color:#fff;font-weight:800;letter-spacing:1px;
+         padding:14px 22px;border-radius:6px;text-align:center}
+  .monthbox{display:flex;align-items:center;gap:8px;background:#fff;border:2px solid var(--line);
+            border-radius:6px;padding:8px 12px}
+  .monthbox select{border:0;background:transparent;font:inherit;font-weight:700;color:var(--ink);
+                   outline:none;cursor:pointer}
+  .logo{width:78px;height:56px;display:flex;align-items:center;justify-content:center;
+        border-radius:6px;background:#fff;border:1px solid var(--line);
+        font-weight:800;color:var(--bronze);letter-spacing:1px}
+
+  /* ── Cards ── */
+  .grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:20px}
+  .kpi{background:var(--card);border:2px solid var(--line);border-radius:10px;overflow:hidden;
+       box-shadow:0 1px 3px rgba(58,49,49,.05)}
+  .kpi h3{margin:0;background:var(--bronze);color:#fff;font-size:11.5px;font-weight:800;
+          letter-spacing:1.2px;text-transform:uppercase;padding:11px;text-align:center}
+  .kpi .val{padding:22px 12px;text-align:center;font-size:30px;font-weight:800;letter-spacing:-.5px}
+  .kpi .sub{padding:0 14px 12px;text-align:center;font-size:11.5px;color:var(--sub);line-height:1.45}
+  .kpi .note{padding:0 14px 16px;text-align:center;font-size:11px;color:var(--mute);line-height:1.5}
+  .pos{color:var(--green)} .neg{color:var(--red)}
+
+  /* ── Panels ── */
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px}
+  .panel{background:var(--card);border:2px solid var(--line);border-radius:10px;overflow:hidden}
+  .panel h3{margin:0;background:var(--bronze);color:#fff;font-size:11.5px;font-weight:800;
+            letter-spacing:1.2px;text-transform:uppercase;padding:11px;text-align:center}
+  .panel .body{padding:14px}
+
+  /* ── Tables ── */
+  table{width:100%;border-collapse:collapse;font-size:12.5px}
+  th{background:var(--cream);color:var(--sub);font-size:11px;font-weight:800;text-align:left;
+     padding:9px 10px;border-bottom:1px solid var(--line);text-transform:none}
+  td{padding:9px 10px;border-bottom:1px solid #F2EDE3}
+  tr:last-child td{border-bottom:0}
+  td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+  tr.strong td{font-weight:800}
+
+  .commentary{background:#fff;border:2px solid var(--line);border-radius:10px;
+              padding:14px 16px;font-size:12.5px;line-height:1.65;color:var(--sub)}
+
+  /* ── Section heading ── */
+  .section{background:var(--deep);color:var(--gold);font-weight:800;letter-spacing:1.4px;
+           text-transform:uppercase;font-size:12px;padding:12px 16px;border-radius:8px;margin:26px 0 16px}
+
+  /* ── Recommendations ── */
+  .rec th{background:var(--deep);color:var(--gold);font-size:11px;letter-spacing:1px;text-transform:uppercase}
+  .rec td{vertical-align:top;font-size:12.5px;line-height:1.55}
+  .prio{display:inline-block;padding:4px 10px;border-radius:20px;font-size:10.5px;font-weight:800;
+        letter-spacing:.6px}
+  .prio.CRITICAL{background:#FEF2F2;color:var(--red);border:1px solid #FECACA}
+  .prio.HIGH{background:#FFFBEB;color:var(--amber);border:1px solid #FDE68A}
+  .prio.MEDIUM{background:var(--cream);color:var(--sub);border:1px solid var(--line)}
+
+  .legend{display:flex;gap:16px;justify-content:center;padding:4px 0 10px;font-size:11px;color:var(--sub)}
+  .legend i{display:inline-block;width:11px;height:11px;border-radius:2px;margin-right:5px;vertical-align:-1px}
+
+  @media (max-width:1080px){
+    .grid4{grid-template-columns:repeat(2,1fr)}
+    .grid2{grid-template-columns:1fr}
+    .topbar{grid-template-columns:1fr;gap:8px}
+  }
+  @media (max-width:620px){ .grid4{grid-template-columns:1fr} .wrap{padding:12px} }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="topbar">
+    <div class="logo">UE</div>
+    <div class="brand">UNIQUELY ENOUGH</div>
+    <div class="title">MONTHLY FINANCIAL REPORT</div>
+    <div class="monthbox"><select id="month"></select></div>
+    <div class="brand">Finance Therapy Group</div>
+  </div>
+
+  <!-- KPI row -->
+  <div class="grid4">
+    <div class="kpi"><h3>Total Income</h3><div class="val" id="kInc">–</div></div>
+    <div class="kpi"><h3>Total Expense</h3><div class="val" id="kExp">–</div></div>
+    <div class="kpi"><h3>Net Income</h3><div class="val" id="kNet">–</div></div>
+    <div class="kpi"><h3>Net Income %</h3><div class="val" id="kPct">–</div></div>
+  </div>
+
+  <!-- Charts -->
+  <div class="grid2">
+    <div class="panel"><h3>Income Monthly Movement</h3>
+      <div class="legend"><span><i style="background:#E8B923"></i>2026</span>
+        <span><i style="background:#C9BCA8"></i>2025</span>
+        <span><i style="background:#8C8073"></i>Trend (3-mo avg)</span></div>
+      <div class="body" id="chartInc"></div></div>
+    <div class="panel"><h3>Expense Monthly Movement</h3>
+      <div class="legend"><span><i style="background:#4C6FBF"></i>2026</span>
+        <span><i style="background:#C9BCA8"></i>2025</span>
+        <span><i style="background:#8C8073"></i>Trend</span></div>
+      <div class="body" id="chartExp"></div></div>
+  </div>
+
+  <!-- Analysis -->
+  <div class="grid2">
+    <div class="panel"><h3 id="incAnalysisTitle">Income Analysis</h3>
+      <table id="tblInc"></table></div>
+    <div class="panel"><h3 id="expAnalysisTitle">Expense Analysis</h3>
+      <table id="tblExp"></table></div>
+  </div>
+
+  <div class="grid2">
+    <div class="commentary" id="cmtInc"></div>
+    <div class="commentary" id="cmtExp"></div>
+  </div>
+
+  <div class="section">Balance Sheet Details</div>
+  <div class="grid4" id="bsCards"></div>
+  <div class="grid4" id="ratioCards"></div>
+
+  <div class="section">Our Top Recommendations</div>
+  <div class="panel"><table class="rec" id="tblRec"></table></div>
+
+</div>
+
+<script>
+// ─────────────────────────────────────────────────────────────────────────────
+// Data lifted from the workbook's FS-R sheet — the single source every figure
+// on the dashboard traces back to. Each series is 12 values, Jan..Dec.
+// ─────────────────────────────────────────────────────────────────────────────
+const DATA = {"months":["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"],"key":{"Fee for Service Income":{"y2025":[32883.99,67433.47,47366.22,95999.32,59632.0,114525.12,85026.22,96853.32,81040.82,111305.09,114943.13,54450.16],"y2026":[70487.76,111361.38,160419.32,110252.81,91472.78,143584.95,147713.95,150761.85,152049.27,153349.57,154662.86,155989.3]},"TOTAL INCOME":{"y2025":[32883.99,67433.47,47366.22,95999.32,59632.0,114525.12,85026.22,96853.32,81040.82,111305.09,114943.13,54450.16],"y2026":[70487.76,111361.38,160419.32,110252.81,91472.78,143584.95,147713.95,150761.85,152049.27,153349.57,154662.86,155989.3]},"Total Operating Expenses":{"y2025":[54799.94,60658.39,65090.28,72800.7,72561.62,69220.69,66516.11,73189.15,76457.39,82132.31,93847.1,103460.71],"y2026":[95766.79,91434.86,93566.51,113984.94,125105.68,108883.23,152219.36,127115.76,127115.76,127115.76,127115.76,127115.76]},"Total Other Expenses":{"y2025":[0.0,0.0,0.0,0.0,0.0,7.0,0.0,0.0,27.16,40.0,13.2,858.88],"y2026":[831.38,826.38,851.38,826.38,863.38,1015.88,826.38,868.3,868.3,868.3,868.3,868.3]},"Net Income":{"y2025":[-21818.63,6877.98,-17667.1,23309.02,-12723.06,45307.43,18616.06,23750.04,4755.38,29249.85,21133.99,-49624.69],"y2026":[-25999.63,19208.24,66012.39,-4505.43,-34413.79,33832.15,-5255.79,22857.28,24144.7,25445.0,26758.29,28084.73]},"Cash and bank":{"y2025":[87720.43,94424.12,78075.08,102291.17,90355.09,119778.5,130976.83,153306.63,143926.14,161927.14,184069.78,130016.24],"y2026":[99690.68,114031.12,205735.78,202909.17,167125.62,199599.49,192654.9,215512.18,239656.88,265101.87,291860.17,319944.89]},"Total current assets":{"y2025":[87720.43,94424.12,78075.08,102291.17,90355.09,119778.5,130976.83,153306.63,143926.14,161927.14,184069.78,130016.24],"y2026":[99690.68,114031.12,205735.78,202909.17,167125.62,199599.49,192654.9,215512.18,239656.88,265101.87,291860.17,319944.89]},"Fixed assets (net)":{"y2025":[900.48,900.48,900.48,900.48,900.48,900.48,900.48,900.48,900.48,900.48,900.48,900.48],"y2026":[0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0]},"Total assets":{"y2025":[88620.91,95324.6,78975.56,103191.65,91255.57,120678.98,131877.31,154207.11,144826.62,162827.62,184970.26,130916.72],"y2026":[99690.68,114031.12,205735.78,202909.17,167125.62,199599.49,192654.9,215512.18,239656.88,265101.87,291860.17,319944.89]},"Credit cards":{"y2025":[6946.88,5289.4,6602.44,8041.47,9998.43,7562.57,6122.55,6972.35,5412.18,5609.43,7769.81,11690.64],"y2026":[10737.02,7869.22,7955.68,11333.4,10442.61,9985.76,8392.96,8392.96,8392.96,8392.96,8392.96,8392.96]},"Total current liabilities":{"y2025":[6946.88,5289.4,6602.44,8041.47,9998.43,7562.57,6122.55,6972.35,5412.18,5609.43,7769.81,11690.64],"y2026":[10737.02,7869.22,7955.68,11333.4,10442.61,9985.76,8392.96,8392.96,8392.96,8392.96,8392.96,8392.96]},"Total liabilities":{"y2025":[6946.88,5289.4,6602.44,8041.47,9998.43,7562.57,6122.55,6972.35,5412.18,5609.43,7769.81,11690.64],"y2026":[10737.02,7869.22,7955.68,11333.4,10442.61,9985.76,8392.96,8392.96,8392.96,8392.96,8392.96,8392.96]},"Personal Expense (owner draws)":{"y2025":[13245.51,14728.7,14733.72,14201.76,13031.78,-416.38,-6394.09,-8664.13,-21239.83,-32685.93,-33837.66,-42187.34],"y2026":[-2150.0,-4150.0,-5619.4,-7318.3,-7797.27,-8698.7,-8794.7,-8794.7,-8794.7,-8794.7,-8794.7,-8794.7]},"Total equity":{"y2025":[81674.03,90035.2,72373.12,95150.18,81257.14,113116.41,125754.76,147234.76,139414.44,157218.19,177200.45,119226.08],"y2026":[88953.66,106161.9,197780.1,191575.77,156683.01,189613.73,184261.94,207119.22,231263.92,256708.91,283467.21,311551.93]}},"expenseLines":[{"row":37,"label":"Payroll - Wages & Taxes","y2025":[39610.44,46796.79,48839.25,52697.82,49764.99,47983.22,43096.09,54184.33,49155.96,53386.46,63674.96,54967.62],"y2026":[75153.9,73920.83,73427.58,89753.28,94928.55,86902.63,85407.89,95528.09,95528.09,95528.09,95528.09,95528.09]},{"row":38,"label":"Payroll - Benefits, 401k & Workers' Comp","y2025":[1677.66,1239.81,1459.29,1823.01,1336.36,1172.49,4834.25,1678.81,1460.77,1716.92,1158.08,2813.03],"y2026":[2704.72,4190.14,3876.37,3343.54,8900.25,4138.95,3358.55,5267.13,5267.13,5267.13,5267.13,5267.13]},{"row":39,"label":"Payroll - Processing Fees","y2025":[184.0,202.0,202.0,223.0,235.0,223.0,247.0,265.0,259.0,259.0,241.0,235.0],"y2026":[259.0,283.0,314.0,277.0,307.0,424.66,315.9,363.97,363.97,363.97,363.97,363.97]},{"row":40,"label":"Contract Labor","y2025":[2960.02,612.45,2159.59,1086.03,3013.68,5148.38,4124.07,3317.6,3470.5,4946.09,2746.81,5143.06],"y2026":[4247.02,4047.69,7143.61,2533.87,5842.33,6520.55,7728.96,6405.34,6405.34,6405.34,6405.34,6405.34]},{"row":41,"label":"Reimbursement Expense","y2025":[3622.66,4984.23,5579.75,4966.28,6826.07,5958.52,5353.46,5629.27,4673.12,6799.23,6488.18,5492.55],"y2026":[0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0]},{"row":42,"label":"Advertising & Marketing","y2025":[323.0,323.0,172.17,221.98,350.79,749.48,323.0,323.0,1966.54,1358.0,323.0,2688.15],"y2026":[0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0]},{"row":43,"label":"Automobile & Fuel","y2025":[205.38,206.12,179.6,637.3,240.76,205.44,253.77,287.79,747.18,226.08,11115.33,106.59],"y2026":[515.18,174.96,814.61,508.71,450.75,571.57,299.21,469.97,469.97,469.97,469.97,469.97]},{"row":44,"label":"Computer & Software","y2025":[355.0,359.2,385.0,2454.59,2629.59,144.5,444.5,172.26,144.5,438.5,144.5,144.5],"y2026":[2360.42,1883.94,1780.69,5516.91,7094.98,2244.12,6307.67,4138.05,4138.05,4138.05,4138.05,4138.05]},{"row":45,"label":"Dues, Subscriptions & Memberships","y2025":[1203.17,511.77,1899.75,1434.72,1604.64,1562.4,2182.43,1462.44,1487.43,1149.91,1199.89,1022.4],"y2026":[16.56,79.25,97.51,335.75,39.53,39.53,1293.35,314.15,314.15,314.15,314.15,314.15]},{"row":46,"label":"Legal & Professional","y2025":[1000.0,1200.0,1300.0,1300.0,1300.0,800.0,1550.0,1800.0,2800.0,2550.0,1050.0,1800.0],"y2026":[300.0,300.0,300.0,1421.25,300.0,2399.0,1200.0,986.71,986.71,986.71,986.71,986.71]},{"row":47,"label":"Insurance","y2025":[283.23,311.15,299.33,299.32,299.32,299.32,299.32,403.61,295.98,51.74,51.71,3036.94],"y2026":[350.0,0.0,700.0,350.0,350.0,350.0,350.0,350.0,350.0,350.0,350.0,350.0]},{"row":48,"label":"Office Expense & Supplies","y2025":[905.43,2322.36,617.96,4026.46,2681.64,3331.1,1010.03,2298.3,3906.2,4743.95,3521.16,4300.13],"y2026":[2544.04,493.07,952.83,3631.23,2565.21,403.34,2494.91,1756.77,1756.77,1756.77,1756.77,1756.77]},{"row":49,"label":"Meals & Entertainment","y2025":[734.75,1030.3,1460.98,1001.99,2083.78,1326.51,2171.17,1137.08,3297.97,2782.14,1348.18,2300.22],"y2026":[2979.29,5755.7,3005.62,3156.54,2710.44,2340.02,2993.76,3327.01,3327.01,3327.01,3327.01,3327.01]},{"row":50,"label":"Travel","y2025":[0.0,209.28,0.0,204.0,0.0,0.0,258.86,78.89,58.12,124.0,0.0,683.28],"y2026":[0.0,0.0,773.72,0.0,0.0,0.0,0.0,128.95,128.95,128.95,128.95,128.95]},{"row":51,"label":"Charitable Contributions","y2025":[1170.0,115.0,80.0,80.0,80.0,80.0,80.0,80.0,1480.0,80.0,80.0,15908.0],"y2026":[211.07,119.99,168.99,2531.98,1119.99,2119.99,119.99,1030.15,1030.15,1030.15,1030.15,1030.15]},{"row":52,"label":"Continuing Education","y2025":[0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,800.0,87.27,0.0,1670.0],"y2026":[0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0]},{"row":53,"label":"Janitorial, Repairs & Maintenance","y2025":[480.0,110.0,400.0,300.0,0.0,0.0,200.0,0.0,325.0,125.0,575.0,625.0],"y2026":[0.0,0.0,0.0,239.88,239.09,0.0,0.0,79.83,79.83,79.83,79.83,79.83]},{"row":54,"label":"Utilities & Telecom","y2025":[28.15,92.04,28.15,28.15,93.54,191.21,88.16,28.25,88.16,273.18,28.3,255.68],"y2026":[28.27,186.29,128.43,359.96,200.69,267.96,336.93,246.71,246.71,246.71,246.71,246.71]},{"row":55,"label":"Shipping & Postage","y2025":[57.05,32.89,13.39,0.0,0.0,18.75,0.0,42.52,38.63,32.49,0.0,68.56],"y2026":[31.53,0.0,53.52,0.0,56.87,67.27,0.0,29.61,29.61,29.61,29.61,29.61]},{"row":56,"label":"Taxes, Licenses & Bank Fees","y2025":[0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,2.35,101.0,0.0],"y2026":[2065.79,0.0,0.0,0.0,0.0,39.0,0.0,6.5,6.5,6.5,6.5,6.5]},{"row":57,"label":"Business Gifts","y2025":[0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,1000.0,0.0,200.0],"y2026":[0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0]},{"row":58,"label":"Interest Expense","y2025":[0.0,0.0,14.07,16.05,21.46,26.37,0.0,0.0,2.33,0.0,0.0,0.0],"y2026":[0.0,0.0,29.03,25.04,0.0,54.64,12.24,20.16,20.16,20.16,20.16,20.16]},{"row":59,"label":"Other / Uncategorized","y2025":[0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0],"y2026":[2000.0,0.0,0.0,0.0,0.0,0.0,40000.0,6666.67,6666.67,6666.67,6666.67,6666.67]}],"incomeLines":[{"row":33,"label":"Fee for Service Income","y2025":[32883.99,67433.47,47366.22,95999.32,59632.0,114525.12,85026.22,96853.32,81040.82,111305.09,114943.13,54450.16],"y2026":[70487.76,111361.38,160419.32,110252.81,91472.78,143584.95,147713.95,150761.85,152049.27,153349.57,154662.86,155989.3]}]};
+
+const MONTHS = DATA.months;
+const K = DATA.key;
+
+// ── Formulas, mirroring the workbook ─────────────────────────────────────────
+// The workbook keeps a month index in 'Working Sheet'!C1 and everything reads
+// from it. `m` here is that index, zero-based.
+
+// Income for a month. 'Working Sheet' C5:N5 zeroes months after the selected
+// one, so a part-closed year doesn't draw a cliff down to December.
+const income26 = m => K["TOTAL INCOME"].y2026[m];
+const income25 = m => K["TOTAL INCOME"].y2025[m];
+
+// Expense = operating + other. Two rows in the sheet, added everywhere they meet.
+const expense26 = m => K["Total Operating Expenses"].y2026[m] + K["Total Other Expenses"].y2026[m];
+const expense25 = m => K["Total Operating Expenses"].y2025[m] + K["Total Other Expenses"].y2025[m];
+
+// Payroll cost = the four payroll rows (wages, benefits, processing, contract).
+const PAYROLL_ROWS = [37, 38, 39, 40];
+const payroll = m => DATA.expenseLines
+  .filter(l => PAYROLL_ROWS.includes(l.row))
+  .reduce((s, l) => s + l.y2026[m], 0);
+
+const sumTo = (arr, m) => arr.slice(0, m + 1).reduce((a, b) => a + b, 0);
+
+// Prior month wraps to December of the previous year when January is selected.
+const priorIncome  = m => m === 0 ? income25(11)  : income26(m - 1);
+const priorExpense = m => m === 0 ? expense25(11) : expense26(m - 1);
+const priorLabel   = m => m === 0 ? "Dec 2025" : MONTHS[m - 1] + " 2026";
+const lyLabel      = m => MONTHS[m] + " 2025";
+
+// ── Formatting ───────────────────────────────────────────────────────────────
+const money = n => (n < 0 ? "-$" : "$") + Math.abs(Math.round(n)).toLocaleString();
+const kfmt  = n => (n < 0 ? "-$" : "$") + Math.round(Math.abs(n) / 1000).toLocaleString() + "K";
+const pct   = n => (n * 100).toFixed(1) + "%";
+const signed = n => (n >= 0 ? "" : "-") + "$" + Math.abs(Math.round(n)).toLocaleString();
+const cls = n => n >= 0 ? "pos" : "neg";
+const safeDiv = (a, b) => b ? a / b : 0;   // every ratio in the sheet is IFERROR(…,0)
+
+// ── Driver analysis — feeds the commentary ───────────────────────────────────
+// The sheet compares each expense line against the prior month and names the
+// biggest mover in either direction.
+function drivers(m) {
+  const prev = i => m === 0 ? null : i;
+  const lines = DATA.expenseLines.map(l => ({
+    label: l.label,
+    change: l.y2026[m] - (m === 0 ? l.y2025[11] : l.y2026[m - 1]),
+  }));
+  const inc = DATA.incomeLines.map(l => ({
+    label: l.label,
+    change: l.y2026[m] - (m === 0 ? l.y2025[11] : l.y2026[m - 1]),
+  }));
+  const max = a => a.reduce((x, y) => y.change > x.change ? y : x, a[0]);
+  const min = a => a.reduce((x, y) => y.change < x.change ? y : x, a[0]);
+  return { incUp: max(inc), incDown: min(inc), expUp: max(lines), expDown: min(lines) };
+}
+
+// ── Charts — inline SVG, no libraries ────────────────────────────────────────
+function chart(el, cur, prior, trend, curColor) {
+  const W = 640, H = 260, padL = 44, padR = 12, padT = 16, padB = 30;
+  const iw = W - padL - padR, ih = H - padT - padB;
+  const max = Math.max(...cur, ...prior, ...trend, 1);
+  const y = v => padT + ih - (v / max) * ih;
+  const slot = iw / 12, bw = Math.min(14, slot / 3);
+
+  let g = "";
+  // gridlines
+  for (let i = 0; i <= 4; i++) {
+    const gy = padT + (ih / 4) * i, val = max * (1 - i / 4);
+    g += `<line x1="${padL}" y1="${gy}" x2="${W - padR}" y2="${gy}" stroke="#F2EDE3"/>`;
+    g += `<text x="${padL - 6}" y="${gy + 3}" text-anchor="end" font-size="9" fill="#A8998A">${Math.round(val / 1000)}K</text>`;
+  }
+  MONTHS.forEach((mo, i) => {
+    const cx = padL + slot * i + slot / 2;
+    const c = cur[i], p = prior[i];
+    if (c > 0) {
+      g += `<rect x="${cx - bw - 1}" y="${y(c)}" width="${bw}" height="${padT + ih - y(c)}" fill="${curColor}" rx="1"/>`;
+      g += `<text x="${cx - bw / 2 - 1}" y="${y(c) - 4}" text-anchor="middle" font-size="8" fill="#6B5E52">${Math.round(c / 1000)}K</text>`;
+    }
+    if (p > 0) {
+      g += `<rect x="${cx + 1}" y="${y(p)}" width="${bw}" height="${padT + ih - y(p)}" fill="#C9BCA8" rx="1"/>`;
+    }
+    g += `<text x="${cx}" y="${H - 10}" text-anchor="middle" font-size="10" fill="#6B5E52">${mo}</text>`;
+  });
+  // trend line — only across months that have data
+  const pts = trend.map((v, i) => v > 0 ? `${padL + slot * i + slot / 2},${y(v)}` : null).filter(Boolean);
+  if (pts.length > 1) g += `<polyline points="${pts.join(" ")}" fill="none" stroke="#8C8073" stroke-width="1.6"/>`;
+
+  el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img">${g}</svg>`;
+}
+
+// ── Render ───────────────────────────────────────────────────────────────────
+function render(m) {
+  const inc = income26(m), exp = expense26(m), net = inc - exp;
+
+  // KPI row — Dashboard C7 / Q7 / AE7 / AS7
+  kInc.textContent = money(inc);
+  kExp.textContent = money(exp);
+  kNet.textContent = money(net);       kNet.className = "val " + cls(net);
+  kPct.textContent = pct(safeDiv(net, inc)); kPct.className = "val " + cls(net);
+
+  // Charts. Income trend is a 3-month average; the expense trend is the sheet's
+  // own scaled line, kept as-is so the shape matches the workbook.
+  const inc26 = MONTHS.map((_, i) => i <= m ? income26(i) : 0);
+  const exp26 = MONTHS.map((_, i) => i <= m ? expense26(i) : 0);
+  const inc25 = MONTHS.map((_, i) => income25(i));
+  const exp25 = MONTHS.map((_, i) => expense25(i));
+  const incTrend = MONTHS.map((_, i) => {
+    if (i > m) return 0;
+    if (i < 2) return inc26[i];
+    return (inc26[i] + inc26[i - 1] + inc26[i - 2]) / 3;
+  });
+  const expTrend = exp26.map(v => v * 1.4);
+  chart(chartInc, inc26, inc25, incTrend, "#E8B923");
+  chart(chartExp, exp26, exp25, expTrend, "#4C6FBF");
+
+  // Analysis tables — Dashboard rows 29-32
+  const label = MONTHS[m] + " 2026";
+  incAnalysisTitle.textContent = "Income Analysis – " + label;
+  expAnalysisTitle.textContent = "Expense Analysis – " + label;
+
+  const ytd26i = sumTo(MONTHS.map((_, i) => income26(i)), m);
+  const ytd25i = sumTo(MONTHS.map((_, i) => income25(i)), m);
+  const ytd26e = sumTo(MONTHS.map((_, i) => expense26(i)), m);
+  const ytd25e = sumTo(MONTHS.map((_, i) => expense25(i)), m);
+
+  const analysis = (actual, prior, ly, ytdC, ytdP) => [
+    ["Month Actual (" + label + ")", actual, null, null],
+    ["vs Prior Month (" + priorLabel(m) + ")", prior, actual - prior, safeDiv(actual - prior, prior)],
+    ["vs Same Month LY (" + lyLabel(m) + ")", ly, actual - ly, safeDiv(actual - ly, ly)],
+    ["YTD 2026 (Jan-" + MONTHS[m] + ") vs same period 2025", ytdC, ytdC - ytdP, safeDiv(ytdC - ytdP, ytdP)],
+  ];
+
+  const drawTable = (el, rows) => {
+    el.innerHTML =
+      `<tr><th>Metric</th><th class="num">Amount</th><th class="num">$ Variance</th><th class="num">% Variance</th></tr>` +
+      rows.map((r, i) => `<tr class="${i === 0 ? "strong" : ""}">
+        <td>${r[0]}</td><td class="num">${money(r[1])}</td>
+        <td class="num ${r[2] === null ? "" : cls(r[2])}">${r[2] === null ? "–" : signed(r[2])}</td>
+        <td class="num ${r[3] === null ? "" : cls(r[3])}">${r[3] === null ? "–" : pct(r[3])}</td></tr>`).join("");
+  };
+  drawTable(tblInc, analysis(inc, priorIncome(m), income25(m), ytd26i, ytd25i));
+  drawTable(tblExp, analysis(exp, priorExpense(m), expense25(m), ytd26e, ytd25e));
+
+  // Commentary — Dashboard C34 / AE34, rebuilt sentence for sentence
+  const d = drivers(m);
+  const dInc = inc - priorIncome(m), dExp = exp - priorExpense(m);
+  const lyInc = inc - income25(m), lyExp = exp - expense25(m);
+
+  if (inc === 0) {
+    cmtInc.textContent = `No income has been posted for ${label} yet — select a closed month to see commentary.`;
+  } else {
+    const up = dInc >= 0;
+    const driver = up ? d.incUp : d.incDown;
+    let s = `Income closed at ${kfmt(inc)} for ${label}, ${up ? "higher" : "lower"} by ` +
+            `${pct(Math.abs(safeDiv(dInc, priorIncome(m))))} (${money(Math.abs(dInc))}) vs ${priorLabel(m)}, ` +
+            `mainly due to ${up ? "higher" : "lower"} ${driver.label} (${money(Math.abs(driver.change))}).`;
+    s += ` Against ${lyLabel(m)}, income is ${lyInc >= 0 ? "up" : "down"} ` +
+         `${pct(Math.abs(safeDiv(lyInc, income25(m))))}, while YTD 2026 of ${kfmt(ytd26i)} is ` +
+         `${pct(Math.abs(safeDiv(ytd26i - ytd25i, ytd25i)))} ${ytd26i >= ytd25i ? "ahead of" : "behind"} the same period in 2025.`;
+    cmtInc.textContent = s;
+  }
+
+  if (exp === 0) {
+    cmtExp.textContent = `No expenses have been posted for ${label} yet — select a closed month to see commentary.`;
+  } else {
+    const up = dExp >= 0;
+    const driver = up ? d.expUp : d.expDown;
+    const offset = up ? d.expDown : d.expUp;
+    let s = `Expenses closed at ${kfmt(exp)} for ${label}, ${up ? "higher" : "lower"} by ` +
+            `${pct(Math.abs(safeDiv(dExp, priorExpense(m))))} (${money(Math.abs(dExp))}) vs ${priorLabel(m)}, ` +
+            `mainly due to ${up ? "higher" : "lower"} ${driver.label} (${money(Math.abs(driver.change))})`;
+    // The sheet only names an offsetting line when it actually moved the other way.
+    if (up && offset.change < 0)  s += `, partially offset by lower ${offset.label} (${money(Math.abs(offset.change))})`;
+    if (!up && offset.change > 0) s += `, partially offset by higher ${offset.label} (${money(offset.change)})`;
+    s += `. Against ${lyLabel(m)}, spend is ${lyExp >= 0 ? "up" : "down"} ` +
+         `${pct(Math.abs(safeDiv(lyExp, expense25(m))))}, and YTD 2026 spend of ${kfmt(ytd26e)} is ` +
+         `${pct(Math.abs(safeDiv(ytd26e - ytd25e, ytd25e)))} ${ytd26e >= ytd25e ? "above" : "below"} 2025` +
+         `, leaving ${net >= 0 ? "net income" : "a net loss"} for the month of ${kfmt(Math.abs(net))}.`;
+    cmtExp.textContent = s;
+  }
+
+  // ── Balance sheet cards — Dashboard rows 44-47 ──
+  const at = (name, i) => K[name].y2026[i];
+  const prevIdx = m === 0 ? null : m - 1;
+  const prevOf = name => prevIdx === null ? K[name].y2025[11] : K[name].y2026[prevIdx];
+
+  const cash = at("Cash and bank", m), cards = at("Credit cards", m);
+  const equity = at("Total equity", m), pay = payroll(m);
+  const curAssets = at("Total current assets", m), curLiab = at("Total current liabilities", m);
+  const draws = -at("Personal Expense (owner draws)", m);
+  const daysPayroll = safeDiv(cash, pay / 30);
+
+  bsCards.innerHTML = [
+    ["Cash & Bank", money(cash), "",
+      `Prior month ${money(prevOf("Cash and bank"))} (${pct(safeDiv(cash, prevOf("Cash and bank")) - 1)})`,
+      `Covers about ${daysPayroll.toFixed(1)} days of payroll. ` +
+      (cash < pay / 2 ? "That is under half a month — fund payroll and payroll taxes before any other spend."
+                      : "Hold at least 15 days of payroll as a floor.")],
+    ["Credit Cards", money(cards), "",
+      `Prior month ${money(prevOf("Credit cards"))}`,
+      `Card balances are ${pct(safeDiv(cards, cash))} of cash on hand. ` +
+      (safeDiv(cards, cash) > 0.25 ? "Pay down monthly to avoid interest."
+                                   : "Comfortably covered — keep clearing the balance in full each month.")],
+    ["Total Equity", money(equity), "",
+      `Prior month ${money(prevOf("Total equity"))}`,
+      `Book equity after owner draws of ${money(draws)} YTD. ` +
+      (equity > 0 ? "Positive and building." : "Negative — retained losses exceed contributed capital.")],
+    ["Payroll Cost (Month)", money(pay), "",
+      `Revenue ${money(inc)}   |   Target 50%`,
+      `Payroll, benefits and contract labour are ${pct(safeDiv(pay, inc))} of this month's revenue. ` +
+      (safeDiv(pay, inc) > 0.6 ? "Well above the 50% goal — the main margin lever." : "At or near the 50% goal.")],
+  ].map(c => `<div class="kpi"><h3>${c[0]}</h3><div class="val">${c[1]}</div>
+      <div class="sub">${c[3]}</div><div class="note">${c[4]}</div></div>`).join("");
+
+  // ── Ratio cards — Dashboard rows 54-57 ──
+  const ratio = safeDiv(curAssets, curLiab);
+  const payPct = safeDiv(pay, inc);
+  const wc = curAssets - curLiab;
+  const prevCA = prevIdx === null ? K["Total current assets"].y2025[11] : K["Total current assets"].y2026[prevIdx];
+  const prevCL = prevIdx === null ? K["Total current liabilities"].y2025[11] : K["Total current liabilities"].y2026[prevIdx];
+
+  ratioCards.innerHTML = [
+    ["Current Ratio", ratio.toFixed(2) + "x",
+      `Prior month ${safeDiv(prevCA, prevCL).toFixed(2)}x   |   Target 1.20x`,
+      "Current assets divided by current liabilities — can the company pay what falls due within a year? " +
+      (ratio < 1 ? "Below 1.00x it cannot, and lenders or bonding agents decline at this level."
+                 : "At or above 1.00x — keep building toward 1.20x.")],
+    ["Payroll % of Revenue", pct(payPct),
+      `Target 50.0%`,
+      "Payroll, benefits and contract labour as a share of revenue — the single biggest margin lever for a clinician-led practice."],
+    ["Working Capital", money(wc),
+      `Prior mo. ${money(prevCA - prevCL)}  |  Target: 1 mo payroll`,
+      "Current assets less current liabilities — the cash cushion for running the business. " +
+      (wc < 0 ? "Negative, which means payroll taxes and loans are financing operations, so growth has to come from margin rather than cash."
+              : "Positive — hold at least one month of payroll here.")],
+    ["Days of Payroll Covered", daysPayroll.toFixed(1),
+      `Monthly payroll ${money(pay)}   |   Target 15 days`,
+      "How long the bank balance would cover payroll at this month's payroll cost."],
+  ].map(c => `<div class="kpi"><h3>${c[0]}</h3><div class="val">${c[1]}</div>
+      <div class="sub">${c[2]}</div><div class="note">${c[3]}</div></div>`).join("");
+}
+
+// ── Recommendations — static in the workbook, static here ─────────────────────
+const RECS = [
+  { n: 1, action: "Split clinician wages into direct service delivery and admin",
+    why: "Gross Profit currently equals revenue because no cost of revenue is classified, so true service margin is invisible. Without it you cannot tell whether a full schedule is actually profitable, or price sessions and payer contracts with confidence.",
+    metric: "Service margin % / Direct labour ratio", prio: "CRITICAL" },
+  { n: 2, action: "Clinician-level P&L (billable hours, utilisation, direct pay, margin)",
+    why: "Growth only helps if each clinician is profitable. Clinician-level margin shows whose caseload to rebuild, whose rate to revisit, and where spare session capacity actually sits before hiring again.",
+    metric: "Margin % per clinician / Utilisation", prio: "CRITICAL" },
+  { n: 3, action: "Bill rate vs pay rate spread and unbilled-hour tracking",
+    why: "The spread between the billed rate and clinician pay per session hour, plus no-shows, late cancellations and the roughly 92 unbilled clinician hours per week, is where the payroll-to-revenue ratio is decided.",
+    metric: "Spread $/hr / Unbilled hours recovered", prio: "CRITICAL" },
+];
+tblRec.innerHTML =
+  `<tr><th style="width:34px"></th><th>Action Items</th><th>Why It Matters</th>
+       <th style="width:190px">Metric to Watch</th><th style="width:120px">Priority Level</th></tr>` +
+  RECS.map(r => `<tr><td class="num" style="font-weight:800;color:#B5905B">${r.n}</td>
+    <td style="font-weight:700">${r.action}</td><td style="color:#6B5E52">${r.why}</td>
+    <td>${r.metric}</td><td><span class="prio ${r.prio}">${r.prio}</span></td></tr>`).join("");
+
+// ── Month selector ───────────────────────────────────────────────────────────
+// Only months that have been closed are offered; picking an open one would
+// draw a dashboard of zeroes.
+const closed = MONTHS.map((_, i) => income26(i) > 0 || expense26(i) > 0);
+month.innerHTML = MONTHS.map((mo, i) =>
+  `<option value="${i}"${closed[i] ? "" : " disabled"}>${mo} 2026${closed[i] ? "" : " —"}</option>`).join("");
+const lastClosed = closed.lastIndexOf(true);
+month.value = lastClosed < 0 ? 0 : lastClosed;
+month.addEventListener("change", e => render(+e.target.value));
+render(+month.value);
+</script>
+</body>
+</html>
