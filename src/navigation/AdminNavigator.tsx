@@ -21,14 +21,14 @@ import { StaffManagementScreen } from '../screens/admin/StaffManagementScreen';
 import { ProfileScreen } from '../screens/main/ProfileScreen';
 import { WorkflowDashboardScreen } from '../screens/admin/WorkflowDashboardScreen';
 import { UEDashboardScreen } from '../screens/admin/UEDashboardScreen';
+import { FinancialReportsScreen } from '../screens/admin/FinancialReportsScreen';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-// 'Reports' was Clyde's own report generator (public/financial-report.html).
-// Camaree asked for the portal to be unlinked from it, so the tab is gone. The
-// page and its screen are still in the repo — put the nav entry and the case
-// below back to restore it.
-type AdminTab = 'Dashboard' | 'Documents' | 'Clients' | 'Staff' | 'Workflow' | 'Profile';
+// 'Reports' used to open Clyde's own report generator (public/financial-report.html).
+// It now opens our own client dashboards instead; the old page and its
+// ReportsScreen are still in the repo, unreferenced.
+type AdminTab = 'Dashboard' | 'Documents' | 'Clients' | 'Staff' | 'Workflow' | 'Reports' | 'Profile';
 
 interface NavItem {
   name: AdminTab;
@@ -46,6 +46,7 @@ const NAV_ITEMS: NavItem[] = [
   { name: 'Clients',   label: 'Clients',   active: 'people',        inactive: 'people-outline' },
   { name: 'Staff',     label: 'Staff',     active: 'shield',        inactive: 'shield-outline', adminOnly: true },
   { name: 'Workflow',  label: 'Workflow',  active: 'git-branch',    inactive: 'git-branch-outline' },
+  { name: 'Reports',   label: 'Financial Reports', active: 'analytics', inactive: 'analytics-outline' },
   { name: 'Profile',   label: 'Profile',   active: 'person',        inactive: 'person-outline' },
 ];
 
@@ -106,6 +107,7 @@ export function AdminNavigator({ onLogout }: { onLogout: () => void }) {
       case 'Clients':   return <ClientListScreen onSelectClient={c => { setSelectedClient(c); setShowDashboard(false); }} />;
       case 'Staff':     return <StaffManagementScreen />;
       case 'Workflow':  return <WorkflowDashboardScreen />;
+      case 'Reports':   return <FinancialReportsScreen onBack={() => handleTabPress('Dashboard')} />;
       case 'Profile':   return <ProfileScreen onLogout={onLogout} />;
     }
   };
