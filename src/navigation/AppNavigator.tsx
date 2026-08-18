@@ -16,6 +16,7 @@ import { DocumentsScreen } from '../screens/main/DocumentsScreen';
 import { NotificationsScreen } from '../screens/main/NotificationsScreen';
 import { ProfileScreen } from '../screens/main/ProfileScreen';
 import { UEDashboardScreen } from '../screens/admin/UEDashboardScreen';
+import { dashboardForClient } from '../lib/clientDashboards';
 import { AdminNavigator } from './AdminNavigator';
 import { getUnreadCount } from '../db/notifications';
 import { ClientUploadModal } from '../components/ClientUploadModal';
@@ -54,6 +55,10 @@ function WebLayout({ onLogout }: { onLogout: () => void }) {
   const [uploadOpen, setUploadOpen] = useState(false);
   // Opened from the client's own profile, and closed by the screen's back button.
   const [showDashboard, setShowDashboard] = useState(false);
+  // Checked here as well as in the profile that offers it. Hiding the way in is
+  // not the same as refusing to render: this screen holds one client's books, so
+  // whether it draws at all is decided from who is signed in, not from state.
+  const myDashboard = dashboardForClient(user);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -84,7 +89,7 @@ function WebLayout({ onLogout }: { onLogout: () => void }) {
       case 'Notifications': return <NotificationsScreen />;
       case 'Profile':
         // The client's own report — without the internal working tabs.
-        if (showDashboard) {
+        if (showDashboard && myDashboard) {
           return <UEDashboardScreen onBack={() => setShowDashboard(false)} backLabel="Back to Profile" />;
         }
         return <ProfileScreen onLogout={onLogout} onOpenDashboard={() => setShowDashboard(true)} />;
