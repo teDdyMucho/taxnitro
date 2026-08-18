@@ -41,7 +41,9 @@
                     background:var(--gold);border-radius:2px}
 
   /* ── Page ── */
-  .main{flex:1;min-width:0;padding:0 0 70px;max-width:1500px}
+  /* No width cap: the statement tables run 18 months wide and want every pixel.
+     Prose keeps its own ch-based limit so lines stay readable on a big screen. */
+  .main{flex:1;min-width:0;padding:0 0 70px}
   .page{display:none} .page.on{display:block}
   .pad{padding:0 24px}
 
