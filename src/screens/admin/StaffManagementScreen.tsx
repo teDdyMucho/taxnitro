@@ -24,6 +24,7 @@ import {
   Profile, UserRole,
 } from '../../db/profiles';
 import { supabase } from '../../lib/supabase';
+import { invitePendingStaff, listPendingStaff, cancelPendingStaff, PendingStaff } from '../../db/pendingStaff';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -87,16 +88,20 @@ function AddStaffModal({
   visible,
   onClose,
   onSuccess,
+  currentUserEmail,
 }: {
   visible: boolean;
   onClose: () => void;
   onSuccess: () => void;
+  /** Recorded on the invite, so the list can say who sent it. */
+  currentUserEmail?: string | null;
 }) {
   const sheet = useSheetStyles('md');
   const [email, setEmail]           = useState('');
   const [role, setRole]             = useState<'admin' | 'staff'>('staff');
   const [loading, setLoading]       = useState(false);
-  const [result, setResult]         = useState<'success' | 'notfound' | null>(null);
+  // 'notfound' is not a dead end — it is the moment to offer an invite instead.
+  const [result, setResult]         = useState<'success' | 'notfound' | 'invited' | null>(null);
   const [assignedEmail, setAssignedEmail] = useState('');
   const [suggestions, setSuggestions]     = useState<{ email: string; full_name: string }[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
@@ -154,6 +159,18 @@ function AddStaffModal({
     }
   };
 
+  // No account yet — hold the role for them instead of asking them to register
+  // first and be chased afterwards. The signup trigger applies it when they join.
+  const handleInvite = async () => {
+    if (!email.trim()) return;
+    setLoading(true);
+    const row = await invitePendingStaff(email, role, currentUserEmail ?? null);
+    setLoading(false);
+    if (!row) return;                       // the db module already logged why
+    setAssignedEmail(email.trim());
+    setResult('invited');
+  };
+
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={handleClose}>
       <Pressable style={[im.overlay, sheet.overlay]} onPress={handleClose}>
@@ -162,7 +179,7 @@ function AddStaffModal({
           {/* Handle bar */}
           <View style={im.handle} />
 
-          {result === 'success' ? (
+          {result === 'success' || result === 'invited' ? (
             /* ── Success state ── */
             <View style={im.successContainer}>
               <LinearGradient
@@ -170,15 +187,21 @@ function AddStaffModal({
                 style={im.successIcon}
                 start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
               >
-                <Ionicons name="shield-checkmark" size={30} color="#FFFFFF" />
+                <Ionicons
+                  name={result === 'invited' ? 'mail-outline' : 'shield-checkmark'}
+                  size={30} color="#FFFFFF"
+                />
               </LinearGradient>
-              <Text style={im.successTitle}>Role Assigned!</Text>
+              <Text style={im.successTitle}>
+                {result === 'invited' ? 'Invite Sent!' : 'Role Assigned!'}
+              </Text>
               <Text style={im.successSub}>
                 <Text style={{ fontWeight: '800', color: '#111827' }}>{assignedEmail}</Text>
-                {' '}is now a{' '}
+                {result === 'invited' ? ' becomes a ' : ' is now a '}
                 <Text style={{ fontWeight: '800', color: ROLE_CONFIG[role].pillText }}>
                   {ROLE_CONFIG[role].label}
-                </Text>.
+                </Text>
+                {result === 'invited' ? ' as soon as they sign up.' : '.'}
               </Text>
               <TouchableOpacity style={im.primaryBtn} onPress={handleDone} activeOpacity={0.85}>
                 <Ionicons name="checkmark-circle" size={17} color="#FFFFFF" />
@@ -254,9 +277,12 @@ function AddStaffModal({
                 )}
 
                 {result === 'notfound' && (
-                  <View style={im.errorBox}>
-                    <Ionicons name="alert-circle-outline" size={14} color="#DC2626" />
-                    <Text style={im.errorText}>No account found with that email.</Text>
+                  <View style={im.inviteBox}>
+                    <Ionicons name="mail-outline" size={14} color="#B5905B" />
+                    <Text style={im.inviteText}>
+                      No account with that email yet. Invite them as {role} and the
+                      role is applied the moment they sign up.
+                    </Text>
                   </View>
                 )}
               </View>
@@ -315,15 +341,20 @@ function AddStaffModal({
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={[im.primaryBtn, { flex: 2 }, !email.trim() && im.primaryBtnDisabled]}
-                  onPress={handleAssign}
+                  onPress={result === 'notfound' ? handleInvite : handleAssign}
                   disabled={loading || !email.trim()}
                   activeOpacity={0.85}
                 >
                   {loading
                     ? <ActivityIndicator color="#FFFFFF" size="small" />
                     : <>
-                        <Ionicons name="person-add-outline" size={16} color="#FFFFFF" />
-                        <Text style={im.primaryBtnText}>Assign Role</Text>
+                        <Ionicons
+                          name={result === 'notfound' ? 'mail-outline' : 'person-add-outline'}
+                          size={16} color="#FFFFFF"
+                        />
+                        <Text style={im.primaryBtnText}>
+                          {result === 'notfound' ? 'Send Invite' : 'Assign Role'}
+                        </Text>
                       </>
                   }
                 </TouchableOpacity>
@@ -408,6 +439,13 @@ const im = StyleSheet.create({
     paddingHorizontal: 12, paddingVertical: 10,
   },
   errorText: { flex: 1, color: '#DC2626', fontSize: 12, lineHeight: 17 },
+  inviteBox: {
+    flexDirection: 'row', alignItems: 'flex-start', gap: 8,
+    backgroundColor: '#FDF8EC', borderRadius: 10,
+    borderWidth: 1, borderColor: '#F0E2C0',
+    paddingHorizontal: 12, paddingVertical: 10,
+  },
+  inviteText: { flex: 1, color: '#6B5E52', fontSize: 12, lineHeight: 17 },
 
   /* Role cards */
   roleRow: { flexDirection: 'row', gap: 10 },
@@ -510,6 +548,14 @@ export function StaffManagementScreen() {
 
   const { isLoading: authLoading, user } = useAuth();
 
+  // Invites are people who do not exist in the staff list yet. Without showing
+  // them, an invite is invisible until the person happens to sign up.
+  const [invites, setInvites] = useState<PendingStaff[]>([]);
+  const [cancelInvite, setCancelInvite] = useState<PendingStaff | null>(null);
+  const loadInvites = useCallback(() => {
+    listPendingStaff().then(rows => { if (mountedRef.current) setInvites(rows); });
+  }, []);
+
   const load = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
     // No setLoading(true) — show existing content immediately
@@ -524,7 +570,7 @@ export function StaffManagementScreen() {
     finally { clearTimeout(safetyTimer); if (mountedRef.current) { setLoading(false); setRefreshing(false); } }
   }, []);
 
-  useEffect(() => { if (!authLoading) load(); }, [authLoading]);
+  useEffect(() => { if (!authLoading) { load(); loadInvites(); } }, [authLoading, loadInvites]);
 
   const confirmRole = async () => {
     if (!roleTarget) return;
@@ -601,6 +647,8 @@ export function StaffManagementScreen() {
   const visibleStaff = staff.filter(m =>
     tab === 'admin' ? m.role === 'admin' : m.role !== 'admin'
   );
+  // An invite belongs on the page for the role it will become.
+  const invitesForTab = invites.filter(i => i.role === tab);
 
   const renderItem = ({ item }: { item: Profile }) => {
     const safeRole = (item.role === 'admin' ? 'admin' : 'staff') as 'admin' | 'staff';
@@ -812,10 +860,41 @@ export function StaffManagementScreen() {
           keyExtractor={i => i.id}
           renderItem={renderItem}
           contentContainerStyle={s.listContent}
+          ListHeaderComponent={
+            invitesForTab.length > 0 ? (
+              <View style={s.inviteCard}>
+                <View style={s.inviteHead}>
+                  <Ionicons name="mail-outline" size={15} color="#B5905B" />
+                  <Text style={s.inviteTitle}>
+                    Waiting to sign up · {invitesForTab.length}
+                  </Text>
+                </View>
+                <Text style={s.inviteHint}>
+                  The role is applied the moment they create their account.
+                </Text>
+                {invitesForTab.map(inv => (
+                  <View key={inv.email} style={s.inviteRow}>
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                      <Text style={s.inviteEmail} numberOfLines={1}>{inv.email}</Text>
+                      {inv.invited_by ? (
+                        <Text style={s.inviteBy} numberOfLines={1}>Invited by {inv.invited_by}</Text>
+                      ) : null}
+                    </View>
+                    <TouchableOpacity
+                      onPress={() => setCancelInvite(inv)}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    >
+                      <Text style={s.inviteCancel}>Cancel</Text>
+                    </TouchableOpacity>
+                  </View>
+                ))}
+              </View>
+            ) : null
+          }
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
-              onRefresh={() => load(true)}
+              onRefresh={() => { load(true); loadInvites(); }}
               tintColor="#E8B923"
             />
           }
@@ -860,12 +939,61 @@ export function StaffManagementScreen() {
       <AddStaffModal
         visible={addOpen}
         onClose={() => setAddOpen(false)}
+        currentUserEmail={user?.email}
         onSuccess={() => {
           setAddOpen(false);
           showToast('Staff role assigned successfully');
           load(true);
+          loadInvites();
         }}
       />
+
+      {/* Cancelling an invite — asked before, like every other removal here */}
+      <Modal visible={!!cancelInvite} transparent animationType="fade" onRequestClose={() => setCancelInvite(null)}>
+        <Pressable style={dc.overlay} onPress={() => setCancelInvite(null)}>
+          <Pressable style={dc.box} onPress={() => {}}>
+            <View style={dc.banIcon}>
+              <Ionicons name="mail-unread-outline" size={26} color="#B45309" />
+            </View>
+            <Text style={dc.title}>Cancel this invite?</Text>
+            <Text style={dc.sub} numberOfLines={2}>{cancelInvite?.email}</Text>
+
+            <View style={dc.warnBox}>
+              <Ionicons name="information-circle-outline" size={15} color="#B45309" />
+              <Text style={dc.warnText}>
+                They can still sign up, but as a normal client. Invite them again to
+                put the {cancelInvite?.role ?? 'staff'} role back.
+              </Text>
+            </View>
+
+            <View style={dc.row}>
+              <TouchableOpacity
+                style={dc.cancelBtn}
+                onPress={() => setCancelInvite(null)}
+                activeOpacity={0.75}
+              >
+                <Text style={dc.cancelText}>No, keep it</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={dc.altBtn}
+                onPress={async () => {
+                  const target = cancelInvite;
+                  setCancelInvite(null);
+                  if (!target) return;
+                  if (await cancelPendingStaff(target.email)) {
+                    setInvites(list => list.filter(i => i.email !== target.email));
+                    showToast('Invite cancelled');
+                  }
+                }}
+                activeOpacity={0.85}
+              >
+                <Ionicons name="close-circle-outline" size={15} color="#1C1713" />
+                <Text style={dc.altText}>Yes, cancel it</Text>
+              </TouchableOpacity>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       {/* Deactivate confirmation — reactivating needs none, so this is one-way */}
       <Modal visible={!!deactivateTarget} transparent animationType="fade" onRequestClose={() => !deactivating && setDeactivateTarget(null)}>
@@ -1169,6 +1297,22 @@ const s = StyleSheet.create({
   tabCountTextOn:  { color: '#6B4A1A' },
 
   /* ── List ── */
+  /* Pending invites — people who have no account yet */
+  inviteCard: {
+    backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#F0E2C0',
+    borderRadius: 16, padding: 14, marginBottom: 12, gap: 4,
+  },
+  inviteHead: { flexDirection: 'row', alignItems: 'center', gap: 7 },
+  inviteTitle: { fontSize: 12.5, fontWeight: '800', color: '#1C1713' },
+  inviteHint: { fontSize: 11.5, color: '#A8998A', lineHeight: 16, marginBottom: 4 },
+  inviteRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    borderTopWidth: 1, borderTopColor: '#F2EDE3', paddingTop: 9, marginTop: 5,
+  },
+  inviteEmail: { fontSize: 13, fontWeight: '600', color: '#1C1713' },
+  inviteBy: { fontSize: 10.5, color: '#A8998A', marginTop: 2 },
+  inviteCancel: { fontSize: 12, fontWeight: '700', color: '#DC2626' },
+
   listContent: { paddingHorizontal: 16, paddingTop: 4, paddingBottom: 32 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
 
