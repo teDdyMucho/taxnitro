@@ -189,7 +189,12 @@ html,body{height:100%;overflow:hidden}
      <a class="fm-open" id="dashOpen" href="#" target="_blank" rel="noopener"><svg viewBox="0 0 24 24"><path d="M14 3h7v7"/><path d="M21 3l-9 9"/><path d="M19 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h6"/></svg>Open in new tab</a>
    </div>
    <div class="dash-wrap">
-     <iframe id="dashFrame" class="dash-frame" title="Client financial dashboard"></iframe>
+     <div class="fm-soon" id="dashReady" hidden>
+       <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg>
+       <h3><span id="dashReadyName"></span></h3>
+       <p>Restated statements, the live forecast model and the monthly commentary, with the internal tabs shown.</p>
+       <button type="button" class="fm-open" id="dashGo" onclick="openDashboard()" style="border:none;cursor:pointer;font-family:inherit;margin-top:6px">Open dashboard</button>
+     </div>
      <div class="fm-soon" id="dashEmpty" hidden>
        <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg>
        <h3>No dashboard for <span id="dashEmptyName"></span> yet</h3>
@@ -509,17 +514,27 @@ function renderDashboard(){
 function loadDashboard(){
  var c=document.getElementById('dashClient').value;
  var url=DASHBOARDS[c];
- var frame=document.getElementById('dashFrame'),empty=document.getElementById('dashEmpty'),open=document.getElementById('dashOpen');
+ var ready=document.getElementById('dashReady'),empty=document.getElementById('dashEmpty'),open=document.getElementById('dashOpen');
  if(url){
+   ready.hidden=false;empty.hidden=true;
+   document.getElementById('dashReadyName').textContent=c;
    // ?view=staff — this is the admin side, so the internal tabs stay visible.
-   var src=url+'?view=staff';
-   if(frame.getAttribute('src')!==src)frame.setAttribute('src',src);
-   frame.hidden=false;empty.hidden=true;open.hidden=false;open.href=src;
+   open.hidden=false;open.href=url+'?view=staff';
  }else{
-   frame.hidden=true;frame.removeAttribute('src');
-   empty.hidden=false;open.hidden=true;
+   ready.hidden=true;empty.hidden=false;open.hidden=true;
    document.getElementById('dashEmptyName').textContent=c;
  }
+}
+// Inside the portal the dashboard is a screen of its own, with its own back
+// button — so hand the client over and let the app navigate. Opened straight
+// from a browser there is no app to ask, so go to the standalone page instead.
+function openDashboard(){
+ var c=document.getElementById('dashClient').value,url=DASHBOARDS[c];
+ if(!url)return;
+ var host=(window.parent&&window.parent!==window)?window.parent:(window.opener||null);
+ if(host){try{host.postMessage({type:'ftg-open-dashboard',client:c},'*');return}catch(e){}}
+ if(window.ReactNativeWebView){try{window.ReactNativeWebView.postMessage(JSON.stringify({type:'ftg-open-dashboard',client:c}));return}catch(e){}}
+ location.href=url+'?view=staff';
 }
 function fmCard(c){
  var m=MODELS[c]||{url:'',freq:'monthly'};var url=m.url||'';
