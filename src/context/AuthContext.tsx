@@ -56,16 +56,30 @@ function sessionUser(userId: string, email: string): AuthUser {
 // `select('*')` for the same reason: naming columns explicitly means a column
 // this build doesn't know about yet — or one whose migration hasn't been run —
 // fails the WHOLE query (PostgREST 42703) instead of just being absent.
+//
+// `maybeSingle()` rather than `single()`: an account with no profiles row is a
+// real state — a row deleted while its auth user stayed behind — and single()
+// reports it as "Cannot coerce the result to a single JSON object", which reads
+// like a broken query rather than a missing row. Telling the two apart is the
+// difference between fixing the data and hunting a bug that is not there.
 async function fetchProfile(userId: string, email: string): Promise<AuthUser | null> {
   try {
     const { data, error } = await supabase
       .from('profiles')
       .select('*')
       .eq('id', userId)
-      .single();
+      .maybeSingle();
 
-    if (error || !data) {
-      console.error('fetchProfile:', error?.message ?? 'no profile row for user');
+    if (error) {
+      console.error('fetchProfile: could not read profiles —', error.message);
+      return null;
+    }
+    if (!data) {
+      console.error(
+        `fetchProfile: no profiles row for auth user ${userId} (${email}). ` +
+        'The account exists in Auth but has no profile, so the app is keeping ' +
+        'the minimal signed-in user. Add the row, or delete the auth user.',
+      );
       return null;
     }
 

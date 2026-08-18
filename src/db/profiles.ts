@@ -35,7 +35,8 @@ export async function getProfile(userId: string): Promise<Profile | null> {
     .from('profiles')
     .select('*')
     .eq('id', userId)
-    .single();
+    // maybeSingle: no row is an answer, not a failure. See AuthContext.
+    .maybeSingle();
 
   if (error) { console.error('getProfile:', error.message); return null; }
   return data ? normalizeProfile(data) : null;

@@ -383,7 +383,7 @@ export function ProfileScreen({ onLogout, onOpenDashboard }: Props) {
           .from('profiles')
           .select('full_name, email, client_id, plan, created_at, avatar_url')
           .eq('id', user.id)
-          .single(),
+          .maybeSingle(),
         ...FOLDER_TABLES.map(t =>
           supabase.from(t).select('id, status, approval_status')
         ),
@@ -403,7 +403,7 @@ export function ProfileScreen({ onLogout, onOpenDashboard }: Props) {
           .from('profiles')
           .select('full_name, email, client_id, plan, created_at, avatar_url')
           .eq('id', user.id)
-          .single(),
+          .maybeSingle(),
         getDocumentsByEmail(user.email ?? ''),
       ]);
 

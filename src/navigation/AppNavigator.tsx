@@ -58,7 +58,7 @@ function WebLayout({ onLogout }: { onLogout: () => void }) {
   useEffect(() => {
     if (!user?.id) return;
     getUnreadCount(user.id).then(setUnreadCount);
-    supabase.from('profiles').select('avatar_url').eq('id', user.id).single()
+    supabase.from('profiles').select('avatar_url').eq('id', user.id).maybeSingle()
       .then(({ data }) => { if (data?.avatar_url) setAvatarUrl(data.avatar_url); });
 
     const channel = supabase

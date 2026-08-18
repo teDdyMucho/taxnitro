@@ -298,7 +298,7 @@ export function DashboardScreen() {
     const userEmail = user.email;
     const [docs, profileRes, reqs, custom] = await Promise.all([
       getDocumentsByEmail(userEmail),
-      supabase.from('profiles').select('avatar_url').eq('id', user.id).single(),
+      supabase.from('profiles').select('avatar_url').eq('id', user.id).maybeSingle(),
       getFulfilledRequirements(userEmail, monthOf()),
       getCustomRequests(userEmail, monthOf()),
     ]);
