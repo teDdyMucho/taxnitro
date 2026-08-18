@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator,
-  TextInput, useWindowDimensions,
+  TextInput, useWindowDimensions, Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -43,13 +43,17 @@ const STATEMENTS: TabDef[] = [
 ];
 
 export interface UEDashboardScreenProps {
-  /** Returns to Financial Reports. Omitted when there is nowhere to go back to. */
+  /** Leaves the report. Omitted when there is nowhere to go back to. */
   onBack?: () => void;
+  /** What the back button says — name where it actually returns to. */
+  backLabel?: string;
   /** Staff and admin see the internal tabs; clients do not. */
   staffView?: boolean;
 }
 
-export function UEDashboardScreen({ onBack, staffView = false }: UEDashboardScreenProps) {
+export function UEDashboardScreen({
+  onBack, backLabel = 'Back to Admin', staffView = false,
+}: UEDashboardScreenProps) {
   const { width } = useWindowDimensions();
   const wide = width >= 900;
 
@@ -86,7 +90,7 @@ export function UEDashboardScreen({ onBack, staffView = false }: UEDashboardScre
 
   if (!sheets || !fsr || !dash || !model) {
     return (
-      <View style={s.loading}>
+      <View style={[s.loading, fullScreen]}>
         <ActivityIndicator color={Colors.primary} size="large" />
         <Text style={s.loadingText}>Loading the workbook…</Text>
       </View>
@@ -124,7 +128,7 @@ export function UEDashboardScreen({ onBack, staffView = false }: UEDashboardScre
       {onBack && (
         <Pressable onPress={onBack} style={s.back}>
           <Ionicons name="arrow-back" size={16} color={Colors.primaryDeep} />
-          <Text style={s.backText}>Back to Financial Reports</Text>
+          <Text style={s.backText}>{backLabel}</Text>
         </Pressable>
       )}
     </View>
@@ -135,7 +139,7 @@ export function UEDashboardScreen({ onBack, staffView = false }: UEDashboardScre
         {onBack && (
           <Pressable onPress={onBack} style={s.backSmall}>
             <Ionicons name="arrow-back" size={14} color={Colors.primaryDeep} />
-            <Text style={s.backTextSmall}>Reports</Text>
+            <Text style={s.backTextSmall}>Back</Text>
           </Pressable>
         )}
       </View>
@@ -497,7 +501,7 @@ export function UEDashboardScreen({ onBack, staffView = false }: UEDashboardScre
   };
 
   return (
-    <View style={[s.root, wide && s.rootWide]}>
+    <View style={[s.root, wide && s.rootWide, fullScreen]}>
       {sidebar}
       <ScrollView style={s.main} contentContainerStyle={s.mainContent}>
         {page()}
@@ -505,6 +509,12 @@ export function UEDashboardScreen({ onBack, staffView = false }: UEDashboardScre
     </View>
   );
 }
+
+// The report carries its own sidebar, so on web it covers the app shell rather
+// than sitting inside it beside a second one. Its back button is the way out.
+const fullScreen = Platform.OS === 'web'
+  ? ({ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 9999 } as any)
+  : null;
 
 function Legend({ color, label }: { color: string; label: string }) {
   return (

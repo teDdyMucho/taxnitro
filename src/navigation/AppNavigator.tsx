@@ -84,7 +84,9 @@ function WebLayout({ onLogout }: { onLogout: () => void }) {
       case 'Notifications': return <NotificationsScreen />;
       case 'Profile':
         // The client's own report — without the internal working tabs.
-        if (showDashboard) return <UEDashboardScreen onBack={() => setShowDashboard(false)} />;
+        if (showDashboard) {
+          return <UEDashboardScreen onBack={() => setShowDashboard(false)} backLabel="Back to Profile" />;
+        }
         return <ProfileScreen onLogout={onLogout} onOpenDashboard={() => setShowDashboard(true)} />;
     }
   };

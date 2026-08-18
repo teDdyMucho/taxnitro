@@ -91,7 +91,13 @@ export function AdminNavigator({ onLogout }: { onLogout: () => void }) {
     if (activeTab === 'Clients' && selectedClient) {
       // Staff and admin see the whole report, internal tabs included.
       if (showDashboard) {
-        return <UEDashboardScreen staffView onBack={() => setShowDashboard(false)} />;
+        return (
+          <UEDashboardScreen
+            staffView
+            onBack={() => setShowDashboard(false)}
+            backLabel={`Back to ${selectedClient.full_name?.split(' ')[0] || 'client'}`}
+          />
+        );
       }
       return (
         <ClientDocumentsScreen

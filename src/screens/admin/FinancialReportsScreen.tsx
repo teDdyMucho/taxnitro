@@ -56,6 +56,7 @@ export function FinancialReportsScreen({ onBack }: { onBack?: () => void }) {
       <UEDashboardScreen
         staffView
         onBack={rows.length > 1 ? () => setOpenId(null) : onBack}
+        backLabel={rows.length > 1 ? 'Back to Financial Reports' : 'Back to Admin'}
       />
     );
   }
