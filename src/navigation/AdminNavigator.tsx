@@ -71,9 +71,9 @@ export function AdminNavigator({ onLogout }: { onLogout: () => void }) {
 
   const [activeTab, setActiveTab]           = useState<AdminTab>('Dashboard');
   const [selectedClient, setSelectedClient] = useState<Profile | null>(null);
-  // Set when Financial Reports asks to open a client's dashboard; cleared on the
-  // way back, which is what puts the report page on screen again.
-  const [dashboardClient, setDashboardClient] = useState<string | null>(null);
+  // Set from the client's own page; cleared on the way back, which is what puts
+  // that client back on screen.
+  const [showDashboard, setShowDashboard] = useState(false);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
 
   const visibleItems = NAV_ITEMS.filter(i => !i.adminOnly || isAdmin);
@@ -81,36 +81,30 @@ export function AdminNavigator({ onLogout }: { onLogout: () => void }) {
   const handleTabPress = (name: AdminTab) => {
     setActiveTab(name);
     setSelectedClient(null);
-    setDashboardClient(null);
+    setShowDashboard(false);
   };
 
   const renderScreen = () => {
     if (activeTab === 'Clients' && selectedClient) {
+      // Staff and admin see the whole report, internal tabs included.
+      if (showDashboard) {
+        return <UEDashboardScreen staffView onBack={() => setShowDashboard(false)} />;
+      }
       return (
         <ClientDocumentsScreen
           client={selectedClient}
           onBack={() => setSelectedClient(null)}
+          onOpenDashboard={() => setShowDashboard(true)}
         />
       );
     }
     switch (activeTab) {
       case 'Dashboard': return <AdminDashboardScreen onViewAllDocuments={() => setActiveTab('Documents')} />;
       case 'Documents': return <AdminDocumentsScreen />;
-      case 'Clients':   return <ClientListScreen onSelectClient={c => setSelectedClient(c)} />;
+      case 'Clients':   return <ClientListScreen onSelectClient={c => { setSelectedClient(c); setShowDashboard(false); }} />;
       case 'Staff':     return <StaffManagementScreen />;
       case 'Workflow':  return <WorkflowDashboardScreen />;
-      case 'Reports':
-        // Only Uniquely Enough has a built dashboard so far; the report page
-        // itself decides who is offered one, and names the client here.
-        if (dashboardClient) {
-          return <UEDashboardScreen staffView onBack={() => setDashboardClient(null)} />;
-        }
-        return (
-          <ReportsScreen
-            onBack={() => handleTabPress('Dashboard')}
-            onOpenDashboard={setDashboardClient}
-          />
-        );
+      case 'Reports':   return <ReportsScreen onBack={() => handleTabPress('Dashboard')} />;
       case 'Profile':   return <ProfileScreen onLogout={onLogout} />;
     }
   };

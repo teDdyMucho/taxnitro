@@ -25,6 +25,7 @@ import { Colors } from '../../constants/colors';
 import { Button } from '../../components/Button';
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../lib/supabase';
+import { dashboardForClient } from '../../lib/clientDashboards';
 import { getDocumentsByEmail, FOLDER_TABLES } from '../../db/documents';
 
 const BIOMETRIC_KEY = 'biometric_enabled';
@@ -339,11 +340,18 @@ interface ProfileData {
   avatar_url: string | null;
 }
 
-interface Props { onLogout: () => void }
+interface Props {
+  onLogout: () => void;
+  /** Opens this client's own financial dashboard, when one has been built. */
+  onOpenDashboard?: () => void;
+}
 
-export function ProfileScreen({ onLogout }: Props) {
+export function ProfileScreen({ onLogout, onOpenDashboard }: Props) {
   const insets = useSafeAreaInsets();
   const { user, logout } = useAuth();
+  // A dashboard is built per client, so most accounts have none and the row
+  // below simply does not appear for them.
+  const myDashboard = dashboardForClient(user);
 
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [stats, setStats] = useState<Stats>({ total: 0, viewed: 0, pending: 0 });
@@ -680,8 +688,19 @@ export function ProfileScreen({ onLogout }: Props) {
                   label="Change Password"
                   onPress={() => setShowChangePassword(true)}
                   color={Colors.accentPurple}
-                  last
+                  last={!myDashboard}
                 />
+
+                {/* Only shown to a client whose dashboard has actually been built. */}
+                {myDashboard && (
+                  <SettingRow
+                    icon="stats-chart-outline"
+                    label={myDashboard.label}
+                    onPress={() => onOpenDashboard?.()}
+                    color={Colors.accentGold}
+                    last
+                  />
+                )}
               </>
             )}
           </View>

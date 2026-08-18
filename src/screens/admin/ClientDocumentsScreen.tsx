@@ -38,6 +38,7 @@ import {
   useDownloadSelection, DownloadSelectionBar, DownloadNotice, SelectCheckbox,
 } from '../../components/DownloadSelectionBar';
 import { listSubfoldersForClient, Subfolder } from '../../db/subfolders';
+import { dashboardForClient } from '../../lib/clientDashboards';
 import {
   monthOf, isStaffLabelFolder, staffLabelsForFolder,
   itemsForClient, requiredItemForDocName, stripRequirementPrefix,
@@ -47,6 +48,8 @@ import {
 interface Props {
   client: Profile;
   onBack: () => void;
+  /** Opens this client's financial dashboard, when one has been built. */
+  onOpenDashboard?: () => void;
 }
 
 // Folders staff can deliver files into, per the client's services.
@@ -418,7 +421,9 @@ const rq = StyleSheet.create({
 
 // ── Main Screen ───────────────────────────────────────────────────────────────
 
-export function ClientDocumentsScreen({ client, onBack }: Props) {
+export function ClientDocumentsScreen({ client, onBack, onOpenDashboard }: Props) {
+  // Built per client from their own workbook, so most clients have none.
+  const clientDashboard = dashboardForClient(client);
   const insets = useSafeAreaInsets();
   const [documents, setDocuments] = useState<Document[]>([]);
   const [loading, setLoading] = useState(true);
@@ -692,6 +697,12 @@ export function ClientDocumentsScreen({ client, onBack }: Props) {
             <Ionicons name="clipboard-outline" size={14} color="#E8B923" />
             <Text style={s.requestText}>Request Doc</Text>
           </TouchableOpacity>
+          {clientDashboard && onOpenDashboard && (
+            <TouchableOpacity style={s.requestBtn} onPress={onOpenDashboard} activeOpacity={0.85}>
+              <Ionicons name="stats-chart-outline" size={14} color="#E8B923" />
+              <Text style={s.requestText}>Dashboard</Text>
+            </TouchableOpacity>
+          )}
         </View>
       </LinearGradient>
 

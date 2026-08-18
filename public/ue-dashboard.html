@@ -22,9 +22,6 @@
   td.num,th.num{font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}
 
   /* ── Sidebar — matches AdminNavigator ── */
-  .backlink{display:flex;align-items:center;justify-content:center;gap:7px;margin-top:18px;padding:11px 12px;
-    background:var(--gold);color:var(--deep);border-radius:11px;font-size:12.5px;font-weight:800;
-    text-decoration:none;border:none;cursor:pointer;font-family:inherit}
   .side{width:252px;flex:none;background:var(--brown);padding:24px 16px 28px;
         position:sticky;top:0;height:100vh;overflow:auto;
         border-right:1px solid rgba(255,255,255,.1)}
@@ -160,7 +157,6 @@
     <a data-tab="fsa">FS-A</a>
     <a data-tab="bs">UE BS</a>
     <a data-tab="pl">UE PL</a>
-    <button type="button" class="backlink" id="backlink" hidden onclick="goBack()">&larr; Financial Reports</button>
   </nav>
 
   <main class="main">
@@ -701,15 +697,6 @@ if (!STAFF_VIEW) {
     document.getElementById("p-" + a.dataset.tab)?.remove();
     a.remove();
   });
-}
-
-// Staff reached this from Financial Reports, so offer the way back. A client
-// opened it from a link they were sent, and has nowhere to return to.
-if (STAFF_VIEW) document.getElementById("backlink").hidden = false;
-function goBack() {
-  const host = (window.parent && window.parent !== window) ? window.parent : (window.opener || null);
-  if (host) { try { host.postMessage({ type: "ftg-back-to-admin" }, "*"); return; } catch (e) {} }
-  location.href = "/financial-report.html";
 }
 
 document.querySelectorAll(".side a").forEach(a => a.addEventListener("click", () => {

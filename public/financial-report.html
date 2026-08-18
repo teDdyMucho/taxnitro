@@ -135,8 +135,6 @@ html,body{height:100%;overflow:hidden}
 .fm-banner .t{font-size:12px;color:#cfcfcf;line-height:1.45}
 .fm-banner .t b{color:#F0D98A}
 .fm-banner a{color:#F0D98A;font-weight:700}
-.dash-wrap{flex:1 1 auto;min-height:0;display:flex;flex-direction:column;gap:0}
-.dash-frame{flex:1 1 auto;min-height:0;width:100%;border:1px solid #3A3131;border-radius:12px;background:#2C2320}
 .fm-soon{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;flex:1;color:#7a7a7a;gap:8px}
 .fm-soon svg{width:46px;height:46px;stroke:#3A3131;fill:none;stroke-width:1.6}
 .fm-soon h3{margin:6px 0 0;font-size:18px;background:var(--gold);-webkit-background-clip:text;background-clip:text;color:transparent;font-weight:800}
@@ -159,7 +157,6 @@ html,body{height:100%;overflow:hidden}
    <nav class="sb-nav">
      <div class="lbl">Fractional CFO</div>
      <button class="navitem active" id="nav-report" onclick="showTab('report')"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M9 13h6M9 17h6"/></svg>Monthly Financial Report</button>
-     <button class="navitem" id="nav-dashboard" onclick="showTab('dashboard')"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg>Financial Dashboard</button>
      <button class="navitem" id="nav-models" onclick="showTab('models')"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><rect x="7" y="10" width="3" height="7"/><rect x="12" y="6" width="3" height="11"/><rect x="17" y="13" width="3" height="4"/></svg>Financial Models</button>
      <button class="navitem" id="nav-checkup" onclick="showTab('checkup')"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l2-5 4 11 2.5-6H21"/></svg>Fractional CFO Checkup</button>
    </nav>
@@ -179,28 +176,6 @@ html,body{height:100%;overflow:hidden}
    </div>
    <div class="viewer-bar"><span class="vlbl">Report Preview</span><div class="zoomctl"><button class="zbtn" onclick="zoomStep(-1)" title="Zoom out">&minus;</button><span id="zoomval" class="zval">100%</span><button class="zbtn" onclick="zoomStep(1)" title="Zoom in">+</button><button class="zfit" onclick="zoomFit()">Fit width</button></div></div>
    <div class="report-scroll"><div id="report"></div></div>
-  </div>
-
-  <div id="view-dashboard" class="view" hidden>
-   <div class="main-head"><h2>Financial Dashboard</h2><p>The client's restated statements and live forecast model, opened in full.</p></div>
-   <div class="bar">
-     <div><label>CLIENT</label><select id="dashClient" onchange="loadDashboard()"></select></div>
-     <div style="flex:1"></div>
-     <a class="fm-open" id="dashOpen" href="#" target="_blank" rel="noopener"><svg viewBox="0 0 24 24"><path d="M14 3h7v7"/><path d="M21 3l-9 9"/><path d="M19 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h6"/></svg>Open in new tab</a>
-   </div>
-   <div class="dash-wrap">
-     <div class="fm-soon" id="dashReady" hidden>
-       <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg>
-       <h3><span id="dashReadyName"></span></h3>
-       <p>Restated statements, the live forecast model and the monthly commentary, with the internal tabs shown.</p>
-       <button type="button" class="fm-open" id="dashGo" onclick="openDashboard()" style="border:none;cursor:pointer;font-family:inherit;margin-top:6px">Open dashboard</button>
-     </div>
-     <div class="fm-soon" id="dashEmpty" hidden>
-       <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg>
-       <h3>No dashboard for <span id="dashEmptyName"></span> yet</h3>
-       <p>Each dashboard is built from that client's own workbook. To add one, put its page under <b>public/</b> and name it in the <b>DASHBOARDS</b> map near the bottom of this file.</p>
-     </div>
-   </div>
   </div>
 
   <div id="view-models" class="view" hidden>
@@ -484,57 +459,11 @@ const MODELS={
 };
 const initials=n=>(String(n||'').replace(/[^A-Za-z0-9 &]/g,'').split(/\s+/).filter(Boolean).slice(0,2).map(w=>w[0]).join('').toUpperCase()||'?');
 function showTab(name){
- ['report','dashboard','models','checkup'].forEach(function(t){
+ ['report','models','checkup'].forEach(function(t){
    var v=document.getElementById('view-'+t);if(v)v.hidden=(t!==name);
    var n=document.getElementById('nav-'+t);if(n)n.classList.toggle('active',t===name);
  });
  if(name==='models')renderModels();
- if(name==='dashboard')renderDashboard();
-}
-
-// ---- Financial Dashboard: one built page per client, same idea as MODELS ----
-// A client is listed here once their workbook has been turned into a page under
-// public/. Everyone else gets the empty state rather than another client's books.
-const DASHBOARDS={
- "Uniquely Enough LLC":"/ue-dashboard.html",
-};
-function renderDashboard(){
- var sel=document.getElementById('dashClient');if(!sel)return;
- if(!sel.options.length){
-   DB.clients.forEach(function(c){
-     var o=document.createElement('option');o.value=c;
-     o.textContent=DASHBOARDS[c]?c:c+' — not built yet';
-     sel.appendChild(o);
-   });
-   var first=DB.clients.filter(function(c){return DASHBOARDS[c];})[0];
-   if(first)sel.value=first;
- }
- loadDashboard();
-}
-function loadDashboard(){
- var c=document.getElementById('dashClient').value;
- var url=DASHBOARDS[c];
- var ready=document.getElementById('dashReady'),empty=document.getElementById('dashEmpty'),open=document.getElementById('dashOpen');
- if(url){
-   ready.hidden=false;empty.hidden=true;
-   document.getElementById('dashReadyName').textContent=c;
-   // ?view=staff — this is the admin side, so the internal tabs stay visible.
-   open.hidden=false;open.href=url+'?view=staff';
- }else{
-   ready.hidden=true;empty.hidden=false;open.hidden=true;
-   document.getElementById('dashEmptyName').textContent=c;
- }
-}
-// Inside the portal the dashboard is a screen of its own, with its own back
-// button — so hand the client over and let the app navigate. Opened straight
-// from a browser there is no app to ask, so go to the standalone page instead.
-function openDashboard(){
- var c=document.getElementById('dashClient').value,url=DASHBOARDS[c];
- if(!url)return;
- var host=(window.parent&&window.parent!==window)?window.parent:(window.opener||null);
- if(host){try{host.postMessage({type:'ftg-open-dashboard',client:c},'*');return}catch(e){}}
- if(window.ReactNativeWebView){try{window.ReactNativeWebView.postMessage(JSON.stringify({type:'ftg-open-dashboard',client:c}));return}catch(e){}}
- location.href=url+'?view=staff';
 }
 function fmCard(c){
  var m=MODELS[c]||{url:'',freq:'monthly'};var url=m.url||'';

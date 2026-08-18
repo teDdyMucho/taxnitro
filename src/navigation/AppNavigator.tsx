@@ -15,6 +15,7 @@ import { DashboardScreen } from '../screens/main/DashboardScreen';
 import { DocumentsScreen } from '../screens/main/DocumentsScreen';
 import { NotificationsScreen } from '../screens/main/NotificationsScreen';
 import { ProfileScreen } from '../screens/main/ProfileScreen';
+import { UEDashboardScreen } from '../screens/admin/UEDashboardScreen';
 import { AdminNavigator } from './AdminNavigator';
 import { getUnreadCount } from '../db/notifications';
 import { ClientUploadModal } from '../components/ClientUploadModal';
@@ -51,6 +52,8 @@ function WebLayout({ onLogout }: { onLogout: () => void }) {
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [uploadOpen, setUploadOpen] = useState(false);
+  // Opened from the client's own profile, and closed by the screen's back button.
+  const [showDashboard, setShowDashboard] = useState(false);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -70,12 +73,19 @@ function WebLayout({ onLogout }: { onLogout: () => void }) {
 
   const mkInitials = (name: string) => name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
 
+  // Leaving Profile closes the dashboard, so coming back lands on the profile
+  // itself rather than wherever the last visit left off.
+  const goTab = (name: TabName) => { setActiveTab(name); setShowDashboard(false); };
+
   const renderScreen = () => {
     switch (activeTab) {
       case 'Dashboard':     return <DashboardScreen />;
       case 'Documents':     return <DocumentsScreen />;
       case 'Notifications': return <NotificationsScreen />;
-      case 'Profile':       return <ProfileScreen onLogout={onLogout} />;
+      case 'Profile':
+        // The client's own report — without the internal working tabs.
+        if (showDashboard) return <UEDashboardScreen onBack={() => setShowDashboard(false)} />;
+        return <ProfileScreen onLogout={onLogout} onOpenDashboard={() => setShowDashboard(true)} />;
     }
   };
 
@@ -99,7 +109,7 @@ function WebLayout({ onLogout }: { onLogout: () => void }) {
                 <TouchableOpacity
                   key={item.name}
                   style={mob.tabItem}
-                  onPress={() => setActiveTab(item.name)}
+                  onPress={() => goTab(item.name)}
                   activeOpacity={0.7}
                 >
                   <View style={{ position: 'relative' }}>
@@ -160,7 +170,7 @@ function WebLayout({ onLogout }: { onLogout: () => void }) {
               <TouchableOpacity
                 key={item.name}
                 style={[web.navItem, isActive && web.navItemActive]}
-                onPress={() => setActiveTab(item.name)}
+                onPress={() => goTab(item.name)}
                 activeOpacity={0.8}
               >
                 {isActive && <View style={web.navActiveBar} />}

@@ -10,13 +10,7 @@ import { Colors } from '../../constants/colors';
 // report's own sidebar posts a message back here to return to the app.
 const REPORT_PATH = '/financial-report.html';
 
-export interface ReportsScreenProps {
-  onBack?: () => void;
-  /** The report page asked to open this client's financial dashboard. */
-  onOpenDashboard?: (client: string) => void;
-}
-
-export function ReportsScreen({ onBack, onOpenDashboard }: ReportsScreenProps) {
+export function ReportsScreen({ onBack }: { onBack?: () => void }) {
   const insets = useSafeAreaInsets();
 
   // Web: the report iframe posts { type: 'ftg-back-to-admin' } when its Back button
@@ -24,13 +18,11 @@ export function ReportsScreen({ onBack, onOpenDashboard }: ReportsScreenProps) {
   useEffect(() => {
     if (Platform.OS !== 'web' || typeof window === 'undefined') return;
     const onMessage = (e: MessageEvent) => {
-      if (!e?.data) return;
-      if (e.data.type === 'ftg-back-to-admin') onBack?.();
-      if (e.data.type === 'ftg-open-dashboard') onOpenDashboard?.(String(e.data.client ?? ''));
+      if (e?.data && e.data.type === 'ftg-back-to-admin') onBack?.();
     };
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [onBack, onOpenDashboard]);
+  }, [onBack]);
 
   // Cover the entire viewport (over the sidebar) on web.
   const webFixed = Platform.OS === 'web'
@@ -50,15 +42,7 @@ export function ReportsScreen({ onBack, onOpenDashboard }: ReportsScreenProps) {
             source={{ uri: REPORT_PATH }}
             style={{ flex: 1, backgroundColor: '#2C2320' }}
             startInLoadingState
-            onMessage={(e) => {
-              const raw = e.nativeEvent.data;
-              if (raw === 'ftg-back-to-admin') { onBack?.(); return; }
-              try {
-                const msg = JSON.parse(raw);
-                if (msg?.type === 'ftg-back-to-admin') onBack?.();
-                if (msg?.type === 'ftg-open-dashboard') onOpenDashboard?.(String(msg.client ?? ''));
-              } catch { /* not one of ours */ }
-            }}
+            onMessage={(e) => { if (e.nativeEvent.data === 'ftg-back-to-admin') onBack?.(); }}
             renderLoading={() => (
               <View style={s.loading}>
                 <ActivityIndicator color={Colors.primary} size="large" />
