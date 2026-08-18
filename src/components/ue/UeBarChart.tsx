@@ -9,7 +9,7 @@ import { MONTHS } from '../../lib/ueModel';
 // everything here is a rectangle, a hairline or a line segment, all of which a
 // View does natively on web and on device.
 
-const H = 274;          // canvas height, matching the report's proportions
+const H = 320;          // canvas height, matching the report's proportions
 const PAD_L = 46;       // room for the y-axis figures
 const PAD_R = 8;
 const PAD_T = 36;       // room for the rotated amounts above the tallest bar
@@ -92,12 +92,12 @@ export function UeBarChart({ current, prior, trend, color }: UeBarChartProps) {
     .filter((p): p is { x: number; y: number } => p != null);
 
   return (
-    <View style={{ height: H }} onLayout={onLayout}>
+    <View style={{ height: H }} onLayout={onLayout} pointerEvents="none">
       {/* Gridlines and the y-axis figures */}
       {[0, 1, 2, 3, 4].map(i => {
         const gy = PAD_T + (ih / 4) * i;
         return (
-          <View key={`g${i}`} pointerEvents="none">
+          <React.Fragment key={`g${i}`}>
             <View
               style={[
                 s.grid,
@@ -108,7 +108,7 @@ export function UeBarChart({ current, prior, trend, color }: UeBarChartProps) {
             <Text style={[s.axis, { top: gy - 6, width: PAD_L - 8 }]}>
               {Math.round((max * (1 - i / 4)) / 1000)}K
             </Text>
-          </View>
+          </React.Fragment>
         );
       })}
 
@@ -117,7 +117,7 @@ export function UeBarChart({ current, prior, trend, color }: UeBarChartProps) {
         const cur = current[i] ?? 0;
         const pri = prior[i] ?? 0;
         return (
-          <View key={mo} pointerEvents="none">
+          <React.Fragment key={mo}>
             {cur > 0 && (
               <>
                 <View style={[s.bar, { left: cx - bw - 1, top: y(cur), width: bw, height: PAD_T + ih - y(cur), backgroundColor: color }]} />
@@ -131,7 +131,7 @@ export function UeBarChart({ current, prior, trend, color }: UeBarChartProps) {
               </>
             )}
             <Text style={[s.month, { left: cx - slot / 2, width: slot }]}>{mo}</Text>
-          </View>
+          </React.Fragment>
         );
       })}
 

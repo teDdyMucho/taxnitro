@@ -352,7 +352,7 @@ function chart(el, cur, prior, trend, color) {
   // Taller now that every bar carries its amount. The two bars in a month sit
   // ~15px apart, so a horizontal "150K" on each would collide — the amounts are
   // turned to read upwards instead, which is what a spreadsheet does here too.
-  const W = 660, H = 274, pl = 46, pr = 8, pt = 36, pb = 26;
+  const W = 660, H = 320, pl = 46, pr = 8, pt = 36, pb = 26;
   const iw = W - pl - pr, ih = H - pt - pb;
   const max = Math.max(...cur, ...prior, ...trend, 1);
   const y = v => pt + ih - (v / max) * ih, slot = iw / 12, bw = Math.min(13, slot / 3);
