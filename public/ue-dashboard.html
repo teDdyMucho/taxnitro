@@ -147,8 +147,8 @@
     <div class="logo"><b>UNIQUELY ENOUGH</b><span>Behavioral Health LLC</span></div>
     <div class="lbl">Navigation</div>
     <a data-tab="dash" class="on">Dashboard</a>
-    <a data-tab="findings">Findings for Review</a>
-    <a data-tab="tldr">TL;DR</a>
+    <a data-tab="findings" data-staff="1">Findings for Review</a>
+    <a data-tab="tldr" data-staff="1">TL;DR</a>
     <a data-tab="assum">Assumptions</a>
     <div class="lbl">Statements</div>
     <a data-tab="fsr">FS-R</a>
@@ -347,7 +347,10 @@ function drivers(m) {
 }
 
 function chart(el, cur, prior, trend, color) {
-  const W = 640, H = 236, pl = 46, pr = 8, pt = 12, pb = 26;
+  // Taller now that every bar carries its amount. The two bars in a month sit
+  // ~15px apart, so a horizontal "150K" on each would collide — the amounts are
+  // turned to read upwards instead, which is what a spreadsheet does here too.
+  const W = 660, H = 274, pl = 46, pr = 8, pt = 36, pb = 26;
   const iw = W - pl - pr, ih = H - pt - pb;
   const max = Math.max(...cur, ...prior, ...trend, 1);
   const y = v => pt + ih - (v / max) * ih, slot = iw / 12, bw = Math.min(13, slot / 3);
@@ -359,8 +362,18 @@ function chart(el, cur, prior, trend, color) {
   }
   MONTHS.forEach((mo, i) => {
     const cx = pl + slot * i + slot / 2;
-    if (cur[i] > 0) g += `<rect x="${cx - bw - 1}" y="${y(cur[i])}" width="${bw}" height="${pt + ih - y(cur[i])}" fill="${color}"/>`;
-    if (prior[i] > 0) g += `<rect x="${cx + 1}" y="${y(prior[i])}" width="${bw}" height="${pt + ih - y(prior[i])}" fill="#E0D6C6"/>`;
+    // Amounts sit above their own bar — the current year in the series colour,
+    // the prior year in grey so the two read apart at a glance.
+    const amt = (v, x, fill) => {
+      if (v <= 0) return "";
+      const ty = y(v) - 4;
+      return `<text x="${x}" y="${ty}" transform="rotate(-90 ${x} ${ty})" text-anchor="start" `
+           + `dominant-baseline="middle" font-size="8" font-weight="600" fill="${fill}">${Math.round(v / 1000)}K</text>`;
+    };
+    if (cur[i] > 0) g += `<rect x="${cx - bw - 1}" y="${y(cur[i])}" width="${bw}" height="${pt + ih - y(cur[i])}" fill="${color}"/>`
+      + amt(cur[i], cx - bw / 2 - 1, color);
+    if (prior[i] > 0) g += `<rect x="${cx + 1}" y="${y(prior[i])}" width="${bw}" height="${pt + ih - y(prior[i])}" fill="#E0D6C6"/>`
+      + amt(prior[i], cx + bw / 2 + 1, "#A8998A");
     g += `<text x="${cx}" y="${H - 8}" text-anchor="middle" font-size="9.5" fill="#A8998A">${mo}</text>`;
   });
   const p = trend.map((v, i) => v > 0 ? `${pl + slot * i + slot / 2},${y(v)}` : null).filter(Boolean);
@@ -631,20 +644,27 @@ const sumRange = (row, a, b) => { let s = 0; for (let i = a; i <= b; i++) s += r
 
 // ── Static tabs ──────────────────────────────────────────────────────────────
 function renderStatic() {
-  document.getElementById("p-findings").innerHTML =
+  // A page may be absent — the client view drops the internal tabs entirely.
+  const fill = (id, html) => { const el = document.getElementById(id); if (el) el.innerHTML = html; };
+
+  fill("p-findings",
     `<div class="subhead"><h1 class="plain">Findings for Review</h1><p>CFO / controller findings and recommendations, sourced from the UE PL and UE BS tabs.</p></div><div class="pad">` +
-    gridTable(SHEETS["Findings for Review"], { flagCol: 6 }) + "</div>";
-  document.getElementById("p-tldr").innerHTML =
+    gridTable(SHEETS["Findings for Review"], { flagCol: 6 }) + "</div>");
+
+  fill("p-tldr",
     `<div class="subhead"><h1 class="plain">TL;DR</h1><p>Monthly / YTD financial summary prepared by Finance Therapy Group.</p></div><div class="pad">` +
-    gridTable(SHEETS["TL;DR"].map(r => r.slice(0, 6))) + "</div>";
-  document.getElementById("p-bs").innerHTML =
+    gridTable(SHEETS["TL;DR"].map(r => r.slice(0, 6))) + "</div>");
+
+  fill("p-bs",
     `<div class="subhead"><h1 class="plain">UE BS</h1><p>Balance sheet as provided — the source behind the restated statements.</p></div><div class="pad">` +
-    gridTable(SHEETS["UE BS"]) + "</div>";
-  document.getElementById("p-pl").innerHTML =
+    gridTable(SHEETS["UE BS"]) + "</div>");
+
+  fill("p-pl",
     `<div class="subhead"><h1 class="plain">UE PL</h1><p>Profit and loss as provided — the source behind the restated statements.</p></div><div class="pad">` +
-    gridTable(SHEETS["UE PL"]) + "</div>";
-  document.getElementById("p-fsa").innerHTML = statement(SHEETS["FS-A"], {
-    title: "FS-A — Actuals", lead: "Actuals only, with no forecast. This is the historical basis the scenario model averages from." });
+    gridTable(SHEETS["UE PL"]) + "</div>");
+
+  fill("p-fsa", statement(SHEETS["FS-A"], {
+    title: "FS-A — Actuals", lead: "Actuals only, with no forecast. This is the historical basis the scenario model averages from." }));
 }
 
 // ── Recompute everything that depends on the assumptions ─────────────────────
@@ -662,6 +682,20 @@ month.innerHTML = MONTHS.map((mo, i) =>
   `<option value="${i}">${mo} 2026${i > LAST_ACTUAL ? " (forecast)" : ""}</option>`).join("");
 month.value = 7;
 month.addEventListener("change", e => renderDash(+e.target.value));
+
+// ── Who is looking ───────────────────────────────────────────────────────────
+// Findings and TL;DR are internal working notes, not client-facing. The page
+// has no login of its own, so the caller says which view to render:
+//   ?view=staff  → everything
+//   (default)    → the client view, with those two hidden
+// Once embedded in the portal the role is known, and it passes the parameter.
+const STAFF_VIEW = new URLSearchParams(location.search).get("view") === "staff";
+if (!STAFF_VIEW) {
+  document.querySelectorAll(".side a[data-staff]").forEach(a => {
+    document.getElementById("p-" + a.dataset.tab)?.remove();
+    a.remove();
+  });
+}
 
 document.querySelectorAll(".side a").forEach(a => a.addEventListener("click", () => {
   document.querySelectorAll(".side a").forEach(x => x.classList.remove("on"));
