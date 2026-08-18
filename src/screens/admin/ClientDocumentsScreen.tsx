@@ -39,6 +39,7 @@ import {
 } from '../../components/DownloadSelectionBar';
 import { listSubfoldersForClient, Subfolder } from '../../db/subfolders';
 import { dashboardForClient } from '../../lib/clientDashboards';
+import { ClientDetailsPanel } from '../../components/ClientDetailsPanel';
 import {
   monthOf, isStaffLabelFolder, staffLabelsForFolder,
   itemsForClient, requiredItemForDocName, stripRequirementPrefix,
@@ -741,19 +742,23 @@ export function ClientDocumentsScreen({ client, onBack, onOpenDashboard }: Props
             renderItem={renderFolderCard}
             contentContainerStyle={{ padding: 16, paddingBottom: 32 }}
             ListHeaderComponent={
-              folders.length > 0 ? (
-                <>
-                  <Text style={s.sectionLabel}>Folders</Text>
-                  {/* Everything this client has, in one archive. */}
-                  <DownloadSelectionBar
-                    selection={dl}
-                    items={folders.flatMap(f => f.data)}
-                    zipName={`${clientSlug} — All documents`}
-                    label="documents"
-                    allowSelect={false}
-                  />
-                </>
-              ) : null
+              <>
+                {/* What the team knows about this business, where the files are. */}
+                <ClientDetailsPanel clientEmail={client.email} clientName={client.full_name} />
+                {folders.length > 0 && (
+                  <>
+                    <Text style={s.sectionLabel}>Folders</Text>
+                    {/* Everything this client has, in one archive. */}
+                    <DownloadSelectionBar
+                      selection={dl}
+                      items={folders.flatMap(f => f.data)}
+                      zipName={`${clientSlug} — All documents`}
+                      label="documents"
+                      allowSelect={false}
+                    />
+                  </>
+                )}
+              </>
             }
             ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => load(true)} tintColor={Colors.primary} />}
