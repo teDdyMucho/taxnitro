@@ -37,6 +37,7 @@ import { createCustomRequest } from '../../db/customRequests';
 import {
   useDownloadSelection, DownloadSelectionBar, DownloadNotice, SelectCheckbox,
 } from '../../components/DownloadSelectionBar';
+import { listSubfoldersForClient, Subfolder } from '../../db/subfolders';
 import {
   monthOf, isStaffLabelFolder, staffLabelsForFolder,
   itemsForClient, requiredItemForDocName, stripRequirementPrefix,
@@ -429,6 +430,15 @@ export function ClientDocumentsScreen({ client, onBack }: Props) {
   const [requestOpen, setRequestOpen] = useState(false);
   // null → the folder list; otherwise the folder being looked inside.
   const [activeFolderKey, setActiveFolderKey] = useState<string | null>(null);
+  // Staff can file a document into a subfolder from the upload or the file
+  // browser. Those are real folders to the client, so they have to appear here
+  // too — grouping by the upload label alone hid them on this screen.
+  const [subfolders, setSubfolders] = useState<Subfolder[]>([]);
+  useEffect(() => {
+    let alive = true;
+    listSubfoldersForClient(client.email).then(list => { if (alive) setSubfolders(list); });
+    return () => { alive = false; };
+  }, [client.email]);
 
   const load = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true); else setLoading(true);
@@ -490,15 +500,26 @@ export function ClientDocumentsScreen({ client, onBack }: Props) {
   const folders = useMemo<FolderBucket[]>(() => {
     const buckets = new Map<string, FolderBucket>();
 
+    const subById = new Map(subfolders.map(sf => [sf.id, sf]));
+
     documents.forEach(doc => {
-      const item  = requiredItemForDocName(doc.name, clientItems);
-      const key   = item ? `req:${item.service}:${item.key}` : `tbl:${doc.document_type ?? ''}`;
-      const title = item ? item.label : folderTableLabel(doc.document_type);
-      // Required items first, in checklist order; everything else after.
-      const order = item ? clientItems.indexOf(item) : 1000;
-      const icon: keyof typeof Ionicons.glyphMap = !item
-        ? 'folder-outline'
-        : item.key.startsWith(BANK_STATEMENTS_KEY) ? 'business-outline' : 'document-text-outline';
+      const item = requiredItemForDocName(doc.name, clientItems);
+      const sub  = doc.subfolder_id ? subById.get(doc.subfolder_id) : undefined;
+
+      // A document filed into a subfolder belongs to that folder first — that is
+      // where staff put it, and where they expect to find it again.
+      let key: string, title: string, order: number;
+      let icon: keyof typeof Ionicons.glyphMap;
+      if (sub) {
+        key = `sub:${sub.id}`; title = sub.name; order = 500; icon = 'folder';
+      } else if (item) {
+        key = `req:${item.service}:${item.key}`; title = item.label;
+        order = clientItems.indexOf(item);
+        icon = item.key.startsWith(BANK_STATEMENTS_KEY) ? 'business-outline' : 'document-text-outline';
+      } else {
+        key = `tbl:${doc.document_type ?? ''}`; title = folderTableLabel(doc.document_type);
+        order = 1000; icon = 'folder-outline';
+      }
 
       const row: DocRow = { ...doc, displayName: stripRequirementPrefix(doc.name, item) };
       const bucket = buckets.get(key);
@@ -507,7 +528,7 @@ export function ClientDocumentsScreen({ client, onBack }: Props) {
     });
 
     return [...buckets.values()].sort((a, b) => a.order - b.order || a.title.localeCompare(b.title));
-  }, [documents, clientItems]);
+  }, [documents, clientItems, subfolders]);
 
   const totalDocs   = documents.length;
   const openFolder  = folders.find(f => f.key === activeFolderKey) ?? null;

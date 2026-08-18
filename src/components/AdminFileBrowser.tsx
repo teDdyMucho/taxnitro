@@ -748,6 +748,26 @@ export function AdminFileBrowser({ visible, onClose }: Props) {
                     {(item.unreadCount ?? 0) > 0 && (
                       <View style={fb.replyDot}><Text style={fb.replyDotText}>{item.unreadCount}</Text></View>
                     )}
+                    {/* Opening a file should not mean opening its detail page
+                        first — view and download sit on the row itself. */}
+                    {!dl.selecting && (
+                      <View style={{ flexDirection: 'row', gap: 6 }}>
+                        <TouchableOpacity
+                          style={fb.rowActBtn}
+                          onPress={() => setViewFile({ url: item.document_url, name: item.name })}
+                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        >
+                          <Ionicons name="eye-outline" size={15} color="#1C1713" />
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={fb.rowActBtn}
+                          onPress={() => dl.downloadSingle(item)}
+                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        >
+                          <Ionicons name="download-outline" size={15} color="#B5905B" />
+                        </TouchableOpacity>
+                      </View>
+                    )}
                     <Ionicons name="chevron-forward" size={16} color="#94A3B8" />
                   </View>
                 </TouchableOpacity>
@@ -1226,6 +1246,12 @@ const fb = StyleSheet.create({
     backgroundColor: '#FFFFFF', borderRadius: 14, padding: 14,
     borderWidth: 1, borderColor: '#F1F5F9',
     shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 4, elevation: 1,
+  },
+  rowActBtn: {
+    width: 30, height: 30, borderRadius: 9,
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: 'rgba(232,185,35,0.14)',
+    borderWidth: 1, borderColor: 'rgba(232,185,35,0.32)',
   },
   fileListCardMarked: { backgroundColor: 'rgba(232,185,35,0.10)', borderColor: 'rgba(232,185,35,0.55)' },
   fileListIconSlot: { width: 46, height: 46, alignItems: 'center', justifyContent: 'center' },

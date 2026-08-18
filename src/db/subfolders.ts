@@ -41,6 +41,23 @@ export async function listSubfolders(
 }
 
 /**
+ * Every subfolder belonging to one client, across all folder tables.
+ *
+ * The per-table version answers "what is in this folder"; a client's document
+ * list spans many tables at once, so it needs the whole set keyed by id.
+ */
+export async function listSubfoldersForClient(ownerEmail: string): Promise<Subfolder[]> {
+  if (!ownerEmail) return [];
+  const { data, error } = await supabase
+    .from('custom_subfolders')
+    .select('*')
+    .or(`owner_email.eq.${ownerEmail},owner_email.is.null`)
+    .order('name', { ascending: true });
+  if (error) { console.error('listSubfoldersForClient:', error.message); return []; }
+  return (data ?? []) as Subfolder[];
+}
+
+/**
  * Create a subfolder for one client. Returns the row, or null on failure —
  * most often a duplicate name, which is unique per (table, owner).
  */

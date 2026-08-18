@@ -739,13 +739,17 @@ function DocCard({ doc, sf, onPress, selecting, marked, onDownload }: {
       <View style={s.docCardRight}>
         {!isPending && !isRejected && <StatusBadge status={doc.status} size="sm" />}
         {selecting ? null : (
-          <TouchableOpacity
-            style={s.cardDlBtn}
-            onPress={onDownload}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          >
-            <Ionicons name="download-outline" size={15} color="#B5905B" />
-          </TouchableOpacity>
+          <View style={{ flexDirection: 'row', gap: 6, marginTop: 4 }}>
+            {/* Tapping the card opens the file too, but a button says so. */}
+            <TouchableOpacity style={s.cardActBtn} onPress={onPress}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Ionicons name="eye-outline" size={15} color="#1C1713" />
+            </TouchableOpacity>
+            <TouchableOpacity style={s.cardActBtn} onPress={onDownload}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Ionicons name="download-outline" size={15} color="#B5905B" />
+            </TouchableOpacity>
+          </View>
         )}
         <Ionicons name="chevron-forward" size={15} color={Colors.textMuted} style={{ marginTop: 2 }} />
       </View>
@@ -1663,11 +1667,11 @@ const s = StyleSheet.create({
   // Checkbox occupies the type-badge slot while marking, so rows don't shift.
   extBoxSlot: { width: 52, height: 52, alignItems: 'center', justifyContent: 'center' },
   docCardMarked: { backgroundColor: 'rgba(232,185,35,0.10)', borderColor: 'rgba(232,185,35,0.55)' },
-  cardDlBtn: {
+  cardActBtn: {
     width: 30, height: 30, borderRadius: 9,
     alignItems: 'center', justifyContent: 'center',
-    backgroundColor: 'rgba(232,185,35,0.12)',
-    marginTop: 4,
+    backgroundColor: 'rgba(232,185,35,0.14)',
+    borderWidth: 1, borderColor: 'rgba(232,185,35,0.32)',
   },
 
   // doc header — gradient, no bg color needed
