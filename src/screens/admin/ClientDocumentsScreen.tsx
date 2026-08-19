@@ -40,6 +40,7 @@ import {
 import { listSubfoldersForClient, Subfolder } from '../../db/subfolders';
 import { dashboardForClient } from '../../lib/clientDashboards';
 import { ClientDetailsPanel } from '../../components/ClientDetailsPanel';
+import { ClientQuestionnairePanel } from '../../components/ClientQuestionnairePanel';
 import {
   monthOf, isStaffLabelFolder, staffLabelsForFolder,
   itemsForClient, requiredItemForDocName, stripRequirementPrefix,
@@ -745,6 +746,11 @@ export function ClientDocumentsScreen({ client, onBack, onOpenDashboard }: Props
               <>
                 {/* What the team knows about this business, where the files are. */}
                 <ClientDetailsPanel clientEmail={client.email} clientName={client.full_name} />
+                {/* And what the client told us themselves, month by month. */}
+                <ClientQuestionnairePanel
+                  clientEmail={client.email}
+                  accounts={normalizeBankAccounts(client.bank_accounts)}
+                />
                 {folders.length > 0 && (
                   <>
                     <Text style={s.sectionLabel}>Folders</Text>

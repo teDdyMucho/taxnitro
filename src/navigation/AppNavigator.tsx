@@ -20,6 +20,9 @@ import { dashboardForClient } from '../lib/clientDashboards';
 import { AdminNavigator } from './AdminNavigator';
 import { getUnreadCount } from '../db/notifications';
 import { ClientUploadModal } from '../components/ClientUploadModal';
+import { MonthlyQuestionnaireModal } from '../components/MonthlyQuestionnaireModal';
+import { isQuestionnaireDone } from '../db/questionnaire';
+import { monthOf } from '../db/requirements';
 import { IDLE_TIMEOUT_MS } from '../hooks/useIdleLogout';
 
 export type MainTabParamList = {
@@ -55,6 +58,30 @@ function WebLayout({ onLogout }: { onLogout: () => void }) {
   const [uploadOpen, setUploadOpen] = useState(false);
   // Opened from the client's own profile, and closed by the screen's back button.
   const [showDashboard, setShowDashboard] = useState(false);
+
+  // ── The monthly questionnaire ──────────────────────────────────────────────
+  // Bookkeeping and CFO clients answer a short set of questions before they
+  // start uploading for the month; it tells us what to look for in their books.
+  // Tax-only clients are not asked.
+  const month = monthOf();
+  const asksQuestionnaire = (user?.services ?? []).some(sv => sv === 'BK' || sv === 'CFO');
+  const [questionnaireOpen, setQuestionnaireOpen] = useState(false);
+  // null while unknown — the gate must not fire on a guess.
+  const [questionnaireDone, setQuestionnaireDone] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    if (!user?.email || !asksQuestionnaire) { setQuestionnaireDone(true); return; }
+    let live = true;
+    isQuestionnaireDone(user.email, month).then(done => { if (live) setQuestionnaireDone(done); });
+    return () => { live = false; };
+  }, [user?.email, asksQuestionnaire, month]);
+
+  // Asking comes first, but only once we know the answer — an unread state
+  // must not block someone who has already filled it in.
+  const startUpload = () => {
+    if (questionnaireDone === false) setQuestionnaireOpen(true);
+    else setUploadOpen(true);
+  };
   // Checked here as well as in the profile that offers it. Hiding the way in is
   // not the same as refusing to render: this screen holds one client's books, so
   // whether it draws at all is decided from who is signed in, not from state.
@@ -137,7 +164,7 @@ function WebLayout({ onLogout }: { onLogout: () => void }) {
               );
             })}
             {/* Upload action */}
-            <TouchableOpacity style={mob.tabItem} onPress={() => setUploadOpen(true)} activeOpacity={0.7}>
+            <TouchableOpacity style={mob.tabItem} onPress={startUpload} activeOpacity={0.7}>
               <Ionicons name="cloud-upload-outline" size={22} color="#E8B923" />
               <Text style={[mob.tabLabel, { color: '#E8B923' }]}>Upload</Text>
             </TouchableOpacity>
@@ -145,6 +172,12 @@ function WebLayout({ onLogout }: { onLogout: () => void }) {
         </View>
 
         <ClientUploadModal visible={uploadOpen} onClose={() => setUploadOpen(false)} />
+      <MonthlyQuestionnaireModal
+        visible={questionnaireOpen}
+        month={month}
+        onClose={() => setQuestionnaireOpen(false)}
+        onSubmitted={() => { setQuestionnaireDone(true); setUploadOpen(true); }}
+      />
       </View>
     );
   }
@@ -202,7 +235,7 @@ function WebLayout({ onLogout }: { onLogout: () => void }) {
           })}
 
           {/* Upload — the single client upload entry point */}
-          <TouchableOpacity style={web.uploadBtn} onPress={() => setUploadOpen(true)} activeOpacity={0.85}>
+          <TouchableOpacity style={web.uploadBtn} onPress={startUpload} activeOpacity={0.85}>
             <Ionicons name="cloud-upload-outline" size={18} color="#3A3131" />
             <Text style={web.uploadBtnText}>Upload</Text>
           </TouchableOpacity>
@@ -262,6 +295,12 @@ function WebLayout({ onLogout }: { onLogout: () => void }) {
       )}
 
       <ClientUploadModal visible={uploadOpen} onClose={() => setUploadOpen(false)} />
+      <MonthlyQuestionnaireModal
+        visible={questionnaireOpen}
+        month={month}
+        onClose={() => setQuestionnaireOpen(false)}
+        onSubmitted={() => { setQuestionnaireDone(true); setUploadOpen(true); }}
+      />
     </View>
   );
 }
