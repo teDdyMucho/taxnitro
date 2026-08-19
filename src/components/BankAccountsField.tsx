@@ -19,23 +19,13 @@ import { Colors } from '../constants/colors';
 import { BankAccount, bankAccountLabel, newBankAccountId } from '../db/requirements';
 
 // ── Validation ────────────────────────────────────────────────────────────────
-
-/** A card is complete when it has a bank name and exactly 4 digits. */
-export function isCompleteBankAccount(a: BankAccount): boolean {
-  return a.bank.trim().length > 0 && /^\d{4}$/.test(a.last4.trim());
-}
-
-/** True if any card is half-filled — the caller should block save until fixed. */
-export function hasIncompleteBankAccount(accounts: BankAccount[]): boolean {
-  return accounts.some(a => !isCompleteBankAccount(a));
-}
-
-/** Drop half-filled cards and trim — what actually gets written to the profile. */
-export function cleanBankAccounts(accounts: BankAccount[]): BankAccount[] {
-  return accounts
-    .filter(isCompleteBankAccount)
-    .map(a => ({ id: a.id, bank: a.bank.trim(), last4: a.last4.trim() }));
-}
+// These moved next to BankAccount itself, so the questionnaire can use the same
+// rule without importing a component. Re-exported here for the screens that
+// already take them from this file.
+import {
+  isCompleteBankAccount, hasIncompleteBankAccount, cleanBankAccounts,
+} from '../db/requirements';
+export { isCompleteBankAccount, hasIncompleteBankAccount, cleanBankAccounts };
 
 // ── Component ─────────────────────────────────────────────────────────────────
 

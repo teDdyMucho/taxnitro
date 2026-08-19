@@ -35,6 +35,8 @@ interface AuthContextValue {
   logout: () => Promise<void>;
   clearError: () => void;
   forgotPassword: (email: string) => Promise<{ success: boolean; error?: string }>;
+  /** Re-read the profile after something changed it — closing a bank account, say. */
+  refreshProfile: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -239,10 +241,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return { success: true };
   }, []);
 
+  // Same rule as everywhere else here: on failure keep the user we have rather
+  // than replacing them with defaults.
+  const refreshProfile = useCallback(async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user) return;
+    const profile = await fetchProfile(session.user.id, session.user.email ?? '');
+    if (profile) setUser(profile);
+  }, []);
+
   return (
     <AuthContext.Provider value={{
       isAuthenticated, isLoading, error, user, signOutReason, clearSignOutReason,
-      login, register, logout, clearError, forgotPassword,
+      login, register, logout, clearError, forgotPassword, refreshProfile,
     }}>
       {/* Web tracks input through DOM listeners. React Native has no global
           input event, so touches are captured here and passed along — the

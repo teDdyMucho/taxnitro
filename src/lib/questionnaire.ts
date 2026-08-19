@@ -1,4 +1,4 @@
-import type { BankAccount } from '../db/requirements';
+import { cleanBankAccounts, type BankAccount } from './bankAccounts';
 
 // The monthly questionnaire for bookkeeping and CFO clients, asked before they
 // start uploading for the month.
@@ -109,6 +109,11 @@ export interface Answer {
   accounts?: BankAccount[];
   /** Ids of their existing accounts that closed, for the second. */
   closed?: string[];
+  /**
+   * Those same accounts as they read at the time. Closing one takes it off the
+   * profile, so the ids alone would leave the record unreadable a month later.
+   */
+  closedAccounts?: BankAccount[];
   files?: AnswerFile[];
 }
 
@@ -145,7 +150,8 @@ export function isAnswerComplete(q: Question, a: Answer | undefined): boolean {
     case 'none':            return true;
     case 'short_text':
     case 'long_text':       return !!a.text?.trim();
-    case 'bank_accounts':   return (a.accounts ?? []).length > 0;
+    // A card that has been added but not filled in is not an answer.
+    case 'bank_accounts':   return cleanBankAccounts(a.accounts ?? []).length > 0;
     case 'closed_accounts': return (a.closed ?? []).length > 0;
     case 'upload':          return (a.files ?? []).length > 0;
   }

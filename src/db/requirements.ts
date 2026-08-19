@@ -45,11 +45,15 @@ export function itemsByService(service: RequirementService): RequiredItem[] {
 // With NO accounts configured the generic item is kept, so clients created
 // before this feature behave exactly as before.
 
-export interface BankAccount {
-  id: string;      // stable — the requirement_key depends on it, never reuse
-  bank: string;    // e.g. 'BDO'
-  last4: string;   // last 4 digits of the account number
-}
+// The type and its rules live in lib/bankAccounts.ts, which pulls in nothing —
+// the questionnaire needs them and must not drag a database client along.
+// Re-exported here for everything that already takes them from this file.
+import {
+  isCompleteBankAccount, hasIncompleteBankAccount, cleanBankAccounts,
+  type BankAccount,
+} from '../lib/bankAccounts';
+export { isCompleteBankAccount, hasIncompleteBankAccount, cleanBankAccounts };
+export type { BankAccount };
 
 /** The base requirement key that per-account items expand from. */
 export const BANK_STATEMENTS_KEY = 'bank_statements';

@@ -54,6 +54,34 @@ export async function updateProfile(userId: string, updates: Partial<Pick<Profil
   return data;
 }
 
+/**
+ * Drop accounts a client has told us are closed, so they stop being asked for
+ * next month. Their id is never reused, so the requirement rows already filed
+ * against a closed account keep pointing at the right thing.
+ *
+ * Reads the current list first rather than writing a computed one, so two
+ * changes in the same month cannot overwrite each other.
+ */
+export async function removeBankAccounts(userId: string, ids: string[]): Promise<BankAccount[] | null> {
+  if (!userId || ids.length === 0) return null;
+  const { data: current, error: readErr } = await supabase
+    .from('profiles')
+    .select('bank_accounts')
+    .eq('id', userId)
+    .maybeSingle();
+  if (readErr) { console.error('removeBankAccounts (read):', readErr.message); return null; }
+
+  const kept = normalizeBankAccounts(current?.bank_accounts).filter(a => !ids.includes(a.id));
+  const { data, error } = await supabase
+    .from('profiles')
+    .update({ bank_accounts: kept })
+    .eq('id', userId)
+    .select('bank_accounts')
+    .single();
+  if (error) { console.error('removeBankAccounts:', error.message); return null; }
+  return normalizeBankAccounts(data?.bank_accounts);
+}
+
 export async function updateClientProfile(
   userId: string,
   updates: Partial<Pick<Profile, 'full_name' | 'plan' | 'is_active' | 'services' | 'has_qbo_access' | 'bank_accounts'>>,

@@ -10,6 +10,7 @@ import { Colors } from '../constants/colors';
 import { useAuth } from '../context/AuthContext';
 import { BankAccountsField, cleanBankAccounts } from './BankAccountsField';
 import { uploadDocumentToStorage } from '../db/documents';
+import { removeBankAccounts } from '../db/profiles';
 import { formatMonthLabel } from '../db/requirements';
 import type { BankAccount } from '../db/requirements';
 import {
@@ -34,7 +35,7 @@ export function MonthlyQuestionnaireModal({
   onClose: () => void;
   onSubmitted?: () => void;
 }) {
-  const { user } = useAuth();
+  const { user, refreshProfile } = useAuth();
   const email = user?.email ?? '';
 
   const [answers, setAnswers] = useState<Answers>(emptyAnswers);
@@ -101,8 +102,22 @@ export function MonthlyQuestionnaireModal({
     if (status === 'submitted' && missing.length > 0) { setShowMissing(true); return; }
     setBusy(status === 'submitted' ? 'submit' : 'save');
     const row = await saveQuestionnaire(email, month, answers, status);
+    if (!row) { setBusy(null); return; }    // the db module already logged why
+
+    // Accounts they have told us are closed come off their list, so next month
+    // does not ask for statements on an account that no longer exists. Only on
+    // submit: a saved draft is not their final answer.
+    if (status === 'submitted') {
+      const closed = answers.closed_accounts?.value === 'yes'
+        ? (answers.closed_accounts.closed ?? [])
+        : [];
+      if (closed.length && user?.id) {
+        await removeBankAccounts(user.id, closed);
+        await refreshProfile();
+      }
+    }
+
     setBusy(null);
-    if (!row) return;                       // the db module already logged why
     if (status === 'submitted') onSubmitted?.();
     onClose();
   };
@@ -143,17 +158,27 @@ export function MonthlyQuestionnaireModal({
             </Text>
           ) : (
             <View style={{ gap: 8 }}>
+              <Text style={s.note}>
+                Anything you tick here comes off your list, so we stop asking for
+                its statements next month.
+              </Text>
               {myAccounts.map(acc => {
                 const on = (a.closed ?? []).includes(acc.id);
                 return (
                   <TouchableOpacity
                     key={acc.id}
                     style={[s.pick, on && s.pickOn]}
-                    onPress={() => setAnswer(q.key, {
-                      closed: on
+                    onPress={() => {
+                      const closed = on
                         ? (a.closed ?? []).filter(id => id !== acc.id)
-                        : [...(a.closed ?? []), acc.id],
-                    })}
+                        : [...(a.closed ?? []), acc.id];
+                      // Keep the names alongside the ids: the account is about
+                      // to leave their profile, and an id alone reads as noise.
+                      setAnswer(q.key, {
+                        closed,
+                        closedAccounts: myAccounts.filter(x => closed.includes(x.id)),
+                      });
+                    }}
                     activeOpacity={0.8}
                   >
                     <Ionicons

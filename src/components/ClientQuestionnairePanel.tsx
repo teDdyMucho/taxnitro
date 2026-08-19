@@ -28,10 +28,11 @@ function AnswerDetail({ a, accounts }: { a: Answer; accounts: BankAccount[] }) {
   }
 
   if (a.closed?.length) {
-    // Fall back to the id when the account has since been removed from their
-    // profile — better a raw id than a silently missing line.
+    // Closing an account takes it off the profile, so the names recorded at the
+    // time are the reliable source. Fall back to their current list, then to the
+    // raw id — better that than a silently missing line.
     const names = a.closed.map(id => {
-      const acc = accounts.find(x => x.id === id);
+      const acc = a.closedAccounts?.find(x => x.id === id) ?? accounts.find(x => x.id === id);
       return acc ? `${acc.bank} · end ${acc.last4}` : id;
     });
     return <Text style={s.detail}>{names.join('\n')}</Text>;
