@@ -10,9 +10,12 @@ import { ClientDashboardScreen } from './ClientDashboardScreen';
 // Financial Reports — the clients whose dashboard has been built.
 //
 // A dashboard is made from a client's own workbook, so this lists whoever
-// actually has one rather than every client on the books. With a single client
-// built, the tab opens straight into their report; once there is more than one
-// it shows the list first, and the report gets a way back to it.
+// actually has one rather than every client on the books.
+//
+// The list shows even when only one client has a dashboard. Opening straight
+// into it would save a tap, but this tab used to go directly to one client's
+// report and that is the thing being fixed: the button leads to whoever has a
+// dashboard, and you pick.
 
 interface WithDashboard {
   client: Profile;
@@ -34,8 +37,6 @@ export function FinancialReportsScreen({ onBack }: { onBack?: () => void }) {
         .map(client => ({ client, dashboard: dashboardForClient(client) }))
         .filter((r): r is WithDashboard => r.dashboard != null);
       setRows(withDash);
-      // One client, no decision to make — go straight in.
-      if (withDash.length === 1) setOpenId(withDash[0].client.id);
     });
     return () => { live = false; };
   }, []);
@@ -50,14 +51,14 @@ export function FinancialReportsScreen({ onBack }: { onBack?: () => void }) {
 
   const open = rows.find(r => r.client.id === openId);
   if (open) {
-    // Staff and admin see the whole report, internal tabs included. Back returns
-    // to the list when there is one to return to, and off the tab when there is not.
+    // Staff and admin see the whole report, internal tabs included. Back always
+    // returns to the list, because that is where it was opened from.
     return (
       <ClientDashboardScreen
         dashboard={open.dashboard}
         staffView
-        onBack={rows.length > 1 ? () => setOpenId(null) : onBack}
-        backLabel={rows.length > 1 ? 'Back to Financial Reports' : 'Back to Admin'}
+        onBack={() => setOpenId(null)}
+        backLabel="Back to Financial Reports"
       />
     );
   }
@@ -72,7 +73,7 @@ export function FinancialReportsScreen({ onBack }: { onBack?: () => void }) {
         <Text style={s.title}>Financial Reports</Text>
         <Text style={s.sub}>
           Restated statements, the live forecast model and the monthly commentary,
-          built from each client's own workbook.
+          built from each client's own workbook. Pick a client to open theirs.
         </Text>
       </LinearGradient>
 
