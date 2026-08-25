@@ -58,12 +58,6 @@ export const QUESTIONS: Question[] = [
     prompt: 'Please describe.',
   },
   {
-    key: 'major_purchases',
-    text: 'Were there any major asset purchases (equipment, vehicles, computers, furniture)?',
-    followUp: 'short_text',
-    prompt: 'Please describe.',
-  },
-  {
     key: 'compliance',
     text: 'Were there any compliance issues we should be aware of?',
     followUp: 'long_text',
@@ -71,7 +65,7 @@ export const QUESTIONS: Question[] = [
   },
   {
     key: 'assets_bought',
-    text: 'Did the business purchase any assets?',
+    text: 'Did the business purchase any assets (equipment, vehicles, computers, furniture)?',
     followUp: 'short_text',
     prompt: 'Please describe.',
   },
