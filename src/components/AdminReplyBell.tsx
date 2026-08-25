@@ -77,12 +77,9 @@ export function AdminReplyBell({ onMarkedRead }: Props) {
   const { width: winW, height: winH } = useWindowDimensions();
   // Wide enough to hang under the bell rather than stretch across the screen.
   const wide = winW >= 640;
-  // On a phone this is a bottom sheet, like every other sheet in the app: a
-  // panel hanging from the top would sit across the screen title, since the
-  // bell is in that same header rather than off to the side.
-  const listMax = wide
-    ? Math.max(180, winH - (insets.top + 70) - 76 - (insets.bottom + 24))
-    : Math.max(180, winH * 0.6);
+  // What is left after the gap above the panel, its header, and a little room
+  // at the bottom — so the list never runs off a short screen.
+  const listMax = Math.max(180, winH - (insets.top + 70) - 76 - (insets.bottom + 24));
   const mountedRef = useRef(true);
   useEffect(() => () => { mountedRef.current = false; }, []);
 
@@ -277,29 +274,19 @@ export function AdminReplyBell({ onMarkedRead }: Props) {
         animationType="fade"
         onRequestClose={() => setOpen(false)}
       >
-        <Pressable
-          style={[bs.overlay, !wide && { justifyContent: 'flex-end' }]}
-          onPress={() => setOpen(false)}
-        >
+        <Pressable style={bs.overlay} onPress={() => setOpen(false)}>
           <Pressable
             style={[
               bs.panel,
-              // Desktop: hangs at the top right, under the bell it came from.
-              // Phone: rises from the bottom, clear of the header entirely.
+              { marginTop: insets.top + 70 },
+              // On a phone it fills the width; on a desktop it sits under the
+              // bell at the top right, where it was opened from.
               wide
-                ? { marginTop: insets.top + 70, alignSelf: 'flex-end', width: 400, marginRight: 16 }
-                : {
-                    alignSelf: 'stretch',
-                    marginHorizontal: 0,
-                    marginBottom: 0,
-                    paddingBottom: insets.bottom,
-                    borderBottomLeftRadius: 0,
-                    borderBottomRightRadius: 0,
-                  },
+                ? { alignSelf: 'flex-end', width: 400, marginRight: 16 }
+                : { alignSelf: 'stretch' },
             ]}
             onPress={() => {}}
           >
-            {!wide && <View style={bs.grabber} />}
 
             {/* Panel header */}
             <LinearGradient
@@ -426,10 +413,6 @@ const bs = StyleSheet.create({
 
   // Overlay + panel
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)' },
-  grabber: {
-    width: 40, height: 4, borderRadius: 2, backgroundColor: '#E5E7EB',
-    alignSelf: 'center', marginTop: 10, marginBottom: 2,
-  },
   panel: {
     marginHorizontal: 12,
     backgroundColor: '#FFFFFF',
