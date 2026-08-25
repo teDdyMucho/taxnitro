@@ -642,6 +642,7 @@ function DocListView({ sf, root, rootColor, documents, refreshing, onRefresh, on
         fixedFolder={sf.key}
         fixedSubfolder={activeSub?.id ?? null}
         notify
+        notifyLabel={sf.label}
         onClose={() => setUploadOpen(false)}
         onUploaded={d => { onUploadDone(d); setUploadOpen(false); }}
       />

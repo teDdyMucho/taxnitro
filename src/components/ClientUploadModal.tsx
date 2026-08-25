@@ -137,7 +137,7 @@ function fmtSize(bytes?: number): string {
 }
 
 export function ClientUploadModal({
-  visible, onClose, onUploaded, fixedFolder, fixedSubfolder, notify = false,
+  visible, onClose, onUploaded, fixedFolder, fixedSubfolder, notify = false, notifyLabel,
 }: {
   visible: boolean;
   onClose: () => void;
@@ -157,6 +157,13 @@ export function ClientUploadModal({
    * whoever owns the flow, not a side effect of this modal replacing another.
    */
   notify?: boolean;
+  /**
+   * The folder's name as the client sees it, for the webhook's `subfolder`
+   * field. Taken from the caller rather than from the chosen option, because in
+   * a Required Info folder the option is the ITEM — "Bank Statements — BDO
+   * ••••4821" — and n8n has always been sent the folder.
+   */
+  notifyLabel?: string;
 }) {
   const { user } = useAuth();
   const sheet = useSheetStyles('md');
@@ -366,7 +373,9 @@ export function ClientUploadModal({
           if (doc) {
             if (notify) {
               await notifyWebhook({
-                file, folderKey: option.folder, folderLabel: option.label,
+                file,
+                folderKey: option.folder,
+                folderLabel: notifyLabel ?? option.label,
                 documentUrl: url, email: user.email, userId: user.id,
               });
             }
