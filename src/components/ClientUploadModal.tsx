@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, Modal, Pressable, TouchableOpacity, TextInput,
   ScrollView, ActivityIndicator, Alert, Platform,
@@ -10,6 +10,7 @@ import { Colors } from '../constants/colors';
 import { useAuth } from '../context/AuthContext';
 import { useSheetStyles } from '../hooks/useSheetStyles';
 import { uploadDocumentToStorage, createDocumentRecord, Document } from '../db/documents';
+import { moveDocumentToSubfolder } from '../db/subfolders';
 import {
   RequiredItem, RequirementService, BANK_STATEMENTS_KEY,
   itemsForClient, collectorFolderForService, createPendingRequirement,
@@ -31,9 +32,48 @@ import { supabase } from '../lib/supabase';
 
 // Catch-all folder per service, so a client is never stuck with a document that
 // isn't one of their required items.
-const EXTRA_FOLDER: Record<'BK' | 'CFO', { key: string; label: string }> = {
-  BK:  { key: 'bk_final_pnl',        label: 'Additional BK Docs' },
-  CFO: { key: 'cfo_additional_docs', label: 'Additional CFO Docs' },
+// The n8n flow that has always been told about uploads made from inside a
+// folder. Only that one call site ever notified it; the Documents button never
+// did. Kept exactly that way here rather than quietly widening what reaches it.
+const WEBHOOK_URL = 'https://primary-production-6722.up.railway.app/webhook/fileupload-mobileapp-ghl-ftg';
+
+/** 'TAX' | 'BK' | 'CFO' from a folder key — what the webhook calls `folder`. */
+const serviceOf = (folderKey: string) =>
+  folderKey.startsWith('tax_') ? 'TAX' : folderKey.startsWith('cfo_') ? 'CFO' : 'BK';
+
+/** Tell n8n, and never let it hold up or fail an upload that already worked. */
+async function notifyWebhook(args: {
+  file: PickedFile; folderKey: string; folderLabel: string;
+  documentUrl: string; email: string; userId: string;
+}) {
+  try {
+    const form = new FormData();
+    if (Platform.OS === 'web') {
+      const blob = await (await fetch(args.file.uri)).blob();
+      form.append('file', blob, args.file.name);
+    } else {
+      form.append('file', { uri: args.file.uri, name: args.file.name, type: args.file.mimeType } as any);
+    }
+    form.append('folder',        serviceOf(args.folderKey));
+    form.append('subfolder',     args.folderLabel);
+    form.append('subfolder_key', args.folderKey);
+    form.append('document_url',  args.documentUrl);
+    form.append('email',         args.email);
+    form.append('user_id',       args.userId);
+    await fetch(WEBHOOK_URL, { method: 'POST', body: form });
+  } catch (e: any) {
+    console.warn('Webhook notify failed (non-fatal):', e?.message);
+  }
+}
+
+const EXTRA_FOLDER: Record<'BK' | 'CFO', { key: string; label: string }[]> = {
+  BK: [
+    { key: 'bk_bank_accounts', label: 'Bank Accounts' },
+    { key: 'bk_final_pnl',     label: 'Additional BK Docs' },
+  ],
+  CFO: [
+    { key: 'cfo_additional_docs', label: 'Additional CFO Docs' },
+  ],
 };
 
 const TAX_FOLDERS: { key: string; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
@@ -96,8 +136,27 @@ function fmtSize(bytes?: number): string {
   return bytes < 1048576 ? `${(bytes / 1024).toFixed(0)} KB` : `${(bytes / 1048576).toFixed(1)} MB`;
 }
 
-export function ClientUploadModal({ visible, onClose, onUploaded }: {
-  visible: boolean; onClose: () => void; onUploaded?: (d: Document) => void;
+export function ClientUploadModal({
+  visible, onClose, onUploaded, fixedFolder, fixedSubfolder, notify = false,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  onUploaded?: (d: Document) => void;
+  /**
+   * Opened from inside a folder — only that folder's options are offered. For a
+   * Required Info folder that is still a list, because the client picks which
+   * required item the file is for; for an ordinary folder it is a single choice
+   * and gets selected for them.
+   */
+  fixedFolder?: string | null;
+  /** The subfolder they had open, so files land where they were looking. */
+  fixedSubfolder?: string | null;
+  /**
+   * Notify the n8n flow, as uploading from inside a folder always has. Left off
+   * for the Documents button, which never did — widening that is a decision for
+   * whoever owns the flow, not a side effect of this modal replacing another.
+   */
+  notify?: boolean;
 }) {
   const { user } = useAuth();
   const sheet = useSheetStyles('md');
@@ -137,11 +196,13 @@ export function ClientUploadModal({ visible, onClose, onUploaded }: {
           requirement: item,
         }));
 
-      const extra = EXTRA_FOLDER[svc];
-      options.push({
-        id: `folder:${extra.key}`, label: extra.label, icon: 'folder-outline',
-        folder: extra.key, requirement: null,
-      });
+      EXTRA_FOLDER[svc].forEach(extra => options.push({
+        id: `folder:${extra.key}`,
+        label: extra.label,
+        icon: extra.key === 'bk_bank_accounts' ? 'card-outline' : 'folder-outline',
+        folder: extra.key,
+        requirement: null,
+      }));
 
       out.push({ title: serviceLabel(svc), options });
     });
@@ -156,10 +217,21 @@ export function ClientUploadModal({ visible, onClose, onUploaded }: {
       });
     }
 
-    return out;
-  }, [user?.services, user?.hasQboAccess, user?.bankAccounts]);
+    if (!fixedFolder) return out;
+    return out
+      .map(g => ({ ...g, options: g.options.filter(o => o.folder === fixedFolder) }))
+      .filter(g => g.options.length > 0);
+  }, [user?.services, user?.hasQboAccess, user?.bankAccounts, fixedFolder]);
 
   const allOptions = useMemo(() => groups.flatMap(g => g.options), [groups]);
+
+  // Opened inside an ordinary folder there is exactly one option, and asking
+  // which of one is pointless. A Required Info folder still has several — the
+  // client says which item the file is for — so that stays a choice.
+  useEffect(() => {
+    if (!visible) return;
+    if (allOptions.length === 1) setSelectedId(allOptions[0].id);
+  }, [visible, allOptions]);
 
   const selected = useMemo(
     () => allOptions.find(o => o.id === selectedId) ?? null,
@@ -291,7 +363,20 @@ export function ClientUploadModal({ visible, onClose, onUploaded }: {
             uploadedByRole: 'client',
             uploadedBy: user.email,
           });
-          if (doc) { inThisGroup.push(doc); uploaded.push({ doc, folder: option.folder }); }
+          if (doc) {
+            if (notify) {
+              await notifyWebhook({
+                file, folderKey: option.folder, folderLabel: option.label,
+                documentUrl: url, email: user.email, userId: user.id,
+              });
+            }
+            // Opened from inside a subfolder, so that is where it belongs.
+            // createDocumentRecord takes no subfolder, hence the follow-up; a
+            // failure here leaves the file in the folder root rather than lost.
+            if (fixedSubfolder) await moveDocumentToSubfolder(option.folder, doc.id, fixedSubfolder);
+            inThisGroup.push(doc);
+            uploaded.push({ doc, folder: option.folder });
+          }
           else failed.push(file.name);
           setSent(n => n + 1);
         }

@@ -22,6 +22,7 @@ import {
   useDownloadSelection, DownloadSelectionBar, DownloadNotice, SelectCheckbox,
 } from '../../components/DownloadSelectionBar';
 import { listSubfolders, Subfolder } from '../../db/subfolders';
+import { ClientUploadModal } from '../../components/ClientUploadModal';
 import * as DocumentPicker from 'expo-document-picker';
 import * as WebBrowser from 'expo-web-browser';
 import WebView from 'react-native-webview';
@@ -633,12 +634,14 @@ function DocListView({ sf, root, rootColor, documents, refreshing, onRefresh, on
 
       <DownloadNotice message={dl.notice} />
 
-      <UploadModal
+      {/* The upload from the Documents button, aimed at the folder already
+          open — drag and drop, several files at once, and they land in the
+          subfolder being looked at rather than back at the folder root. */}
+      <ClientUploadModal
         visible={uploadOpen}
-        sf={sf}
-        root={root}
-        userId={userId}
-        userEmail={userEmail}
+        fixedFolder={sf.key}
+        fixedSubfolder={activeSub?.id ?? null}
+        notify
         onClose={() => setUploadOpen(false)}
         onUploaded={d => { onUploadDone(d); setUploadOpen(false); }}
       />
@@ -761,258 +764,6 @@ function DocCard({ doc, sf, onPress, selecting, marked, onDownload }: {
 // ── Upload Modal ──────────────────────────────────────────────────────────────
 
 interface PickedFile { uri: string; name: string; mimeType: string; size?: number }
-
-function UploadModal({ visible, sf, root, userId, userEmail, onClose, onUploaded }: {
-  visible: boolean; sf: SubFolder; root: RootFolder; userId: string; userEmail: string;
-  onClose: () => void; onUploaded: (d: Document) => void;
-}) {
-  const { user } = useAuth();
-  const [picked, setPicked]   = useState<PickedFile | null>(null);
-  const [busy, setBusy]       = useState(false);
-  const [pct, setPct]         = useState(0);
-  const [done, setDone]       = useState(false);
-
-  // Collector folders (e.g. Monthly Reporting → Required Info) show a picker of the
-  // required items, so the client tags which item this upload is for.
-  const requiresPick = isRequirementFolder(sf.key);
-  const [requirement, setRequirement] = useState<RequiredItem | null>(null);
-
-  const reset = () => { setPicked(null); setPct(0); setDone(false); setRequirement(null); };
-  const close = () => { reset(); onClose(); };
-
-  const pick = async () => {
-    try {
-      const r = await DocumentPicker.getDocumentAsync({ type: '*/*', copyToCacheDirectory: true, multiple: false });
-      if (r.canceled) return;
-      const a = r.assets[0];
-      setPicked({ uri: a.uri, name: a.name, mimeType: a.mimeType ?? 'application/octet-stream', size: a.size });
-    } catch { Alert.alert('Error', 'Could not pick a file.'); }
-  };
-
-  const upload = async () => {
-    if (!picked) return;
-    setBusy(true); setPct(15);
-
-    try {
-      // ── Step 1: Upload to Supabase Storage to get a real public URL ──────────
-      const storageUrl = await uploadDocumentToStorage(
-        userId, sf.key, picked.uri, picked.name, picked.mimeType,
-      );
-      setPct(50);
-
-      if (!storageUrl) {
-        setBusy(false); setPct(0);
-        Alert.alert('Upload Failed', 'Could not save file to storage. Make sure the "documents" bucket exists in Supabase and is set to Public.');
-        return;
-      }
-
-      // ── Step 2: Notify webhook (fire-and-forget, non-blocking) ───────────────
-      try {
-        const formData = new FormData();
-        if (Platform.OS === 'web') {
-          const res = await fetch(picked.uri);
-          const blob = await res.blob();
-          formData.append('file', blob, picked.name);
-        } else {
-          formData.append('file', { uri: picked.uri, name: picked.name, type: picked.mimeType } as any);
-        }
-        formData.append('folder',        root.label);   // TAX or BK
-        formData.append('subfolder',     sf.label);      // e.g. Client Uploads
-        formData.append('subfolder_key', sf.key);        // e.g. tax_client_uploads
-        formData.append('document_url',  storageUrl);   // real public URL
-        formData.append('email',         userEmail);
-        formData.append('user_id',       userId);
-        await fetch(WEBHOOK_URL, { method: 'POST', body: formData });
-      } catch (webhookErr: any) {
-        console.warn('Webhook notify failed (non-fatal):', webhookErr?.message);
-      }
-      setPct(80);
-
-      // ── Step 3: Save record to the correct folder table ──────────────────────
-      // For Required Info folders, prefix the chosen item label so it's identifiable.
-      const docName = requirement ? `${requirement.label} — ${picked.name}` : picked.name;
-      const doc = await createDocumentRecord({
-        userId,
-        email: userEmail,
-        name: docName,
-        documentUrl: storageUrl,   // always a real https:// URL
-        documentType: sf.key,
-      });
-      // ── Step 4: If this folder IS a required item, mark it PENDING ──────────────
-      // (turns the dashboard radio yellow immediately, before admin approval)
-      if (doc && requirement && userEmail) {
-        await createPendingRequirement({
-          clientEmail:    userEmail,
-          documentId:     doc.id,
-          documentTable:  sf.key,
-          service:        requirement.service,
-          requirementKey: requirement.key,
-          month:          monthOf(),
-        });
-      }
-
-      setPct(100); setBusy(false);
-
-      if (!doc) { Alert.alert('Partial Success', 'File saved but record creation failed.'); return; }
-      setDone(true);
-      setTimeout(() => { onUploaded(doc); reset(); }, 1400);
-
-    } catch (err: any) {
-      setBusy(false); setPct(0);
-      Alert.alert('Upload Failed', err?.message ?? 'Something went wrong. Check your connection and try again.');
-    }
-  };
-
-  const fmtSize = (b?: number) => !b ? '' : b < 1048576 ? `${(b / 1024).toFixed(1)} KB` : `${(b / 1048576).toFixed(1)} MB`;
-
-  return (
-    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={close}>
-      <View style={up.root}>
-        {/* Header */}
-        <LinearGradient colors={[sf.bg, Colors.bgDeep]} style={up.header} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
-          <TouchableOpacity onPress={close} disabled={busy} style={up.closeBtn}>
-            <Ionicons name="close" size={20} color={Colors.textPrimary} />
-          </TouchableOpacity>
-          <View style={up.headerCenter}>
-            <View style={[up.headerIcon, { backgroundColor: sf.bg }]}>
-              <Ionicons name={sf.icon} size={22} color={sf.color} />
-            </View>
-            <Text style={up.headerTitle}>{sf.label}</Text>
-            <Text style={up.headerSub}>{requiresPick ? 'Select an item, then upload' : 'Upload a document'}</Text>
-          </View>
-          <View style={{ width: 34 }} />
-        </LinearGradient>
-
-        <ScrollView contentContainerStyle={up.body} showsVerticalScrollIndicator={false}>
-          {/* ── Done */}
-          {done && (
-            <View style={up.doneWrap}>
-              <View style={up.doneCircle}>
-                <Ionicons name="time-outline" size={72} color="#F59E0B" />
-              </View>
-              <Text style={up.doneTitle}>Sent for Review</Text>
-              <Text style={up.doneSub}>"{picked?.name}" is pending admin approval before it appears in {sf.label}</Text>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#FEF3C7', borderRadius: 14, paddingHorizontal: 14, paddingVertical: 8, marginTop: 8 }}>
-                <Ionicons name="shield-checkmark-outline" size={14} color="#92400E" />
-                <Text style={{ color: '#92400E', fontSize: 12, fontWeight: '600' }}>Admin will review shortly</Text>
-              </View>
-            </View>
-          )}
-
-          {/* ── Uploading */}
-          {!done && busy && (
-            <View style={up.progressWrap}>
-              <View style={[up.progressIcon, { backgroundColor: sf.bg }]}>
-                <Ionicons name="cloud-upload" size={40} color={sf.color} />
-              </View>
-              <Text style={up.progressTitle}>Uploading…</Text>
-              <Text style={up.progressFile} numberOfLines={1}>{picked?.name}</Text>
-              <View style={up.barBg}>
-                <View style={[up.barFill, { width: `${pct}%` as any, backgroundColor: sf.color }]} />
-              </View>
-              <Text style={[up.pctText, { color: sf.color }]}>{pct}%</Text>
-            </View>
-          )}
-
-          {/* ── Idle */}
-          {!done && !busy && (
-            <>
-              {/* Step 1 (collector folders): pick which required item this file is for */}
-              {requiresPick && !requirement && (
-                <View style={up.reqPick}>
-                  <Text style={up.reqPickTitle}>What are you uploading?</Text>
-                  <Text style={up.reqPickSub}>Choose the required item this file is for</Text>
-                  {itemsForFolderAndClient(sf.key, user?.services, user?.hasQboAccess, user?.bankAccounts).map(item => (
-                    <TouchableOpacity key={item.key} style={up.reqItem} activeOpacity={0.75} onPress={() => setRequirement(item)}>
-                      <Ionicons name="ellipse-outline" size={18} color={sf.color} />
-                      <Text style={up.reqItemText}>{item.label}</Text>
-                      <Ionicons name="chevron-forward" size={16} color={Colors.textMuted} />
-                    </TouchableOpacity>
-                  ))}
-                  <TouchableOpacity style={up.cancelBtn} onPress={close}>
-                    <Text style={up.cancelText}>Cancel</Text>
-                  </TouchableOpacity>
-                </View>
-              )}
-
-              {/* Step 2: selected-item chip + file picker (collector), or plain folder */}
-              {(!requiresPick || requirement) && (
-              <>
-              {requiresPick && requirement && (
-                <TouchableOpacity
-                  style={[up.selectedReq, { borderColor: `${sf.color}50`, backgroundColor: sf.bg }]}
-                  onPress={() => { setRequirement(null); setPicked(null); }}
-                  activeOpacity={0.8}
-                >
-                  <Ionicons name="checkmark-circle" size={18} color={sf.color} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={up.selectedReqLabel}>{requirement.label}</Text>
-                    <Text style={up.selectedReqHint}>Tap to change</Text>
-                  </View>
-                  <Ionicons name="swap-horizontal-outline" size={16} color={sf.color} />
-                </TouchableOpacity>
-              )}
-
-              {/* Drop zone */}
-              {!picked ? (
-                <TouchableOpacity style={[up.dropZone, { borderColor: `${sf.color}50` }]} onPress={pick} activeOpacity={0.85}>
-                  <LinearGradient colors={[sf.bg, 'transparent']} style={up.dropGrad} start={{ x: 0.5, y: 0 }} end={{ x: 0.5, y: 1 }}>
-                    <View style={[up.dropIconBox, { backgroundColor: sf.bg }]}>
-                      <Ionicons name="cloud-upload-outline" size={40} color={sf.color} />
-                    </View>
-                    <Text style={up.dropTitle}>Tap to select a file</Text>
-                    <Text style={up.dropSub}>PDF · XLSX · DOCX · Images · Any format</Text>
-                    <View style={[up.browseChip, { borderColor: sf.color, backgroundColor: `${sf.color}15` }]}>
-                      <Ionicons name="folder-open-outline" size={14} color={sf.color} />
-                      <Text style={[up.browseText, { color: sf.color }]}>Browse Files</Text>
-                    </View>
-                  </LinearGradient>
-                </TouchableOpacity>
-              ) : (
-                /* File preview card */
-                <View style={up.fileCard}>
-                  <View style={[up.fileIconBox, { backgroundColor: sf.bg }]}>
-                    <Ionicons name="document-text" size={32} color={sf.color} />
-                  </View>
-                  <View style={up.fileInfo}>
-                    <Text style={up.fileName} numberOfLines={2}>{picked.name}</Text>
-                    <Text style={up.fileMeta}>
-                      {fmtSize(picked.size)}
-                      {picked.mimeType ? ` · ${picked.mimeType.split('/')[1]?.toUpperCase()}` : ''}
-                    </Text>
-                  </View>
-                  <TouchableOpacity onPress={() => setPicked(null)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                    <Ionicons name="close-circle" size={22} color={Colors.error} />
-                  </TouchableOpacity>
-                </View>
-              )}
-
-              {/* Action buttons */}
-              {picked ? (
-                <TouchableOpacity style={[up.actionBtn, { backgroundColor: sf.color }]} onPress={upload}>
-                  <Ionicons name="cloud-upload" size={18} color={Colors.white} />
-                  <Text style={up.actionBtnText}>Upload Document</Text>
-                </TouchableOpacity>
-              ) : (
-                <TouchableOpacity style={[up.actionBtn, { backgroundColor: sf.bg, borderWidth: 1, borderColor: `${sf.color}50` }]} onPress={pick}>
-                  <Ionicons name="add-circle-outline" size={18} color={sf.color} />
-                  <Text style={[up.actionBtnText, { color: sf.color }]}>Select a File</Text>
-                </TouchableOpacity>
-              )}
-
-              <TouchableOpacity style={up.cancelBtn} onPress={close}>
-                <Text style={up.cancelText}>Cancel</Text>
-              </TouchableOpacity>
-              </>
-              )}
-            </>
-          )}
-        </ScrollView>
-      </View>
-    </Modal>
-  );
-}
-
 // ── Inline document viewer modal ─────────────────────────────────────────────
 
 function DocViewerModal({ url, name, sf, visible, onClose }: {
