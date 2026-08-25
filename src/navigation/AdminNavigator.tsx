@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -22,6 +22,8 @@ import { ProfileScreen } from '../screens/main/ProfileScreen';
 import { WorkflowDashboardScreen } from '../screens/admin/WorkflowDashboardScreen';
 import { ClientDashboardScreen } from '../screens/admin/ClientDashboardScreen';
 import { dashboardForClient } from '../lib/clientDashboards';
+import { loadLastPlace, saveLastPlace } from '../lib/lastPlace';
+import { getProfile } from '../db/profiles';
 import { FinancialReportsScreen } from '../screens/admin/FinancialReportsScreen';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -81,6 +83,29 @@ export function AdminNavigator({ onLogout }: { onLogout: () => void }) {
   // Which folder of theirs was open. Held here because the client's page is
   // unmounted when another tab is shown, and its own state goes with it.
   const [clientFolderKey, setClientFolderKey] = useState<string | null>(null);
+
+  // Signing out and back in is exactly when picking up where you left off
+  // matters most, and React state does not survive it — so it is kept on the
+  // device and read back once, when the user is known.
+  useEffect(() => {
+    let live = true;
+    loadLastPlace(user?.id).then(async place => {
+      if (!live || !place?.staff?.clientId) return;
+      const client = await getProfile(place.staff.clientId);
+      // The client may have been deleted since; then there is nothing to open.
+      if (!live || !client) return;
+      setSelectedClient(client);
+      setClientFolderKey(place.staff?.folderKey ?? null);
+      setActiveTab('Clients');
+    });
+    return () => { live = false; };
+  }, [user?.id]);
+
+  useEffect(() => {
+    saveLastPlace(user?.id, {
+      staff: { clientId: selectedClient?.id ?? null, folderKey: clientFolderKey },
+    });
+  }, [user?.id, selectedClient?.id, clientFolderKey]);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
 
   const visibleItems = NAV_ITEMS.filter(i => !i.adminOnly || isAdmin);

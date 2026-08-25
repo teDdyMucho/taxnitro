@@ -23,6 +23,7 @@ import {
 } from '../../components/DownloadSelectionBar';
 import { listSubfolders, subfolderPath, descendantIds, Subfolder } from '../../db/subfolders';
 import { ClientUploadModal } from '../../components/ClientUploadModal';
+import { loadLastPlace, saveLastPlace } from '../../lib/lastPlace';
 import * as DocumentPicker from 'expo-document-picker';
 import * as WebBrowser from 'expo-web-browser';
 import WebView from 'react-native-webview';
@@ -1157,14 +1158,9 @@ type Nav = 'root' | 'sub' | 'group' | 'docs';
  * shown, taking its navigation with it, so coming back from Dashboard used to
  * mean starting at the top and clicking down again.
  *
- * Kept in the module rather than threaded through the navigator: it is one
- * screen, and this is a convenience, not state anything else depends on.
- * Folders are stored by key and looked up again on the way back, so a folder
- * that has since gone simply does not restore.
- *
- * Stamped with the user, so the next person to sign in on this device starts at
- * the root rather than wherever the last one was. Session-only by design — a
- * reload starts at the root too.
+ * Held in the module for the current session and written to the device as well,
+ * so it also survives signing out and back in. Folders are stored by key and
+ * looked up again on the way back, so one that has since gone does not restore.
  */
 let lastPlace: {
   userId: string;
@@ -1186,6 +1182,29 @@ export function DocumentsScreen() {
   const [documents, setDocuments] = useState<Document[]>([]);
   const [loading,   setLoading]   = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  // Read back from the device once, for the case the session cache is empty —
+  // a fresh sign-in. Sets the same module cache the rest of this reads.
+  const [deviceChecked, setDeviceChecked] = useState(false);
+  useEffect(() => {
+    if (!user?.id) return;
+    if (lastPlace?.userId === user.id) { setDeviceChecked(true); return; }
+    let live = true;
+    loadLastPlace(user.id).then(place => {
+      if (!live) return;
+      if (place?.client?.rootKey) {
+        lastPlace = {
+          userId: user.id,
+          nav: (place.client.nav as Nav) ?? 'root',
+          rootKey: place.client.rootKey ?? null,
+          groupKey: place.client.groupKey ?? null,
+          subKey: place.client.subKey ?? null,
+        };
+      }
+      setDeviceChecked(true);
+    });
+    return () => { live = false; };
+  }, [user?.id]);
+
   // Restored once, from wherever this reader was before the tab changed.
   const restored = useMemo(() => {
     if (!user?.id || lastPlace?.userId !== user.id) return null;
@@ -1200,7 +1219,7 @@ export function DocumentsScreen() {
     // A saved position that no longer resolves is not worth restoring badly.
     if (lastPlace!.nav !== 'root' && !root) return null;
     return { nav: lastPlace!.nav, root, group, sub };
-  }, [user?.id]);
+  }, [user?.id, deviceChecked]);
 
   const [nav,        setNav]       = useState<Nav>(restored?.nav ?? 'root');
   const [activeRoot, setActiveRoot] = useState<RootFolder | null>(restored?.root ?? null);
@@ -1217,6 +1236,7 @@ export function DocumentsScreen() {
       groupKey: activeGroup?.key ?? null,
       subKey: activeSub?.key ?? null,
     };
+    saveLastPlace(user.id, { client: { ...lastPlace } });
   }, [user?.id, nav, activeRoot, activeGroup, activeSub]);
   const [selectedDoc, setSelectedDoc] = useState<Document | null>(null);
 
