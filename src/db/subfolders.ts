@@ -48,6 +48,19 @@ export async function listSubfolders(
 }
 
 /**
+ * Every subfolder in the system, for the view that shows the whole structure at
+ * once. Staff-only by RLS, and the one query that would be wasteful per client.
+ */
+export async function listAllSubfolders(): Promise<Subfolder[]> {
+  const { data, error } = await supabase
+    .from('custom_subfolders')
+    .select('*')
+    .order('name', { ascending: true });
+  if (error) { console.error('listAllSubfolders:', error.message); return []; }
+  return (data ?? []) as Subfolder[];
+}
+
+/**
  * Every subfolder belonging to one client, across all folder tables.
  *
  * The per-table version answers "what is in this folder"; a client's document

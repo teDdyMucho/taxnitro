@@ -30,6 +30,7 @@ import {
   useDownloadSelection, DownloadSelectionBar, DownloadNotice, SelectCheckbox,
 } from '../../components/DownloadSelectionBar';
 import { AdminUploadModal } from '../../components/AdminUploadModal';
+import { AllClientFoldersView } from '../../components/AllClientFoldersView';
 import {
   getAllDocuments,
   deleteDocument,
@@ -488,6 +489,8 @@ export function AdminDocumentsScreen() {
   const [approveDoc, setApproveDoc] = useState<Document | null>(null);
   const [actionBusy, setActionBusy] = useState<string | null>(null); // doc id being actioned
   const [browserOpen, setBrowserOpen] = useState(false);
+  // The list answers "what came in"; the tree answers "where does it live".
+  const [view, setView] = useState<'list' | 'folders'>('list');
   const [uploadOpen, setUploadOpen] = useState(false);
 
   const load = useCallback(async (isRefresh = false) => {
@@ -761,6 +764,18 @@ export function AdminDocumentsScreen() {
             <Ionicons name="cloud-upload-outline" size={16} color="#2C2320" />
             <Text style={s.uploadHeaderText}>Upload</Text>
           </TouchableOpacity>
+          {/* Every client's folder structure, or back to the flat list */}
+          <TouchableOpacity
+            style={[s.browseBtn, view === 'folders' && s.browseBtnOn]}
+            onPress={() => setView(v => (v === 'folders' ? 'list' : 'folders'))}
+            activeOpacity={0.75}
+          >
+            <Ionicons
+              name={view === 'folders' ? 'list-outline' : 'git-branch-outline'}
+              size={18}
+              color={view === 'folders' ? '#2C2320' : '#FFFFFF'}
+            />
+          </TouchableOpacity>
           {/* Browse by folder */}
           <TouchableOpacity style={s.browseBtn} onPress={() => setBrowserOpen(true)} activeOpacity={0.75}>
             <Ionicons name="folder-open-outline" size={18} color="#FFFFFF" />
@@ -774,7 +789,7 @@ export function AdminDocumentsScreen() {
       </LinearGradient>
 
       {/* ── Search Bar ── */}
-      <View style={s.searchWrap}>
+      {view === 'list' && <View style={s.searchWrap}>
         <View style={s.searchBox}>
           <Ionicons name="search-outline" size={16} color="#94A3B8" />
           <TextInput
@@ -790,10 +805,10 @@ export function AdminDocumentsScreen() {
             </TouchableOpacity>
           )}
         </View>
-      </View>
+      </View>}
 
       {/* ── Filter dropdown (per-folder, grouped) ── */}
-      <View style={s.filterWrap}>
+      {view === 'list' && <View style={s.filterWrap}>
         <TouchableOpacity style={s.filterBtn} onPress={() => setFilterOpen(true)} activeOpacity={0.8}>
           <Ionicons name="funnel-outline" size={15} color="#B5905B" />
           <Text style={s.filterBtnText} numberOfLines={1}>
@@ -809,7 +824,7 @@ export function AdminDocumentsScreen() {
           })()}
           <Ionicons name="chevron-down" size={16} color="#94A3B8" style={{ marginLeft: 'auto' }} />
         </TouchableOpacity>
-      </View>
+      </View>}
 
       {/* Filter dropdown modal — grouped by category */}
       <Modal visible={filterOpen} transparent animationType="fade" onRequestClose={() => setFilterOpen(false)}>
@@ -865,6 +880,9 @@ export function AdminDocumentsScreen() {
           <ActivityIndicator color="#10B981" size="large" />
           <Text style={s.loadingText}>Fetching documents…</Text>
         </View>
+      ) : view === 'folders' ? (
+        // Every client's structure, from the same documents already loaded.
+        <AllClientFoldersView documents={documents} onOpen={handleView} />
       ) : (
         <FlatList
           data={filtered}
@@ -965,6 +983,7 @@ const s = StyleSheet.create({
     backgroundColor: '#E8B923', paddingHorizontal: 12,
   },
   uploadHeaderText: { color: '#2C2320', fontSize: 13, fontWeight: '800' },
+  browseBtnOn: { backgroundColor: '#E8B923', borderColor: '#E8B923' },
   browseBtn: {
     width: 36, height: 36, borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.15)',
     alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)',
