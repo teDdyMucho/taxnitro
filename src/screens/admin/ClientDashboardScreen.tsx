@@ -6,7 +6,8 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Colors } from '../../constants/colors';
-import type { UeSheets } from '../../data/ueSheets';
+import type { ClientSheets } from '../../data/clientSheets';
+import type { ClientDashboard } from '../../lib/clientDashboards';
 import { UeBarChart } from '../../components/ue/UeBarChart';
 import { UeGridTable, UeStatement } from '../../components/ue/UeTables';
 import {
@@ -16,11 +17,13 @@ import {
   type Assumptions, type Scenario, type LeverKey, type SharedKey, type AnalysisRow, type InsightCard,
 } from '../../lib/ueModel';
 
-// Uniquely Enough Behavioral Health LLC — the monthly financial report.
+// A client's monthly financial report.
 //
-// Every figure comes from the client's own workbook (src/data/ueSheets.ts) and
-// every calculation from src/lib/ueModel.ts. This file only decides how the
-// result is laid out, so the arithmetic can be checked without a screen.
+// Which client is entirely the caller's business: this screen is handed a
+// dashboard, asks it for the workbook, and draws whatever comes back. Every
+// figure comes from that workbook and every calculation from lib/ueModel.ts, so
+// the arithmetic can be checked without a screen and a second client needs no
+// change here at all.
 //
 // Findings for Review and TL;DR are internal working notes: they appear for
 // staff and admin, and never in a client's view.
@@ -38,11 +41,13 @@ const NAV: TabDef[] = [
 const STATEMENTS: TabDef[] = [
   { key: 'fsr', label: 'FS-R' },
   { key: 'fsa', label: 'FS-A' },
-  { key: 'bs', label: 'UE BS' },
-  { key: 'pl', label: 'UE PL' },
+  { key: 'bs', label: 'Balance Sheet' },
+  { key: 'pl', label: 'Profit & Loss' },
 ];
 
-export interface UEDashboardScreenProps {
+export interface ClientDashboardScreenProps {
+  /** Whose report to draw, and where to get their figures. */
+  dashboard: ClientDashboard;
   /** Leaves the report. Omitted when there is nowhere to go back to. */
   onBack?: () => void;
   /** What the back button says — name where it actually returns to. */
@@ -51,27 +56,29 @@ export interface UEDashboardScreenProps {
   staffView?: boolean;
 }
 
-export function UEDashboardScreen({
-  onBack, backLabel = 'Back to Admin', staffView = false,
-}: UEDashboardScreenProps) {
+export function ClientDashboardScreen({
+  dashboard, onBack, backLabel = 'Back to Admin', staffView = false,
+}: ClientDashboardScreenProps) {
   const { width } = useWindowDimensions();
   const wide = width >= 900;
 
-  const [sheets, setSheets] = useState<UeSheets | null>(null);
+  const [sheets, setSheets] = useState<ClientSheets | null>(null);
   const [tab, setTab] = useState<TabKey>('dash');
   const [month, setMonth] = useState(7);
   const [assumptions, setAssumptions] = useState<Assumptions>(DEFAULT_ASSUMPTIONS);
 
   // One client's financials are a large module, and nobody needs them until
-  // this screen opens — so it is pulled in on mount rather than bundled into
-  // the app everyone downloads.
+  // this screen opens — so the dashboard fetches its own on mount rather than
+  // every workbook riding along in the app everyone downloads. Reloads when the
+  // dashboard changes, so switching clients does not leave the last one on screen.
   useEffect(() => {
     let live = true;
-    import('../../data/ueSheets')
-      .then(m => { if (live) setSheets(m.UE_SHEETS); })
-      .catch(e => console.error('UEDashboard: could not load the workbook', e));
+    setSheets(null);
+    dashboard.load()
+      .then(data => { if (live) setSheets(data); })
+      .catch(e => console.error(`ClientDashboard [${dashboard.key}]: could not load the workbook`, e));
     return () => { live = false; };
-  }, []);
+  }, [dashboard]);
 
   const tabs = useMemo(
     () => [...NAV, ...STATEMENTS].filter(t => staffView || !t.staffOnly),
@@ -116,8 +123,8 @@ export function UEDashboardScreen({
   const sidebar = wide ? (
     <View style={s.side}>
       <View style={s.logo}>
-        <Text style={s.logoName}>UNIQUELY ENOUGH</Text>
-        <Text style={s.logoSub}>Behavioral Health LLC</Text>
+        <Text style={s.logoName}>{dashboard.name}</Text>
+        <Text style={s.logoSub}>{dashboard.subtitle}</Text>
       </View>
       <ScrollView showsVerticalScrollIndicator={false}>
         <Text style={s.navLabel}>Navigation</Text>
@@ -135,7 +142,7 @@ export function UEDashboardScreen({
   ) : (
     <View style={s.topBar}>
       <View style={s.topBarHead}>
-        <Text style={s.logoNameSmall}>UNIQUELY ENOUGH</Text>
+        <Text style={s.logoNameSmall} numberOfLines={1}>{dashboard.name}</Text>
         {onBack && (
           <Pressable onPress={onBack} style={s.backSmall}>
             <Ionicons name="arrow-back" size={14} color={Colors.primaryDeep} />
@@ -221,7 +228,7 @@ export function UEDashboardScreen({
         <View style={s.mastheadTop}>
           <View style={{ flex: 1, minWidth: 220 }}>
             <Text style={s.mastheadTitle}>Monthly Financial Report</Text>
-            <Text style={s.mastheadMeta}>Uniquely Enough Behavioral Health LLC</Text>
+            <Text style={s.mastheadMeta}>{dashboard.name} {dashboard.subtitle}</Text>
           </View>
           <View style={s.preparedBy}>
             <Text style={s.preparedByName}>Prepared by Finance Therapy Group</Text>
@@ -460,18 +467,18 @@ export function UEDashboardScreen({
       case 'assum': return assumptionsPage;
       case 'findings':
         return gridPage('Findings for Review',
-          'CFO / controller findings and recommendations, sourced from the UE PL and UE BS tabs.',
+          'CFO / controller findings and recommendations, sourced from the profit and loss and balance sheet tabs.',
           sheets['Findings for Review'], 6);
       case 'tldr':
         return gridPage('TL;DR',
           'Monthly / YTD financial summary prepared by Finance Therapy Group.',
           sheets['TL;DR'].map(r => r.slice(0, 6)));
       case 'bs':
-        return gridPage('UE BS',
-          'Balance sheet as provided — the source behind the restated statements.', sheets['UE BS']);
+        return gridPage('Balance Sheet',
+          'Balance sheet as provided — the source behind the restated statements.', sheets['Balance Sheet']);
       case 'pl':
-        return gridPage('UE PL',
-          'Profit and loss as provided — the source behind the restated statements.', sheets['UE PL']);
+        return gridPage('Profit and Loss',
+          'Profit and loss as provided — the source behind the restated statements.', sheets['Profit and Loss']);
       case 'fsa':
         return (
           <>

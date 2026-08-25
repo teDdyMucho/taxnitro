@@ -1,4 +1,4 @@
-import type { StatementRow, UeSheets } from '../data/ueSheets';
+import type { StatementRow, ClientSheets } from '../data/clientSheets';
 
 // The Uniquely Enough workbook, as calculation rather than presentation.
 //
@@ -105,7 +105,7 @@ const avgFebJul = (fsa: Fsr, row: number) => {
   return v.length ? v.reduce((a, b) => a + b, 0) / v.length : 0;
 };
 
-export function buildModel(sheets: UeSheets, a: Assumptions): Model {
+export function buildModel(sheets: ClientSheets, a: Assumptions): Model {
   const fsa = byRow(sheets['FS-A']);
   const avg = (row: number) => avgFebJul(fsa, row);
   const i = SCENARIOS.indexOf(a.scenario);
@@ -138,7 +138,7 @@ export function buildModel(sheets: UeSheets, a: Assumptions): Model {
  *   flat    = avg(Feb–Jul)
  * Returns a fresh copy; the source sheets are never mutated.
  */
-export function buildForecast(sheets: UeSheets, a: Assumptions): Fsr {
+export function buildForecast(sheets: ClientSheets, a: Assumptions): Fsr {
   const m = buildModel(sheets, a);
   const fsa = byRow(sheets['FS-A']);
   const avg = (row: number) => avgFebJul(fsa, row);

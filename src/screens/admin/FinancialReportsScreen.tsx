@@ -5,7 +5,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Colors } from '../../constants/colors';
 import { getAllClients, type Profile } from '../../db/profiles';
 import { dashboardForClient, type ClientDashboard } from '../../lib/clientDashboards';
-import { UEDashboardScreen } from './UEDashboardScreen';
+import { ClientDashboardScreen } from './ClientDashboardScreen';
 
 // Financial Reports — the clients whose dashboard has been built.
 //
@@ -53,7 +53,8 @@ export function FinancialReportsScreen({ onBack }: { onBack?: () => void }) {
     // Staff and admin see the whole report, internal tabs included. Back returns
     // to the list when there is one to return to, and off the tab when there is not.
     return (
-      <UEDashboardScreen
+      <ClientDashboardScreen
+        dashboard={open.dashboard}
         staffView
         onBack={rows.length > 1 ? () => setOpenId(null) : onBack}
         backLabel={rows.length > 1 ? 'Back to Financial Reports' : 'Back to Admin'}

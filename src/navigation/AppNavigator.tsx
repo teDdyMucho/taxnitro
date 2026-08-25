@@ -15,7 +15,7 @@ import { DashboardScreen } from '../screens/main/DashboardScreen';
 import { DocumentsScreen } from '../screens/main/DocumentsScreen';
 import { NotificationsScreen } from '../screens/main/NotificationsScreen';
 import { ProfileScreen } from '../screens/main/ProfileScreen';
-import { UEDashboardScreen } from '../screens/admin/UEDashboardScreen';
+import { ClientDashboardScreen } from '../screens/admin/ClientDashboardScreen';
 import { dashboardForClient } from '../lib/clientDashboards';
 import { AdminNavigator } from './AdminNavigator';
 import { getUnreadCount } from '../db/notifications';
@@ -117,7 +117,13 @@ function WebLayout({ onLogout }: { onLogout: () => void }) {
       case 'Profile':
         // The client's own report — without the internal working tabs.
         if (showDashboard && myDashboard) {
-          return <UEDashboardScreen onBack={() => setShowDashboard(false)} backLabel="Back to Profile" />;
+          return (
+            <ClientDashboardScreen
+              dashboard={myDashboard}
+              onBack={() => setShowDashboard(false)}
+              backLabel="Back to Profile"
+            />
+          );
         }
         return <ProfileScreen onLogout={onLogout} onOpenDashboard={() => setShowDashboard(true)} />;
     }

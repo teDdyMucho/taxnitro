@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import { Colors } from '../../constants/colors';
-import type { GridRow, StatementRow } from '../../data/ueSheets';
+import type { GridRow, StatementRow } from '../../data/clientSheets';
 import { MONTHS, money, pct } from '../../lib/ueModel';
 
 // The workbook's presentation tabs, rendered as tables.

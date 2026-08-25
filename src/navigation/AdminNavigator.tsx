@@ -20,7 +20,8 @@ import { ClientDocumentsScreen } from '../screens/admin/ClientDocumentsScreen';
 import { StaffManagementScreen } from '../screens/admin/StaffManagementScreen';
 import { ProfileScreen } from '../screens/main/ProfileScreen';
 import { WorkflowDashboardScreen } from '../screens/admin/WorkflowDashboardScreen';
-import { UEDashboardScreen } from '../screens/admin/UEDashboardScreen';
+import { ClientDashboardScreen } from '../screens/admin/ClientDashboardScreen';
+import { dashboardForClient } from '../lib/clientDashboards';
 import { FinancialReportsScreen } from '../screens/admin/FinancialReportsScreen';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -90,9 +91,13 @@ export function AdminNavigator({ onLogout }: { onLogout: () => void }) {
   const renderScreen = () => {
     if (activeTab === 'Clients' && selectedClient) {
       // Staff and admin see the whole report, internal tabs included.
-      if (showDashboard) {
+      // Decided from the client on screen, not from state alone: this holds one
+      // client's books, so whether it draws at all follows from who is open.
+      const clientDashboard = dashboardForClient(selectedClient);
+      if (showDashboard && clientDashboard) {
         return (
-          <UEDashboardScreen
+          <ClientDashboardScreen
+            dashboard={clientDashboard}
             staffView
             onBack={() => setShowDashboard(false)}
             backLabel={`Back to ${selectedClient.full_name?.split(' ')[0] || 'client'}`}

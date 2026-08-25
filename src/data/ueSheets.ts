@@ -1,43 +1,14 @@
-// Uniquely Enough Behavioral Health LLC — every tab of the client's workbook,
-// values as the workbook itself computed them. Generated from the source xlsx;
-// edit the workbook and regenerate rather than editing figures here.
+import type { ClientSheets } from './clientSheets';
+
+// Uniquely Enough Behavioral Health LLC — every tab of their workbook, values as
+// the workbook itself computed them. Generated from the source xlsx; edit the
+// workbook and regenerate rather than editing figures here.
 //
-// FS-R and FS-A keep their ORIGINAL row numbers. The workbook's own formulas
-// address rows (34 = Total Income, 60 = Total Opex, 72 = Net Income, ...), so
-// keeping the numbering is what makes those references checkable against the
-// source. See ueModel.ts, which reads rows by exactly those numbers.
-//
-// This module is imported lazily (see UEDashboardScreen) so one client's
-// financials are not carried in the bundle every other user downloads.
+// FS-R and FS-A keep their ORIGINAL row numbers. The workbook's formulas address
+// rows (34 = Total Income, 60 = Total Opex, 72 = Net Income, ...), so keeping the
+// numbering is what makes those references checkable against the source.
 
-/** A cell in a presentation sheet: text, a figure, or blank. */
-export type GridCell = string | number | null;
-export type GridRow = GridCell[];
-
-/** A line of a financial statement, keyed by its row number in the workbook. */
-export interface StatementRow {
-  /** Row number in the source workbook — formulas address these. */
-  r: number;
-  label: string;
-  /** Jan–Dec 2025, one entry per month. */
-  y2025: (number | null)[];
-  t2025: number | null;
-  /** Jan–Dec 2026. Aug onward is forecast, rebuilt from the assumptions. */
-  y2026: (number | null)[];
-  t2026: number | null;
-}
-
-export interface UeSheets {
-  'Findings for Review': GridRow[];
-  'TL;DR': GridRow[];
-  ASSUMPTIONS: GridRow[];
-  'UE BS': GridRow[];
-  'UE PL': GridRow[];
-  'FS-R': StatementRow[];
-  'FS-A': StatementRow[];
-}
-
-export const UE_SHEETS: UeSheets = {
+export const UE_SHEETS: ClientSheets = {
   'Findings for Review': [
     ["UNIQUELY ENOUGH BEHAVIORAL HEALTH LLC — CFO / CONTROLLER FINDINGS & RECOMMENDATIONS",null,null,null,null,null,null,null],
     ["Source: UE PL and UE BS tabs. Review period: Jan 2025 – Jul 2026 (2026 is seven months of actuals).",null,null,null,null,null,null,null],
@@ -194,7 +165,7 @@ export const UE_SHEETS: UeSheets = {
     ["FY2026 net income (actual + forecast)",176168.1328,null,null,null],
     ["Cash at Dec 2026",319944.8928,null,null,null],
   ],
-  'UE BS': [
+  'Balance Sheet': [
     ["UNIQUELY ENOUGH BEHAVIORAL HEALTH LLC",null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null],
     ["Balance Sheet",null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null],
     ["As of Jul 31, 2026  (Jan 2025 - Jul 2026)",null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null],
@@ -235,7 +206,7 @@ export const UE_SHEETS: UeSheets = {
     ["Total for Liabilities and Equity",88620.91,95324.6,78975.56,103191.65,91255.57,120678.98,131877.31,154207.11,144826.62,162827.62,184970.26,130916.72,99690.68,114031.12,205735.78,202909.17,167125.62,199599.49,192654.9,null,null,null,null,null],
     ["Check: Assets − L&E",0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,null,null,null,null,null],
   ],
-  'UE PL': [
+  'Profit and Loss': [
     ["UNIQUELY ENOUGH BEHAVIORAL HEALTH LLC",null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null],
     ["Profit and Loss",null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null],
     ["January, 2025 - July, 2026",null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null],
