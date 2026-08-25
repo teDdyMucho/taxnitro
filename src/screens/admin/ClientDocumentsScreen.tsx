@@ -34,7 +34,7 @@ import { createCustomRequest } from '../../db/customRequests';
 import {
   useDownloadSelection, DownloadSelectionBar, DownloadNotice, SelectCheckbox,
 } from '../../components/DownloadSelectionBar';
-import { listSubfoldersForClient, Subfolder } from '../../db/subfolders';
+import { listSubfoldersForClient, renameSubfolder, Subfolder } from '../../db/subfolders';
 import { dashboardForClient } from '../../lib/clientDashboards';
 import { ClientDetailsPanel } from '../../components/ClientDetailsPanel';
 import { AdminUploadModal } from '../../components/AdminUploadModal';
@@ -100,8 +100,12 @@ const vm = StyleSheet.create({
 
 // ── Rename Modal ──────────────────────────────────────────────────────────────
 
-function RenameModal({ visible, current, onConfirm, onCancel }: {
+function RenameModal({ visible, current, onConfirm, onCancel, what = 'Document', note }: {
   visible: boolean; current: string; onConfirm: (v: string) => void; onCancel: () => void;
+  /** What is being renamed, so the title says it. */
+  what?: string;
+  /** A line under the title, when there is something worth saying. */
+  note?: string;
 }) {
   const [value, setValue] = useState(current);
   useEffect(() => { setValue(current); }, [current, visible]);
@@ -109,7 +113,8 @@ function RenameModal({ visible, current, onConfirm, onCancel }: {
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
       <Pressable style={rm.overlay} onPress={onCancel}>
         <Pressable style={rm.box} onPress={() => {}}>
-          <Text style={rm.title}>Rename Document</Text>
+          <Text style={rm.title}>Rename {what}</Text>
+          {note ? <Text style={rm.note}>{note}</Text> : null}
           <TextInput
             style={rm.input}
             value={value}
@@ -117,6 +122,7 @@ function RenameModal({ visible, current, onConfirm, onCancel }: {
             placeholder="New name..."
             placeholderTextColor={Colors.textMuted}
             autoFocus
+            selectTextOnFocus
           />
           <View style={rm.row}>
             <TouchableOpacity style={rm.cancelBtn} onPress={onCancel}>
@@ -136,6 +142,8 @@ const rm = StyleSheet.create({
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center', justifyContent: 'center' },
   box: { backgroundColor: Colors.bgCard, borderRadius: 20, padding: 24, width: 320, gap: 16, borderWidth: 1, borderColor: Colors.border },
   title: { color: Colors.textPrimary, fontSize: 17, fontWeight: '700' },
+  // The box already spaces its children; no margins needed here.
+  note: { color: Colors.textMuted, fontSize: 12.5, lineHeight: 18, marginTop: -8 },
   input: { backgroundColor: Colors.bgMid, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, color: Colors.textPrimary, fontSize: 14, borderWidth: 1, borderColor: Colors.border },
   row: { flexDirection: 'row', gap: 10 },
   cancelBtn: { flex: 1, backgroundColor: Colors.bgMid, borderRadius: 10, paddingVertical: 13, alignItems: 'center', borderWidth: 1, borderColor: Colors.border },
@@ -282,6 +290,9 @@ const rq = StyleSheet.create({
 export function ClientDocumentsScreen({ client, onBack, onOpenDashboard }: Props) {
   // Built per client from their own workbook, so most clients have none.
   const clientDashboard = dashboardForClient(client);
+  // Renaming a subfolder from where it is actually browsed. Only the staff-made
+  // ones can be renamed — the folder categories are the system's, not a client's.
+  const [renameSub, setRenameSub] = useState<Subfolder | null>(null);
   const insets = useSafeAreaInsets();
   const [documents, setDocuments] = useState<Document[]>([]);
   const [loading, setLoading] = useState(true);
@@ -432,6 +443,21 @@ export function ClientDocumentsScreen({ client, onBack, onOpenDashboard }: Props
             <View style={[s.miniBarFill, { width: `${pct}%` as any }]} />
           </View>
         </View>
+
+        {/* Staff-made folders can be renamed; the built-in categories cannot. */}
+        {item.key.startsWith('sub:') && (
+          <TouchableOpacity
+            style={s.folderDlBtn}
+            onPress={() => {
+              const sf = subfolders.find(x => `sub:${x.id}` === item.key);
+              if (sf) setRenameSub(sf);
+            }}
+            activeOpacity={0.75}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Ionicons name="pencil-outline" size={15} color={Colors.textMuted} />
+          </TouchableOpacity>
+        )}
 
         {/* Grab the whole folder without opening it. */}
         <TouchableOpacity
@@ -633,6 +659,23 @@ export function ClientDocumentsScreen({ client, onBack, onOpenDashboard }: Props
 
       {/* Modals */}
       {viewerUrl && <DocViewerModal url={viewerUrl} onClose={() => setViewerUrl(null)} />}
+
+      <RenameModal
+        visible={!!renameSub}
+        what="Folder"
+        note="The files inside stay where they are."
+        current={renameSub?.name ?? ''}
+        onConfirm={async name => {
+          const target = renameSub;
+          setRenameSub(null);
+          if (!target) return;
+          const row = await renameSubfolder(target.id, name);
+          // A clash with another folder of that name is the usual failure; the
+          // list is left untouched rather than showing a rename that did not happen.
+          if (row) setSubfolders(prev => prev.map(sf => (sf.id === row.id ? row : sf)));
+        }}
+        onCancel={() => setRenameSub(null)}
+      />
 
       <RenameModal
         visible={!!renameDoc}

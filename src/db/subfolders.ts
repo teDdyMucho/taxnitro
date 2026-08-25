@@ -81,6 +81,26 @@ export async function createSubfolder(
   return data as Subfolder;
 }
 
+/**
+ * Rename a subfolder. Returns the row, or null if it could not be renamed —
+ * most often because the client already has one by that name in this folder,
+ * which the unique index refuses.
+ *
+ * Renaming moves nothing: the files keep pointing at the same id.
+ */
+export async function renameSubfolder(id: string, name: string): Promise<Subfolder | null> {
+  const clean = name.trim();
+  if (!id || !clean) return null;
+  const { data, error } = await supabase
+    .from('custom_subfolders')
+    .update({ name: clean })
+    .eq('id', id)
+    .select('*')
+    .single();
+  if (error) { console.error('renameSubfolder:', error.message); return null; }
+  return data as Subfolder;
+}
+
 // Delete a subfolder. Files inside it keep existing; their subfolder_id is
 // reset to null by the ON DELETE SET NULL FK.
 export async function deleteSubfolder(id: string): Promise<boolean> {

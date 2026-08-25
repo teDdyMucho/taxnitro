@@ -25,7 +25,7 @@ import {
   useDownloadSelection, DownloadSelectionBar, DownloadNotice, SelectCheckbox,
 } from './DownloadSelectionBar';
 import {
-  listSubfolders, createSubfolder, deleteSubfolder, moveDocumentToSubfolder, Subfolder,
+  listSubfolders, createSubfolder, renameSubfolder, deleteSubfolder, moveDocumentToSubfolder, Subfolder,
 } from '../db/subfolders';
 
 // ── Config ────────────────────────────────────────────────────────────────────
@@ -169,6 +169,11 @@ export function AdminFileBrowser({ visible, onClose }: Props) {
   const [newSubName, setNewSubName]       = useState('');
   const [subBusy, setSubBusy]             = useState(false);
   const [delSubTarget, setDelSubTarget]   = useState<Subfolder | null>(null);
+  // Renaming, not deleting-and-recreating: the files keep pointing at the same
+  // subfolder, so nothing has to be re-filed afterwards.
+  const [renSubTarget, setRenSubTarget]   = useState<Subfolder | null>(null);
+  const [renSubName, setRenSubName]       = useState('');
+  const [renSubError, setRenSubError]     = useState<string | null>(null);
   const [moveTarget, setMoveTarget]       = useState<{ file: FileRow; folderTable: string } | null>(null);
 
   // ── Load categories ─────────────────────────────────────────────────────────
@@ -357,6 +362,26 @@ export function AdminFileBrowser({ visible, onClose }: Props) {
     setNewSubOpen(false);
   };
 
+  const handleRenameSubfolder = async () => {
+    const name = renSubName.trim();
+    if (!renSubTarget || !name || subBusy) return;
+    if (name === renSubTarget.name) { setRenSubTarget(null); return; }
+    // Checked here so the message names the real reason; the unique index
+    // refuses it either way.
+    if (subfolders.some(sf => sf.id !== renSubTarget.id && sf.name.toLowerCase() === name.toLowerCase())) {
+      setRenSubError('This client already has a folder by that name here.');
+      return;
+    }
+    setSubBusy(true);
+    const row = await renameSubfolder(renSubTarget.id, name);
+    setSubBusy(false);
+    if (!row) { setRenSubError('Could not rename that folder.'); return; }
+    setSubfolders(prev => prev
+      .map(s => (s.id === row.id ? row : s))
+      .sort((a, b) => a.name.localeCompare(b.name)));
+    setRenSubTarget(null);
+  };
+
   const handleDeleteSubfolder = async () => {
     if (!delSubTarget || subBusy) return;
     setSubBusy(true);
@@ -446,7 +471,7 @@ export function AdminFileBrowser({ visible, onClose }: Props) {
             key={sf.id}
             style={[fb.subChip, active && fb.subChipActive]}
             onPress={() => withFileFilters ? setActiveSubfolder(sf.id) : setDelSubTarget(sf)}
-            onLongPress={() => setDelSubTarget(sf)}
+            onLongPress={() => { setRenSubName(sf.name); setRenSubError(null); setRenSubTarget(sf); }}
             delayLongPress={350}
             activeOpacity={0.8}
           >
@@ -454,9 +479,17 @@ export function AdminFileBrowser({ visible, onClose }: Props) {
             <Text style={[fb.subChipText, active && fb.subChipTextActive]}>{sf.name}</Text>
             {withFileFilters && cnt > 0 && <Text style={[fb.subChipCount, active && { color: '#1C1713' }]}>{cnt}</Text>}
             {active && (
-              <TouchableOpacity onPress={() => setDelSubTarget(sf)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
-                <Ionicons name="close" size={13} color="#1C1713" />
-              </TouchableOpacity>
+              <>
+                <TouchableOpacity
+                  onPress={() => { setRenSubName(sf.name); setRenSubError(null); setRenSubTarget(sf); }}
+                  hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                >
+                  <Ionicons name="pencil" size={12} color="#1C1713" />
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => setDelSubTarget(sf)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+                  <Ionicons name="close" size={13} color="#1C1713" />
+                </TouchableOpacity>
+              </>
             )}
           </TouchableOpacity>
         );
@@ -1028,6 +1061,49 @@ export function AdminFileBrowser({ visible, onClose }: Props) {
               <TouchableOpacity style={fb.rejectCancelBtn} onPress={() => setDeleteTarget(null)}><Text style={fb.rejectCancelText}>Cancel</Text></TouchableOpacity>
               <TouchableOpacity style={[fb.rejectConfirmBtn, deleteBusy && { opacity: 0.5 }]} onPress={handleDelete} disabled={deleteBusy}>
                 {deleteBusy ? <ActivityIndicator size="small" color="#FFFFFF" /> : <Text style={fb.rejectConfirmText}>Delete</Text>}
+              </TouchableOpacity>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* ── Rename subfolder ── */}
+      <Modal visible={!!renSubTarget} transparent animationType="fade" onRequestClose={() => setRenSubTarget(null)}>
+        <Pressable style={fb.modalOverlay} onPress={() => setRenSubTarget(null)}>
+          <Pressable style={fb.rejectModal} onPress={() => {}}>
+            <View style={[fb.rejectIconWrap, { backgroundColor: 'rgba(232,185,35,0.15)' }]}>
+              <Ionicons name="pencil-outline" size={26} color="#E8B923" />
+            </View>
+            <Text style={fb.rejectModalTitle}>Rename Folder</Text>
+            <Text style={fb.rejectModalSub} numberOfLines={2}>
+              The files inside stay where they are.
+            </Text>
+            <TextInput
+              style={fb.rejectInput}
+              placeholder="Folder name"
+              placeholderTextColor="#94A3B8"
+              value={renSubName}
+              onChangeText={t => { setRenSubName(t); setRenSubError(null); }}
+              autoFocus
+              selectTextOnFocus
+              onSubmitEditing={handleRenameSubfolder}
+            />
+            {renSubError ? (
+              <Text style={[fb.rejectModalSub, { color: '#EF4444', marginTop: 2, fontSize: 12 }]}>{renSubError}</Text>
+            ) : null}
+            <View style={fb.rejectModalBtns}>
+              <TouchableOpacity style={fb.rejectCancelBtn} onPress={() => setRenSubTarget(null)}>
+                <Text style={fb.rejectCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[fb.rejectConfirmBtn, { backgroundColor: '#E8B923' },
+                  (subBusy || !renSubName.trim()) && { opacity: 0.5 }]}
+                onPress={handleRenameSubfolder}
+                disabled={subBusy || !renSubName.trim()}
+              >
+                {subBusy
+                  ? <ActivityIndicator size="small" color="#1C1713" />
+                  : <Text style={[fb.rejectConfirmText, { color: '#1C1713' }]}>Rename</Text>}
               </TouchableOpacity>
             </View>
           </Pressable>
