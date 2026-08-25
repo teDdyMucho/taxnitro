@@ -15,7 +15,7 @@ import { useAuth } from '../context/AuthContext';
 import { Profile } from '../db/profiles';
 import { AdminDashboardScreen } from '../screens/admin/AdminDashboardScreen';
 import { AdminDocumentsScreen } from '../screens/admin/AdminDocumentsScreen';
-import { ClientListScreen } from '../screens/admin/ClientListScreen';
+import { ClientListScreen, type ClientSection } from '../screens/admin/ClientListScreen';
 import { ClientDocumentsScreen } from '../screens/admin/ClientDocumentsScreen';
 import { StaffManagementScreen } from '../screens/admin/StaffManagementScreen';
 import { ProfileScreen } from '../screens/main/ProfileScreen';
@@ -151,12 +151,14 @@ export function AdminNavigator({ onLogout }: { onLogout: () => void }) {
       case 'Clients':
         return (
           <ClientListScreen
-            onSelectClient={c => {
+            onSelectClient={(c, section: ClientSection = 'documents') => {
               // A different client starts at their folder list, not wherever
-              // the last one was left.
-              if (c.id !== selectedClient?.id) setClientFolderKey(null);
+              // the last one was left. Asking for Business Details does too —
+              // the panel sits above the folders, so a folder must not be open
+              // over the top of it.
+              if (c.id !== selectedClient?.id || section === 'details') setClientFolderKey(null);
               setSelectedClient(c);
-              setShowDashboard(false);
+              setShowDashboard(section === 'cfo');
             }}
           />
         );

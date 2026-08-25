@@ -86,6 +86,7 @@ const toast = StyleSheet.create({
 // ── Add Client Modal ──────────────────────────────────────────────────────────
 
 import { supabase } from '../../lib/supabase';
+import { dashboardForClient } from '../../lib/clientDashboards';
 
 // Inlined at bundle time by Metro — must be top-level, not inside a function
 const SUPABASE_URL         = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
@@ -581,7 +582,8 @@ function ManageModal({
   client: Profile;
   onClose: () => void;
   onSave: (updated: Profile) => void;
-  onViewDocs: (client: Profile) => void;
+  /** Opens the client, at the part of them the caller asked for. */
+  onViewDocs: (client: Profile, section: ClientSection) => void;
 }) {
   const sheet = useSheetStyles('md');
   const [name, setName]           = useState(client.full_name ?? '');
@@ -823,12 +825,39 @@ function ManageModal({
             <View style={mm.field}>
               <Text style={mm.label}>Quick Actions</Text>
               <View style={mm.actionGrid}>
-                <TouchableOpacity style={mm.actionCard} onPress={() => onViewDocs(client)} activeOpacity={0.75}>
+                <TouchableOpacity style={mm.actionCard} onPress={() => onViewDocs(client, 'documents')} activeOpacity={0.75}>
                   <View style={[mm.actionIcon, { backgroundColor: 'rgba(232,185,35,0.12)' }]}>
                     <Ionicons name="documents-outline" size={20} color="#E8B923" />
                   </View>
-                  <Text style={mm.actionLabel}>View Documents</Text>
+                  <Text style={mm.actionLabel}>Documents</Text>
                 </TouchableOpacity>
+
+                <TouchableOpacity style={mm.actionCard} onPress={() => onViewDocs(client, 'details')} activeOpacity={0.75}>
+                  <View style={[mm.actionIcon, { backgroundColor: 'rgba(181,144,91,0.14)' }]}>
+                    <Ionicons name="information-circle-outline" size={20} color="#B5905B" />
+                  </View>
+                  <Text style={mm.actionLabel}>Business Details</Text>
+                </TouchableOpacity>
+
+                {/* CFO clients, as asked — plus anyone who actually has a
+                    dashboard, so a client with one built never loses the way to
+                    it because their services were not marked CFO. */}
+                {((client.services ?? []).includes('CFO') || !!dashboardForClient(client)) && (
+                  <TouchableOpacity
+                    style={[mm.actionCard, !dashboardForClient(client) && { opacity: 0.55 }]}
+                    onPress={() => dashboardForClient(client) && onViewDocs(client, 'cfo')}
+                    disabled={!dashboardForClient(client)}
+                    activeOpacity={0.75}
+                  >
+                    <View style={[mm.actionIcon, { backgroundColor: 'rgba(232,185,35,0.12)' }]}>
+                      <Ionicons name="stats-chart-outline" size={20} color="#E8B923" />
+                    </View>
+                    <Text style={mm.actionLabel}>CFO Suite</Text>
+                    {!dashboardForClient(client) && (
+                      <Text style={mm.actionNote}>Not built yet</Text>
+                    )}
+                  </TouchableOpacity>
+                )}
               </View>
             </View>
 
@@ -989,6 +1018,7 @@ const mm = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  actionNote: { color: '#A8998A', fontSize: 10, marginTop: 2, textAlign: 'center' },
   actionLabel: { color: Colors.textSecondary, fontSize: 12, fontWeight: '600', textAlign: 'center' },
   infoCard: {
     backgroundColor: Colors.bgMid,
@@ -1184,8 +1214,11 @@ const pd = StyleSheet.create({
 
 // ── Main Screen ───────────────────────────────────────────────────────────────
 
+/** Which part of a client is being opened. */
+export type ClientSection = 'documents' | 'details' | 'cfo';
+
 interface Props {
-  onSelectClient: (client: Profile) => void;
+  onSelectClient: (client: Profile, section?: ClientSection) => void;
 }
 
 export function ClientListScreen({ onSelectClient }: Props) {
@@ -1263,8 +1296,12 @@ export function ClientListScreen({ onSelectClient }: Props) {
 
         {/* Center: info */}
         <View style={s.cardBody}>
-          <Text style={s.name} numberOfLines={1}>{item.full_name || 'Unnamed Client'}</Text>
-          <Text style={s.email} numberOfLines={1}>{item.email}</Text>
+          {/* The name opens the same tray as the gear — Camaree asked for the
+              name itself to be the way in, and it is the obvious thing to press. */}
+          <TouchableOpacity onPress={() => setManaging(item)} activeOpacity={0.6}>
+            <Text style={s.name} numberOfLines={1}>{item.full_name || 'Unnamed Client'}</Text>
+            <Text style={s.email} numberOfLines={1}>{item.email}</Text>
+          </TouchableOpacity>
           <View style={s.metaRow}>
             {/* Plan chip */}
             <View style={[s.planChip, { backgroundColor: pc.bg, borderColor: pc.border }]}>
@@ -1427,7 +1464,7 @@ export function ClientListScreen({ onSelectClient }: Props) {
             setManaging(null);
             showToast('Client updated');
           }}
-          onViewDocs={c => { setManaging(null); onSelectClient(c); }}
+          onViewDocs={(c, section) => { setManaging(null); onSelectClient(c, section); }}
         />
       )}
 
