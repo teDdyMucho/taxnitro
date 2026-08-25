@@ -18,7 +18,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import WebView from 'react-native-webview';
-import * as DocumentPicker from 'expo-document-picker';
 import { Colors } from '../../constants/colors';
 import { StatusBadge } from '../../components/StatusBadge';
 import { Profile } from '../../db/profiles';
@@ -29,8 +28,6 @@ import {
   deleteDocument,
   renameDocument,
   updateDocumentStatus,
-  uploadDocumentToStorage,
-  createDocumentRecord,
   Document,
 } from '../../db/documents';
 import { createCustomRequest } from '../../db/customRequests';
@@ -40,9 +37,10 @@ import {
 import { listSubfoldersForClient, Subfolder } from '../../db/subfolders';
 import { dashboardForClient } from '../../lib/clientDashboards';
 import { ClientDetailsPanel } from '../../components/ClientDetailsPanel';
+import { AdminUploadModal } from '../../components/AdminUploadModal';
 import { ClientQuestionnairePanel } from '../../components/ClientQuestionnairePanel';
 import {
-  monthOf, isStaffLabelFolder, staffLabelsForFolder,
+  monthOf,
   itemsForClient, requiredItemForDocName, stripRequirementPrefix,
   folderTableLabel, normalizeBankAccounts, RequiredItem, BANK_STATEMENTS_KEY,
 } from '../../db/requirements';
@@ -54,25 +52,6 @@ interface Props {
   onOpenDashboard?: () => void;
 }
 
-// Folders staff can deliver files into, per the client's services.
-// (Only staff-deliverable folders — not the client-upload / required-docs ones.)
-const STAFF_UPLOAD_FOLDERS: { key: string; label: string; service: 'BK' | 'TAX' | 'CFO' }[] = [
-  { key: 'bk_bank_accounts',     label: 'Bank Accounts',               service: 'BK'  },
-  { key: 'bk_final_pnl',         label: 'Additional BK Docs',          service: 'BK'  },
-  { key: 'bk_contracts',         label: 'Contracts (BK)',              service: 'BK'  },
-  { key: 'bk_invoices',          label: 'Invoices (BK)',               service: 'BK'  },
-  { key: 'bk_mr_client_review',  label: 'Monthly Reporting (For Client Review)', service: 'BK' },
-  { key: 'bk_mr_final_statements', label: 'Monthly Reporting (Final Statements)', service: 'BK' },
-  { key: 'tax_return_information', label: 'Tax Returns',               service: 'TAX' },
-  { key: 'tax_contracts',        label: 'Contracts (TAX)',             service: 'TAX' },
-  { key: 'tax_invoices',         label: 'Invoices (TAX)',              service: 'TAX' },
-  { key: 'tax_additional_docs',  label: 'Additional Tax Docs',         service: 'TAX' },
-  { key: 'cfo_mr_client_review',  label: 'Monthly Reporting (For Client Review)', service: 'CFO' },
-  { key: 'cfo_mr_final_statements', label: 'Monthly Reporting (Final Statements & Insights)', service: 'CFO' },
-  { key: 'cfo_contracts',        label: 'Contracts (CFO)',             service: 'CFO' },
-  { key: 'cfo_invoices',         label: 'Invoices (CFO)',              service: 'CFO' },
-  { key: 'cfo_additional_docs',  label: 'Additional CFO Docs',         service: 'CFO' },
-];
 
 // ── Viewer Modal ──────────────────────────────────────────────────────────────
 
@@ -205,130 +184,6 @@ const dm = StyleSheet.create({
   deleteBtn: { flex: 1, backgroundColor: Colors.error, borderRadius: 10, paddingVertical: 13, alignItems: 'center' },
   deleteText: { color: Colors.white, fontWeight: '700', fontSize: 14 },
 });
-
-// ── Staff Upload-to-Client Modal ──────────────────────────────────────────────
-// Staff delivers a file into one of the client's folders. It enters as
-// 'pending' + uploaded_by_role='staff', so the CLIENT approves/rejects it.
-
-function StaffUploadModal({ client, visible, onClose, onUploaded }: {
-  client: Profile; visible: boolean; onClose: () => void; onUploaded: (d: Document) => void;
-}) {
-  const { user } = useAuth();
-  const sheet = useSheetStyles('lg');
-  const [folderKey, setFolderKey] = useState<string | null>(null);
-  const [docLabel, setDocLabel]   = useState<string | null>(null); // for staff-label folders
-  const [picked, setPicked] = useState<{ uri: string; name: string; mimeType: string } | null>(null);
-  const [busy, setBusy] = useState(false);
-
-  const services = Array.isArray(client.services) && client.services.length > 0 ? client.services : ['BK'];
-  const folders = STAFF_UPLOAD_FOLDERS.filter(f => services.includes(f.service));
-
-  // Staff-deliverable folders (For Client Review / Final Statements) require a label pick.
-  const labelOptions = folderKey ? staffLabelsForFolder(folderKey) : [];
-  const needsLabel   = !!folderKey && isStaffLabelFolder(folderKey);
-
-  const reset = () => { setFolderKey(null); setDocLabel(null); setPicked(null); setBusy(false); };
-  const close = () => { reset(); onClose(); };
-
-  const pick = async () => {
-    try {
-      const r = await DocumentPicker.getDocumentAsync({ type: '*/*', copyToCacheDirectory: true, multiple: false });
-      if (r.canceled) return;
-      const a = r.assets[0];
-      setPicked({ uri: a.uri, name: a.name, mimeType: a.mimeType ?? 'application/octet-stream' });
-    } catch { Alert.alert('Error', 'Could not pick a file.'); }
-  };
-
-  const upload = async () => {
-    if (!folderKey || !picked) return;
-    setBusy(true);
-    try {
-      const url = await uploadDocumentToStorage(client.id, folderKey, picked.uri, picked.name, picked.mimeType);
-      if (!url) { setBusy(false); Alert.alert('Upload failed', 'Could not save file to storage.'); return; }
-      // For staff-label folders, prefix the chosen label so it's clear to the client.
-      const displayName = needsLabel && docLabel ? `${docLabel} — ${picked.name}` : picked.name;
-      const doc = await createDocumentRecord({
-        userId: client.id,
-        email: client.email,
-        name: displayName,
-        documentUrl: url,
-        documentType: folderKey,
-        uploadedByRole: (user?.role === 'admin' ? 'admin' : 'staff'),
-        uploadedBy: user?.email ?? 'staff',
-      });
-      setBusy(false);
-      if (!doc) { Alert.alert('Partial success', 'File saved but record creation failed.'); return; }
-      onUploaded(doc);
-      close();
-    } catch (e: any) {
-      setBusy(false);
-      Alert.alert('Upload failed', e?.message ?? 'Something went wrong.');
-    }
-  };
-
-  return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={close}>
-      <Pressable style={[su.overlay, sheet.overlay]} onPress={close}>
-        <Pressable style={[su.sheet, sheet.sheet]} onPress={() => {}}>
-          <View style={su.handle} />
-          <Text style={su.title}>Send a File to {client.full_name?.split(' ')[0] || 'Client'}</Text>
-          <Text style={su.sub}>The client will be asked to approve or reject it.</Text>
-
-          <Text style={su.label}>Folder</Text>
-          <ScrollView style={{ maxHeight: 200 }} showsVerticalScrollIndicator={false}>
-            {folders.map(f => {
-              const active = folderKey === f.key;
-              return (
-                <TouchableOpacity key={f.key} style={[su.folderRow, active && su.folderRowActive]} onPress={() => { setFolderKey(f.key); setDocLabel(null); }} activeOpacity={0.75}>
-                  <Ionicons name={active ? 'radio-button-on' : 'radio-button-off'} size={18} color={active ? '#E8B923' : Colors.textMuted} />
-                  <Text style={[su.folderText, active && { color: Colors.textPrimary, fontWeight: '700' }]}>{f.label}</Text>
-                </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
-
-          {/* Document label — required for staff-deliverable folders */}
-          {needsLabel && (
-            <>
-              <Text style={su.label}>What is this document?</Text>
-              <ScrollView style={{ maxHeight: 180 }} showsVerticalScrollIndicator={false}>
-                {labelOptions.map(opt => {
-                  const active = docLabel === opt;
-                  return (
-                    <TouchableOpacity key={opt} style={[su.folderRow, active && su.folderRowActive]} onPress={() => setDocLabel(opt)} activeOpacity={0.75}>
-                      <Ionicons name={active ? 'radio-button-on' : 'radio-button-off'} size={18} color={active ? '#E8B923' : Colors.textMuted} />
-                      <Text style={[su.folderText, active && { color: Colors.textPrimary, fontWeight: '700' }]}>{opt}</Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </ScrollView>
-            </>
-          )}
-
-          <Text style={su.label}>File</Text>
-          <TouchableOpacity style={su.pickBtn} onPress={pick} activeOpacity={0.8}>
-            <Ionicons name={picked ? 'document-text' : 'cloud-upload-outline'} size={18} color="#E8B923" />
-            <Text style={su.pickText} numberOfLines={1}>{picked ? picked.name : 'Choose a file…'}</Text>
-          </TouchableOpacity>
-
-          <View style={su.row}>
-            <TouchableOpacity style={su.cancelBtn} onPress={close}>
-              <Text style={su.cancelText}>Cancel</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[su.sendBtn, (!folderKey || !picked || busy || (needsLabel && !docLabel)) && { opacity: 0.5 }]}
-              onPress={upload}
-              disabled={!folderKey || !picked || busy || (needsLabel && !docLabel)}
-            >
-              {busy ? <ActivityIndicator color="#3A3131" size="small" /> : <Text style={su.sendText}>Send to Client</Text>}
-            </TouchableOpacity>
-          </View>
-        </Pressable>
-      </Pressable>
-    </Modal>
-  );
-}
-
 const su = StyleSheet.create({
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
   sheet: { backgroundColor: Colors.bgCard, borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 24, paddingBottom: Platform.OS === 'ios' ? 36 : 28, gap: 10, maxHeight: '88%' },
@@ -793,8 +648,11 @@ export function ClientDocumentsScreen({ client, onBack, onOpenDashboard }: Props
         onCancel={() => setDeleteDoc(null)}
       />
 
-      <StaffUploadModal
-        client={client}
+      {/* The same upload used from the Documents tab — drag and drop, several
+          files at once, queued by where each one is going. The client is fixed
+          here, so it does not ask which one. */}
+      <AdminUploadModal
+        fixedClient={client}
         visible={uploadOpen}
         onClose={() => setUploadOpen(false)}
         onUploaded={d => setDocuments(prev => [d, ...prev])}

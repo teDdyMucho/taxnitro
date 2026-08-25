@@ -10,6 +10,7 @@ import { Colors } from '../constants/colors';
 import { useAuth } from '../context/AuthContext';
 import { useSheetStyles } from '../hooks/useSheetStyles';
 import { uploadDocumentToStorage, createDocumentRecord, Document } from '../db/documents';
+import { isStaffLabelFolder, staffLabelsForFolder } from '../db/requirements';
 import { getAllClients, Profile } from '../db/profiles';
 import {
   listSubfolders, createSubfolder, moveDocumentToSubfolder, Subfolder,
@@ -58,6 +59,12 @@ type PickedFile = {
   /** Subfolder within that folder, or null for the folder root. */
   subfolderId: string | null;
   subfolderName: string | null;
+  /**
+   * What this file IS, for the folders that deliver something — a Query Sheet,
+   * a P&L. Prefixed onto the name at upload, which is how the client tells one
+   * deliverable from another. Null for folders that do not ask.
+   */
+  label: string | null;
   uri: string;
   name: string;
   mimeType: string;
@@ -72,12 +79,14 @@ function fromDomFiles(
   files: File[],
   folderKey: string,
   sub: Subfolder | null,
+  label: string | null,
 ): PickedFile[] {
   return files.map(f => ({
     id: nextFileId(),
     folderKey,
     subfolderId: sub?.id ?? null,
     subfolderName: sub?.name ?? null,
+    label,
     // uploadDocumentToStorage fetches this URI on web, and fetch reads blob: URLs.
     uri: URL.createObjectURL(f),
     name: f.name,
@@ -98,15 +107,28 @@ function fmtSize(bytes?: number): string {
   return bytes < 1048576 ? `${(bytes / 1024).toFixed(0)} KB` : `${(bytes / 1048576).toFixed(1)} MB`;
 }
 
-export function AdminUploadModal({ visible, onClose, onUploaded }: {
-  visible: boolean; onClose: () => void; onUploaded?: (d: Document) => void;
+export function AdminUploadModal({ visible, onClose, onUploaded, fixedClient }: {
+  visible: boolean;
+  onClose: () => void;
+  onUploaded?: (d: Document) => void;
+  /**
+   * Opened from a client's own page, where there is nothing to choose. The
+   * picker is hidden and this client is used throughout.
+   */
+  fixedClient?: Profile | null;
 }) {
   const { user } = useAuth();
   const sheet = useSheetStyles('lg');
   const [clients, setClients] = useState<Profile[]>([]);
   const [clientQuery, setClientQuery] = useState('');
-  const [client, setClient] = useState<Profile | null>(null);
+  const [pickedClient, setPickedClient] = useState<Profile | null>(null);
+  const client = fixedClient ?? pickedClient;
+  const setClient = setPickedClient;
+  // Deliverable folders ask what the file is before it can be queued.
+  const [docLabel, setDocLabel] = useState<string | null>(null);
   const [folderKey, setFolderKey] = useState<string | null>(null);
+  const needsLabel   = !!folderKey && isStaffLabelFolder(folderKey);
+  const labelOptions = folderKey ? staffLabelsForFolder(folderKey) : [];
   // Subfolders belong to one client inside one folder, so the list reloads
   // whenever either changes. `subfolder` null = the folder's root.
   const [subfolders, setSubfolders]   = useState<Subfolder[]>([]);
@@ -206,13 +228,14 @@ export function AdminUploadModal({ visible, onClose, onUploaded }: {
     type Bucket = {
       key: string; folderKey: string; folderLabel: string;
       subfolderId: string | null; subfolderName: string | null;
+      label: string | null;
       files: PickedFile[];
     };
     const byDest = new Map<string, Bucket>();
     const order = UPLOAD_FOLDERS.flatMap(g => g.folders).map(f => f.key);
 
     picked.forEach(f => {
-      const key = `${f.folderKey}::${f.subfolderId ?? ''}`;
+      const key = `${f.folderKey}::${f.subfolderId ?? ''}::${f.label ?? ''}`;
       const bucket = byDest.get(key);
       if (bucket) bucket.files.push(f);
       else byDest.set(key, {
@@ -221,13 +244,15 @@ export function AdminUploadModal({ visible, onClose, onUploaded }: {
         folderLabel: FOLDER_LABEL[f.folderKey] ?? f.folderKey,
         subfolderId: f.subfolderId,
         subfolderName: f.subfolderName,
+        label: f.label,
         files: [f],
       });
     });
 
     return [...byDest.values()].sort((a, b) =>
       order.indexOf(a.folderKey) - order.indexOf(b.folderKey) ||
-      (a.subfolderName ?? '').localeCompare(b.subfolderName ?? ''),
+      (a.subfolderName ?? '').localeCompare(b.subfolderName ?? '') ||
+      (a.label ?? '').localeCompare(b.label ?? ''),
     );
   }, [picked]);
 
@@ -251,7 +276,7 @@ export function AdminUploadModal({ visible, onClose, onUploaded }: {
   const clearFiles = () => { picked.forEach(revoke); setPicked([]); };
 
   const pick = async () => {
-    if (!folderKey) return;
+    if (!canAddFiles || !folderKey) return;
     try {
       const r = await DocumentPicker.getDocumentAsync({ type: '*/*', copyToCacheDirectory: true, multiple: true });
       if (r.canceled) return;
@@ -260,6 +285,7 @@ export function AdminUploadModal({ visible, onClose, onUploaded }: {
         folderKey,
         subfolderId: subfolder?.id ?? null,
         subfolderName: subfolder?.name ?? null,
+        label: needsLabel ? docLabel : null,
         uri: a.uri,
         name: a.name,
         mimeType: a.mimeType ?? 'application/octet-stream',
@@ -268,7 +294,7 @@ export function AdminUploadModal({ visible, onClose, onUploaded }: {
     } catch { Alert.alert('Error', 'Could not pick a file.'); }
   };
 
-  const canAddFiles = !!client && !!folderKey && !busy;
+  const canAddFiles = !!client && !!folderKey && !busy && (!needsLabel || !!docLabel);
 
   // react-native-web's View does not forward drag events, so the drop target is
   // a real <div>. On native this collapses to the plain browse button.
@@ -281,7 +307,7 @@ export function AdminUploadModal({ visible, onClose, onUploaded }: {
       setDragOver(false);
       if (!canAddFiles || !folderKey) return;
       const files: File[] = Array.from(e.dataTransfer?.files ?? []);
-      if (files.length) addFiles(fromDomFiles(files, folderKey, subfolder));
+      if (files.length) addFiles(fromDomFiles(files, folderKey, subfolder, needsLabel ? docLabel : null));
     },
   } : {};
 
@@ -307,7 +333,8 @@ export function AdminUploadModal({ visible, onClose, onUploaded }: {
           const doc = await createDocumentRecord({
             userId: client.id,
             email: client.email,
-            name: file.name,
+            // The client reads this name to tell one deliverable from another.
+            name: bucket.label ? `${bucket.label} — ${file.name}` : file.name,
             documentUrl: url,
             documentType: bucket.folderKey,
             uploadedByRole: (user?.role === 'admin' ? 'admin' : 'staff'),
@@ -380,9 +407,9 @@ export function AdminUploadModal({ visible, onClose, onUploaded }: {
                 onContentSizeChange={(_w, h) => { contentH.current = h; recomputeOverflow(); }}
                 onScroll={e => { scrollY.current = e.nativeEvent.contentOffset.y; recomputeOverflow(); }}
               >
-                {/* Step 1: client */}
-                <Text style={s.label}>Client</Text>
-                {client ? (
+                {/* Step 1: client — hidden when opened from a client's own page */}
+                {!fixedClient && <Text style={s.label}>Client</Text>}
+                {fixedClient ? null : client ? (
                   <TouchableOpacity style={s.selectedClient} onPress={() => setClient(null)} activeOpacity={0.8}>
                     <Ionicons name="person-circle-outline" size={20} color="#B5905B" />
                     <View style={{ flex: 1 }}>
@@ -427,7 +454,7 @@ export function AdminUploadModal({ visible, onClose, onUploaded }: {
                           const active = folderKey === f.key;
                           const count  = picked.filter(p => p.folderKey === f.key).length;
                           return (
-                            <TouchableOpacity key={f.key} style={[s.folderRow, active && s.folderRowActive]} onPress={() => setFolderKey(f.key)} activeOpacity={0.75}>
+                            <TouchableOpacity key={f.key} style={[s.folderRow, active && s.folderRowActive]} onPress={() => { setFolderKey(f.key); setDocLabel(null); }} activeOpacity={0.75}>
                               <Ionicons name={active ? 'radio-button-on' : 'radio-button-off'} size={16} color={active ? '#E8B923' : Colors.textMuted} />
                               <Text style={[s.folderText, active && { color: Colors.textPrimary, fontWeight: '700' }]}>{f.label}</Text>
                               {count > 0 && (
@@ -440,6 +467,36 @@ export function AdminUploadModal({ visible, onClose, onUploaded }: {
                         })}
                       </View>
                     ))}
+                  </>
+                )}
+
+                {/* Step 2b: what the file is — only the folders that deliver ask */}
+                {needsLabel && (
+                  <>
+                    <Text style={s.label}>What is this document?</Text>
+                    <Text style={s.subHint}>
+                      Goes in front of the file name, so the client can tell them apart.
+                    </Text>
+                    <View style={s.subRow}>
+                      {labelOptions.map(opt => {
+                        const on = docLabel === opt;
+                        return (
+                          <TouchableOpacity
+                            key={opt}
+                            style={[s.subChip, on && s.subChipOn]}
+                            onPress={() => setDocLabel(on ? null : opt)}
+                            activeOpacity={0.8}
+                          >
+                            <Ionicons
+                              name={on ? 'pricetag' : 'pricetag-outline'}
+                              size={13}
+                              color={on ? '#2C2320' : Colors.textMuted}
+                            />
+                            <Text style={[s.subChipText, on && s.subChipTextOn]}>{opt}</Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
                   </>
                 )}
 
@@ -545,24 +602,26 @@ export function AdminUploadModal({ visible, onClose, onUploaded }: {
                       Platform.OS === 'web' ? ('div' as any) : View,
                       Platform.OS === 'web' ? dropHandlers : {},
                       <TouchableOpacity
-                        style={[s.dropZone, dragOver && s.dropZoneOver, !folderKey && s.dropZoneLocked]}
+                        style={[s.dropZone, dragOver && s.dropZoneOver, !canAddFiles && s.dropZoneLocked]}
                         onPress={pick}
                         activeOpacity={0.8}
                         disabled={!canAddFiles}
                       >
                         <Ionicons
-                          name={!folderKey ? 'lock-closed-outline' : dragOver ? 'download-outline' : 'cloud-upload-outline'}
+                          name={!canAddFiles ? 'lock-closed-outline' : dragOver ? 'download-outline' : 'cloud-upload-outline'}
                           size={26}
-                          color={folderKey ? '#E8B923' : Colors.textMuted}
+                          color={canAddFiles ? '#E8B923' : Colors.textMuted}
                         />
-                        <Text style={[s.dropTitle, !folderKey && { color: Colors.textMuted }]}>
+                        <Text style={[s.dropTitle, !canAddFiles && { color: Colors.textMuted }]}>
                           {!folderKey
                             ? 'Pick a folder first'
-                            : dragOver
-                              ? 'Drop the files here'
-                              : Platform.OS === 'web' ? 'Drag & drop files here' : 'Choose files…'}
+                            : needsLabel && !docLabel
+                              ? 'Say what the document is first'
+                              : dragOver
+                                ? 'Drop the files here'
+                                : Platform.OS === 'web' ? 'Drag & drop files here' : 'Choose files…'}
                         </Text>
-                        {folderKey ? (
+                        {canAddFiles && folderKey ? (
                           <>
                             {Platform.OS === 'web' && !dragOver && (
                               <Text style={s.dropSub}>or click to browse</Text>
@@ -570,6 +629,7 @@ export function AdminUploadModal({ visible, onClose, onUploaded }: {
                             <Text style={s.dropHint} numberOfLines={1}>
                               Files go to “{FOLDER_LABEL[folderKey]}
                               {subfolder ? ` › ${subfolder.name}` : ''}”
+                              {docLabel ? `, as ${docLabel}` : ''}
                             </Text>
                           </>
                         ) : (
@@ -593,11 +653,12 @@ export function AdminUploadModal({ visible, onClose, onUploaded }: {
                               <Text style={s.folderGroupTitle} numberOfLines={1}>
                                 {bucket.folderLabel}
                                 {bucket.subfolderName ? ` › ${bucket.subfolderName}` : ''}
+                                {bucket.label ? ` · ${bucket.label}` : ''}
                               </Text>
                               <Text style={s.folderGroupCount}>{bucket.files.length}</Text>
                               {!busy && (
                                 <TouchableOpacity
-                                  onPress={() => setConfirmRemove({ kind: 'group', id: bucket.key, name: bucket.subfolderName ? `${bucket.folderLabel} › ${bucket.subfolderName}` : bucket.folderLabel })}
+                                  onPress={() => setConfirmRemove({ kind: 'group', id: bucket.key, name: [bucket.folderLabel, bucket.subfolderName, bucket.label].filter(Boolean).join(' › ') })}
                                   hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                                 >
                                   <Ionicons name="close" size={15} color={Colors.textMuted} />
