@@ -17,6 +17,17 @@ import {
 } from '../db/subfolders';
 
 // Every folder an admin/staff can upload into, grouped by suite. Full access.
+/**
+ * Which service a folder belongs to, from its own key. Filing a document into a
+ * folder the client does not take would leave it somewhere they never look —
+ * their Documents tree is built from their services.
+ */
+function serviceOfFolder(key: string): 'TAX' | 'BK' | 'CFO' {
+  if (key.startsWith('tax_')) return 'TAX';
+  if (key.startsWith('cfo_')) return 'CFO';
+  return 'BK';
+}
+
 const UPLOAD_FOLDERS: { title: string; folders: { key: string; label: string }[] }[] = [
   { title: 'Tax Documents & Returns', folders: [
     { key: 'tax_contracts',          label: 'Tax Contracts' },
@@ -128,6 +139,12 @@ export function AdminUploadModal({ visible, onClose, onUploaded, fixedClient }: 
   const [docLabel, setDocLabel] = useState<string | null>(null);
   const [folderKey, setFolderKey] = useState<string | null>(null);
   const needsLabel   = !!folderKey && isStaffLabelFolder(folderKey);
+
+  // Only the folders this client actually has. Empty groups drop out.
+  const services = client?.services?.length ? client.services : ['BK'];
+  const visibleFolders = UPLOAD_FOLDERS
+    .map(g => ({ ...g, folders: g.folders.filter(f => services.includes(serviceOfFolder(f.key) as any)) }))
+    .filter(g => g.folders.length > 0);
   const labelOptions = folderKey ? staffLabelsForFolder(folderKey) : [];
   // Subfolders belong to one client inside one folder, so the list reloads
   // whenever either changes. `subfolder` null = the folder's root.
@@ -166,6 +183,15 @@ export function AdminUploadModal({ visible, onClose, onUploaded, fixedClient }: 
   }, []);
 
   useEffect(() => { if (visible) getAllClients().then(setClients); }, [visible]);
+
+  // A folder chosen for the last client may not exist for this one. Drop it
+  // rather than leave a destination selected that they do not have.
+  useEffect(() => {
+    if (folderKey && !visibleFolders.some(g => g.folders.some(f => f.key === folderKey))) {
+      setFolderKey(null);
+      setDocLabel(null);
+    }
+  }, [client?.id]);
 
   // Reload the subfolder list whenever the destination changes.
   useEffect(() => {
@@ -447,7 +473,7 @@ export function AdminUploadModal({ visible, onClose, onUploaded, fixedClient }: 
                 {client && (
                   <>
                     <Text style={s.label}>Folder</Text>
-                    {UPLOAD_FOLDERS.map(group => (
+                    {visibleFolders.map(group => (
                       <View key={group.title} style={{ marginBottom: 4 }}>
                         <Text style={s.groupLabel}>{group.title}</Text>
                         {group.folders.map(f => {
