@@ -419,6 +419,21 @@ export function ClientDocumentsScreen({
       else buckets.set(key, { key, title, icon, order, data: [row] });
     });
 
+    // A subfolder with nothing in it yet still gets a card. The standard three
+    // are made for every client before anything is filed, and a folder you
+    // cannot see is a folder nobody puts anything in.
+    subfolders.forEach(sf => {
+      const key = `sub:${sf.id}`;
+      if (buckets.has(key)) return;
+      buckets.set(key, {
+        key,
+        title: subfolderPath(subfolders, sf.id).map(p => p.name).join(' › ') || sf.name,
+        icon: 'folder',
+        order: 500,
+        data: [],
+      });
+    });
+
     return [...buckets.values()].sort((a, b) => a.order - b.order || a.title.localeCompare(b.title));
   }, [documents, clientItems, subfolders]);
 

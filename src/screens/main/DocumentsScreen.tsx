@@ -441,8 +441,10 @@ function DocListView({ sf, root, rootColor, documents, refreshing, onRefresh, on
       const within = new Set([sub.id, ...descendantIds(subfolders, sub.id)]);
       const files = documents.filter(d => d.subfolder_id && within.has(d.subfolder_id));
       return { sub, total: files.length, unread: files.filter(d => d.status !== 'viewed').length };
-    })
-    .filter(x => x.total > 0),
+    }),
+  // Empty ones are shown too. A folder standing there waiting for this month's
+  // statement is not noise — it is the answer to "where does this go", and
+  // hiding it until something arrives means it never does.
   [subfolders, documents, activeSub]);
 
   /** Where the open folder sits, outermost first. */
