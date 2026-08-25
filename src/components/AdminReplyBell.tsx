@@ -4,6 +4,7 @@ import {
   Modal,
   Pressable,
   ScrollView,
+  useWindowDimensions,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -73,6 +74,12 @@ interface Props {
 
 export function AdminReplyBell({ onMarkedRead }: Props) {
   const insets = useSafeAreaInsets();
+  const { width: winW, height: winH } = useWindowDimensions();
+  // Wide enough to hang under the bell rather than stretch across the screen.
+  const wide = winW >= 640;
+  // What is left after the gap above the panel, its header, and a little room
+  // at the bottom — so the list never runs off a short screen.
+  const listMax = Math.max(180, winH - (insets.top + 70) - 76 - (insets.bottom + 24));
   const mountedRef = useRef(true);
   useEffect(() => () => { mountedRef.current = false; }, []);
 
@@ -268,7 +275,18 @@ export function AdminReplyBell({ onMarkedRead }: Props) {
         onRequestClose={() => setOpen(false)}
       >
         <Pressable style={bs.overlay} onPress={() => setOpen(false)}>
-          <Pressable style={[bs.panel, { marginTop: insets.top + 70 }]} onPress={() => {}}>
+          <Pressable
+            style={[
+              bs.panel,
+              { marginTop: insets.top + 70 },
+              // On a phone it fills the width; on a desktop it sits under the
+              // bell at the top right, where it was opened from.
+              wide
+                ? { alignSelf: 'flex-end', width: 400, marginRight: 16 }
+                : { alignSelf: 'stretch' },
+            ]}
+            onPress={() => {}}
+          >
 
             {/* Panel header */}
             <LinearGradient
@@ -314,7 +332,7 @@ export function AdminReplyBell({ onMarkedRead }: Props) {
                 <Text style={bs.emptySub}>New client uploads and messages will appear here.</Text>
               </View>
             ) : (
-              <ScrollView bounces={false} showsVerticalScrollIndicator={false} style={{ maxHeight: 420 }}>
+              <ScrollView bounces={false} showsVerticalScrollIndicator={false} style={{ maxHeight: listMax }}>
                 {items.map((item, idx) => (
                   <View key={`${item.kind}::${item.folder_table}::${item.file_id}`}>
                     {idx > 0 && <View style={bs.sep} />}
@@ -338,7 +356,7 @@ export function AdminReplyBell({ onMarkedRead }: Props) {
                           <View style={bs.folderTag}>
                             <Text style={bs.folderTagText}>{FOLDER_LABELS[item.folder_table] ?? item.folder_table}</Text>
                           </View>
-                          <Text style={bs.itemSender}>{item.sender_name}</Text>
+                          <Text style={bs.itemSender} numberOfLines={1}>{item.sender_name}</Text>
                         </View>
                         <Text style={bs.itemMessage} numberOfLines={2}>{item.last_message}</Text>
                       </View>
@@ -443,13 +461,13 @@ const bs = StyleSheet.create({
   itemTopRow:{ flexDirection: 'row', alignItems: 'center', gap: 6 },
   itemFileName: { flex: 1, color: '#111827', fontSize: 13, fontWeight: '700' },
   itemTime:  { color: '#94A3B8', fontSize: 10, flexShrink: 0 },
-  itemFolderRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  itemFolderRow: { flexDirection: 'row', alignItems: 'center', gap: 6, minWidth: 0 },
   folderTag: {
     backgroundColor: '#FEF3C7', paddingHorizontal: 6, paddingVertical: 2,
     borderRadius: 6, borderWidth: 1, borderColor: '#FDE68A',
   },
   folderTagText: { color: '#92400E', fontSize: 9, fontWeight: '700' },
-  itemSender:  { color: '#6B7280', fontSize: 10 },
+  itemSender:  { color: '#6B7280', fontSize: 10, flexShrink: 1, minWidth: 0 },
   itemMessage: { color: '#374151', fontSize: 12, lineHeight: 17 },
 
   itemRight: { alignItems: 'center', gap: 8, flexShrink: 0 },
