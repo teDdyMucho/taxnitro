@@ -52,6 +52,7 @@ const CATEGORIES = [
     folders: [
       { table: 'bk_contracts',         label: 'BK Contracts',        icon: 'document-text-outline' as const },
       { table: 'bk_invoices',          label: 'BK Invoices',         icon: 'receipt-outline'       as const },
+      { table: 'bk_bank_accounts',     label: 'Bank Accounts',       icon: 'card-outline'          as const },
       { table: 'bk_final_pnl',         label: 'Additional BK Docs',  icon: 'folder-outline'        as const },
       { table: 'bk_mr_required_info',  label: 'Monthly Reporting (Required Info)',     icon: 'cloud-upload-outline' as const },
       { table: 'bk_mr_client_review',  label: 'Monthly Reporting (For Client Review)', icon: 'eye-outline'          as const },

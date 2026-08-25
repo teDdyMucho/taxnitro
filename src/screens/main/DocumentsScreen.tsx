@@ -110,6 +110,7 @@ const FOLDERS: RootFolder[] = [
     subFolders: [
       { key: 'bk_contracts',         label: 'BK Contracts',               icon: 'document-text-outline', color: '#E8B923', bg: 'rgba(232,185,35,0.15)'  },
       { key: 'bk_invoices',          label: 'BK Invoices',                icon: 'receipt-outline',       color: '#B5905B', bg: 'rgba(181,144,91,0.15)'  },
+      { key: 'bk_bank_accounts',     label: 'Bank Accounts',              icon: 'card-outline',          color: '#E8B923', bg: 'rgba(232,185,35,0.15)'  },
       { key: 'bk_final_pnl',         label: 'Additional BK Docs',         icon: 'folder-outline',        color: '#B5905B', bg: 'rgba(181,144,91,0.15)'  },
       {
         key: 'bk_monthly_reporting', label: 'Monthly Reporting', icon: 'bar-chart-outline', color: '#E8B923', bg: 'rgba(232,185,35,0.15)',

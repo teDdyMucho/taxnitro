@@ -41,6 +41,7 @@ const FOLDER_LABELS: Record<string, string> = {
   tax_return_information: 'Tax Returns',
   bk_contracts:           'BK Contracts',
   bk_invoices:            'BK Invoices',
+  bk_bank_accounts:       'Bank Accounts',
   bk_final_pnl:           'Additional BK Docs',
   bk_mr_required_info:    'Monthly Reporting (Required Info)',
   bk_mr_client_review:    'Monthly Reporting (For Client Review)',

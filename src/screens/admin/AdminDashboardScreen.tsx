@@ -23,6 +23,7 @@ const FOLDER_META: Record<string, { label: string; color: string; icon: string }
   tax_return_information: { label: 'Tax Returns',     color: '#B5905B', icon: 'information-circle-outline' },
   bk_contracts:           { label: 'BK Contracts',    color: '#2C2320', icon: 'document-text-outline'     },
   bk_invoices:            { label: 'BK Invoices',     color: '#E8B923', icon: 'receipt-outline'            },
+  bk_bank_accounts:       { label: 'Bank Accounts',      color: '#2C2320', icon: 'card-outline'           },
   bk_final_pnl:           { label: 'Additional BK Docs', color: '#2C2320', icon: 'folder-outline'         },
   bk_mr_required_info:    { label: 'Monthly Reporting (Required Info)',     color: '#E8B923', icon: 'cloud-upload-outline' },
   bk_mr_client_review:    { label: 'Monthly Reporting (For Client Review)', color: '#B5905B', icon: 'eye-outline'          },

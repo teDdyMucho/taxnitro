@@ -34,6 +34,7 @@ export const FOLDER_TABLES = [
   'tax_return_information',
   'bk_contracts',
   'bk_invoices',
+  'bk_bank_accounts',
   'bk_final_pnl',
   'bk_mr_required_info',
   'bk_mr_client_review',

@@ -57,6 +57,7 @@ interface Props {
 // Folders staff can deliver files into, per the client's services.
 // (Only staff-deliverable folders — not the client-upload / required-docs ones.)
 const STAFF_UPLOAD_FOLDERS: { key: string; label: string; service: 'BK' | 'TAX' | 'CFO' }[] = [
+  { key: 'bk_bank_accounts',     label: 'Bank Accounts',               service: 'BK'  },
   { key: 'bk_final_pnl',         label: 'Additional BK Docs',          service: 'BK'  },
   { key: 'bk_contracts',         label: 'Contracts (BK)',              service: 'BK'  },
   { key: 'bk_invoices',          label: 'Invoices (BK)',               service: 'BK'  },

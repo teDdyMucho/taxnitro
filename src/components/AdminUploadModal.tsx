@@ -27,6 +27,7 @@ const UPLOAD_FOLDERS: { title: string; folders: { key: string; label: string }[]
   { title: 'Bookkeeping & Financials', folders: [
     { key: 'bk_contracts',           label: 'BK Contracts' },
     { key: 'bk_invoices',            label: 'BK Invoices' },
+    { key: 'bk_bank_accounts',       label: 'Bank Accounts' },
     { key: 'bk_final_pnl',           label: 'Additional BK Docs' },
     { key: 'bk_mr_required_info',    label: 'Monthly Reporting (Required Info)' },
     { key: 'bk_mr_client_review',    label: 'Monthly Reporting (For Client Review)' },

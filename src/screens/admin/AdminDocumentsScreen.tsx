@@ -388,6 +388,7 @@ const FOLDERS = [
   { key: 'tax_return_information', label: 'Tax Returns',    color: '#B5905B' },
   { key: 'bk_contracts',           label: 'BK Contracts',   color: '#2C2320' },
   { key: 'bk_invoices',            label: 'BK Invoices',    color: '#E8B923' },
+  { key: 'bk_bank_accounts',       label: 'Bank Accounts',      color: '#2C2320' },
   { key: 'bk_final_pnl',           label: 'Additional BK Docs', color: '#2C2320' },
   { key: 'bk_mr_required_info',    label: 'Monthly Reporting (Required Info)',     color: '#E8B923' },
   { key: 'bk_mr_client_review',    label: 'Monthly Reporting (For Client Review)', color: '#B5905B' },
@@ -404,7 +405,7 @@ const FOLDERS = [
 const FILTER_GROUPS: { title: string; keys: string[] }[] = [
   { title: 'Quick',                     keys: ['all', 'pending'] },
   { title: 'Tax Documents & Returns',   keys: ['tax_contracts', 'tax_invoices', 'tax_client_uploads', 'tax_additional_docs', 'tax_return_information'] },
-  { title: 'Bookkeeping & Financials',  keys: ['bk_contracts', 'bk_invoices', 'bk_final_pnl', 'bk_mr_required_info', 'bk_mr_client_review', 'bk_mr_final_statements'] },
+  { title: 'Bookkeeping & Financials',  keys: ['bk_contracts', 'bk_invoices', 'bk_bank_accounts', 'bk_final_pnl', 'bk_mr_required_info', 'bk_mr_client_review', 'bk_mr_final_statements'] },
   { title: 'CFO Advisory',              keys: ['cfo_contracts', 'cfo_invoices', 'cfo_additional_docs', 'cfo_mr_required_info', 'cfo_mr_client_review', 'cfo_mr_final_statements'] },
 ];
 
