@@ -34,7 +34,7 @@ import { createCustomRequest } from '../../db/customRequests';
 import {
   useDownloadSelection, DownloadSelectionBar, DownloadNotice, SelectCheckbox,
 } from '../../components/DownloadSelectionBar';
-import { listSubfoldersForClient, renameSubfolder, Subfolder } from '../../db/subfolders';
+import { listSubfoldersForClient, renameSubfolder, subfolderPath, Subfolder } from '../../db/subfolders';
 import { dashboardForClient } from '../../lib/clientDashboards';
 import { ClientDetailsPanel } from '../../components/ClientDetailsPanel';
 import { AdminUploadModal } from '../../components/AdminUploadModal';
@@ -399,7 +399,11 @@ export function ClientDocumentsScreen({
       let key: string, title: string, order: number;
       let icon: keyof typeof Ionicons.glyphMap;
       if (sub) {
-        key = `sub:${sub.id}`; title = sub.name; order = 500; icon = 'folder';
+        // The whole path, so a folder called "January" is not adrift from the
+        // bank and year it belongs to.
+        key = `sub:${sub.id}`;
+        title = subfolderPath(subfolders, sub.id).map(p => p.name).join(' › ') || sub.name;
+        order = 500; icon = 'folder';
       } else if (item) {
         key = `req:${item.service}:${item.key}`; title = item.label;
         order = clientItems.indexOf(item);

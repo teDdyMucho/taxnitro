@@ -21,7 +21,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   useDownloadSelection, DownloadSelectionBar, DownloadNotice, SelectCheckbox,
 } from '../../components/DownloadSelectionBar';
-import { listSubfolders, Subfolder } from '../../db/subfolders';
+import { listSubfolders, subfolderPath, descendantIds, Subfolder } from '../../db/subfolders';
 import { ClientUploadModal } from '../../components/ClientUploadModal';
 import * as DocumentPicker from 'expo-document-picker';
 import * as WebBrowser from 'expo-web-browser';
@@ -429,14 +429,27 @@ function DocListView({ sf, root, rootColor, documents, refreshing, onRefresh, on
     return () => { alive = false; };
   }, [sf.key, userEmail]);
 
-  /** Subfolders that actually hold something — an empty one is just noise. */
+  /**
+   * The folders at this level — inside the open one, or at the top when none is.
+   *
+   * A folder counts everything filed anywhere under it, so a parent holding
+   * nothing directly is not hidden while its children hold the whole year.
+   */
   const subWithCounts = useMemo(() => subfolders
+    .filter(sub => (sub.parent_subfolder_id ?? null) === (activeSub?.id ?? null))
     .map(sub => {
-      const files = documents.filter(d => d.subfolder_id === sub.id);
+      const within = new Set([sub.id, ...descendantIds(subfolders, sub.id)]);
+      const files = documents.filter(d => d.subfolder_id && within.has(d.subfolder_id));
       return { sub, total: files.length, unread: files.filter(d => d.status !== 'viewed').length };
     })
     .filter(x => x.total > 0),
-  [subfolders, documents]);
+  [subfolders, documents, activeSub]);
+
+  /** Where the open folder sits, outermost first. */
+  const subPath = useMemo(
+    () => subfolderPath(subfolders, activeSub?.id ?? null),
+    [subfolders, activeSub],
+  );
 
   /** Files for the level being shown: inside the open subfolder, or the root. */
   const scoped = useMemo(
@@ -489,10 +502,17 @@ function DocListView({ sf, root, rootColor, documents, refreshing, onRefresh, on
         style={[s.docHeader, { paddingTop: pt }]}
       >
         <View style={s.docHeaderTop}>
-          {/* Back steps out of a subfolder first, then off the folder. */}
+          {/* Back steps out one level at a time, then off the folder — from
+              three deep, one tap should not land you outside altogether. */}
           <TouchableOpacity
             style={s.backBtn}
-            onPress={() => (activeSub ? setActiveSub(null) : onBack())}
+            onPress={() => {
+              if (!activeSub) { onBack(); return; }
+              const parent = activeSub.parent_subfolder_id
+                ? subfolders.find(sf2 => sf2.id === activeSub.parent_subfolder_id) ?? null
+                : null;
+              setActiveSub(parent);
+            }}
           >
             <Ionicons name="chevron-back" size={20} color="rgba(255,255,255,0.9)" />
           </TouchableOpacity>
@@ -507,7 +527,7 @@ function DocListView({ sf, root, rootColor, documents, refreshing, onRefresh, on
             </Text>
             <Text style={s.docHeaderSub} numberOfLines={1}>
               {activeSub
-                ? `${sf.label} · ${scoped.length} file${scoped.length !== 1 ? 's' : ''}`
+                ? `${[sf.label, ...subPath.slice(0, -1).map(p => p.name)].join(' › ')} · ${scoped.length} file${scoped.length !== 1 ? 's' : ''}`
                 : `${documents.length} file${documents.length !== 1 ? 's' : ''}${unread > 0 ? ` · ${unread} unread` : ''}`}
             </Text>
           </View>
@@ -560,9 +580,10 @@ function DocListView({ sf, root, rootColor, documents, refreshing, onRefresh, on
         showsVerticalScrollIndicator={false}
         ListHeaderComponent={
           <>
-            {/* Subfolders sit above the loose files, and only at the folder
-                root — search spans everything, so they'd be misleading there. */}
-            {!activeSub && !search && subWithCounts.length > 0 && (
+            {/* Folders sit above the loose files, at whatever level is open —
+                a folder inside a folder is shown the same way. Not during a
+                search, which spans everything and would make them misleading. */}
+            {!search && subWithCounts.length > 0 && (
               <View style={{ marginBottom: 14 }}>
                 <Text style={s.subSectionLabel}>Folders</Text>
                 {subWithCounts.map(({ sub, total, unread: sUnread }) => (
@@ -595,7 +616,7 @@ function DocListView({ sf, root, rootColor, documents, refreshing, onRefresh, on
 
             {filtered.length > 0 && (
               <>
-                {!activeSub && !search && subWithCounts.length > 0 && (
+                {!search && subWithCounts.length > 0 && (
                   <Text style={s.subSectionLabel}>Documents</Text>
                 )}
                 <DownloadSelectionBar
@@ -626,7 +647,7 @@ function DocListView({ sf, root, rootColor, documents, refreshing, onRefresh, on
         ListEmptyComponent={
           // Folder cards are rendered in the header, so "no files yet" below
           // them would be wrong — there are files, just inside the subfolders.
-          !activeSub && !search && subWithCounts.length > 0
+          !search && subWithCounts.length > 0
             ? null
             : <EmptyDocs sf={sf} inSubfolder={!!activeSub} />
         }

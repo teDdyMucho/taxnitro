@@ -12,10 +12,17 @@ export interface Subfolder {
   parent_table: string;
   /** Client this folder belongs to; null on the legacy shared rows. */
   owner_email: string | null;
+  /** The subfolder this one sits inside; null when it sits in the folder itself. */
+  parent_subfolder_id: string | null;
   name: string;
   created_by: string | null;
   created_at: string;
 }
+
+// The tree helpers live in lib/subfolderTree.ts, which imports nothing — the
+// screens that draw the tree need them and should not have to reach through a
+// database module to get there.
+export { buildSubfolderTree, subfolderPath, descendantIds, type SubfolderNode } from '../lib/subfolderTree';
 
 /**
  * Subfolders inside a folder table (alphabetical).
@@ -66,6 +73,8 @@ export async function createSubfolder(
   name: string,
   createdBy: string | null,
   ownerEmail: string | null,
+  /** The subfolder to create this one inside; null puts it in the folder itself. */
+  parentSubfolderId: string | null = null,
 ): Promise<Subfolder | null> {
   const { data, error } = await supabase
     .from('custom_subfolders')
@@ -74,6 +83,7 @@ export async function createSubfolder(
       name: name.trim(),
       created_by: createdBy,
       owner_email: ownerEmail,
+      parent_subfolder_id: parentSubfolderId,
     })
     .select('*')
     .single();
@@ -101,8 +111,9 @@ export async function renameSubfolder(id: string, name: string): Promise<Subfold
   return data as Subfolder;
 }
 
-// Delete a subfolder. Files inside it keep existing; their subfolder_id is
-// reset to null by the ON DELETE SET NULL FK.
+// Delete a subfolder, and everything inside it — the database cascades to the
+// children. Files are NOT deleted: their subfolder_id is reset by the ON DELETE
+// SET NULL already on it, so they come back to the folder root.
 export async function deleteSubfolder(id: string): Promise<boolean> {
   const { data, error } = await supabase
     .from('custom_subfolders')

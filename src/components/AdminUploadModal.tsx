@@ -14,6 +14,7 @@ import { isStaffLabelFolder, staffLabelsForFolder } from '../db/requirements';
 import { getAllClients, Profile } from '../db/profiles';
 import {
   listSubfolders, createSubfolder, moveDocumentToSubfolder, Subfolder,
+  subfolderPath,
 } from '../db/subfolders';
 
 // Every folder an admin/staff can upload into, grouped by suite. Full access.
@@ -212,13 +213,17 @@ export function AdminUploadModal({ visible, onClose, onUploaded, fixedClient }: 
     if (!name || !client?.email || !folderKey) return;
     // The unique index is per (table, owner, lower(name)) — say so here rather
     // than letting the insert fail with a raw constraint error.
-    if (subfolders.some(sf => sf.name.toLowerCase() === name.toLowerCase())) {
+    const siblings = subfolders.filter(sf =>
+      (sf.parent_subfolder_id ?? null) === (subfolder?.id ?? null));
+    if (siblings.some(sf => sf.name.toLowerCase() === name.toLowerCase())) {
       setSubError(`"${name}" already exists in this folder.`);
       return;
     }
     setCreatingSub(true);
     setSubError(null);
-    const created = await createSubfolder(folderKey, name, user?.email ?? null, client.email);
+    // Created inside whatever is selected, so a nested folder can be made from
+    // here without leaving the upload.
+    const created = await createSubfolder(folderKey, name, user?.email ?? null, client.email, subfolder?.id ?? null);
     setCreatingSub(false);
     if (created) {
       setSubfolders(prev => [...prev, created].sort((a, b) => a.name.localeCompare(b.name)));
@@ -551,6 +556,10 @@ export function AdminUploadModal({ visible, onClose, onUploaded, fixedClient }: 
 
                         {subfolders.map(sf => {
                           const on = subfolder?.id === sf.id;
+                          // The full path, so two folders called "2024" under
+                          // different banks are told apart at a glance.
+                          const path = subfolderPath(subfolders, sf.id);
+                          const label = path.map(p => p.name).join(' › ');
                           return (
                             <TouchableOpacity
                               key={sf.id}
@@ -560,7 +569,7 @@ export function AdminUploadModal({ visible, onClose, onUploaded, fixedClient }: 
                             >
                               <Ionicons name="folder" size={13} color={on ? '#2C2320' : '#B5905B'} />
                               <Text style={[s.subChipText, on && s.subChipTextOn]} numberOfLines={1}>
-                                {sf.name}
+                                {label}
                               </Text>
                               {/* Shared rows predate per-client subfolders. */}
                               {!sf.owner_email && (
@@ -578,7 +587,7 @@ export function AdminUploadModal({ visible, onClose, onUploaded, fixedClient }: 
                         <Ionicons name="add" size={15} color={Colors.textMuted} />
                         <TextInput
                           style={[s.newSubText, { outlineWidth: 0 } as any]}
-                          placeholder="New subfolder name…"
+                          placeholder={subfolder ? `New folder inside ${subfolder.name}…` : 'New subfolder name…'}
                           placeholderTextColor={Colors.textMuted}
                           value={newSubName}
                           onChangeText={t => { setNewSubName(t); setSubError(null); }}

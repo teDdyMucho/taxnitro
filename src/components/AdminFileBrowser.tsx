@@ -26,6 +26,7 @@ import {
 } from './DownloadSelectionBar';
 import {
   listSubfolders, createSubfolder, renameSubfolder, deleteSubfolder, moveDocumentToSubfolder, Subfolder,
+  subfolderPath, descendantIds,
 } from '../db/subfolders';
 
 // ── Config ────────────────────────────────────────────────────────────────────
@@ -165,8 +166,13 @@ export function AdminFileBrowser({ visible, onClose }: Props) {
   // Subfolders (staff/admin created, global per folder table)
   const [subfolders, setSubfolders]       = useState<Subfolder[]>([]);
   const [activeSubfolder, setActiveSubfolder] = useState<string>('all'); // 'all' | 'none' | <id>
+  // Which folder's contents the bar is showing. null = the folder table itself.
+  // Separate from activeSubfolder, which is the FILTER: you can be standing in
+  // Chase, looking at everything under it, and step into 2024 from there.
+  const [subCwd, setSubCwd] = useState<string | null>(null);
   const [newSubOpen, setNewSubOpen]       = useState(false);
   const [newSubName, setNewSubName]       = useState('');
+  const [newSubError, setNewSubError]     = useState<string | null>(null);
   const [subBusy, setSubBusy]             = useState(false);
   const [delSubTarget, setDelSubTarget]   = useState<Subfolder | null>(null);
   // Renaming, not deleting-and-recreating: the files keep pointing at the same
@@ -223,6 +229,7 @@ export function AdminFileBrowser({ visible, onClose }: Props) {
   const openFolder = async (cat: Category, folder: FolderMeta) => {
     setNav({ kind: 'clients', category: cat, folder });
     setActiveSubfolder('all');
+    setSubCwd(null);
     listSubfolders(folder.table).then(subs => { if (mountedRef.current) setSubfolders(subs); });
     setLoading(true);
     const { data: docs } = await supabase.from(folder.table).select('id, user_id, email, status').order('email', { ascending: true });
@@ -250,6 +257,7 @@ export function AdminFileBrowser({ visible, onClose }: Props) {
     setFileQuery('');
     setFileFilter('all');
     setActiveSubfolder('all');
+    setSubCwd(null);
     setLoading(true);
     // Subfolders belong to a client, so this list is theirs plus the legacy
     // shared ones — see database/subfolders_per_client.sql.
@@ -351,14 +359,20 @@ export function AdminFileBrowser({ visible, onClose }: Props) {
   const handleCreateSubfolder = async () => {
     const name = newSubName.trim();
     if (!name || !currentFolderTable || subBusy) return;
+    const siblings = subfolders.filter(sf => (sf.parent_subfolder_id ?? null) === subCwd);
+    if (siblings.some(sf => sf.name.toLowerCase() === name.toLowerCase())) {
+      setNewSubError('There is already a folder by that name here.');
+      return;
+    }
     setSubBusy(true);
-    const created = await createSubfolder(currentFolderTable, name, user?.email ?? null, currentClientEmail);
+    const created = await createSubfolder(currentFolderTable, name, user?.email ?? null, currentClientEmail, subCwd);
     setSubBusy(false);
     if (created) {
       setSubfolders(prev => [...prev, created].sort((a, b) => a.name.localeCompare(b.name)));
       setActiveSubfolder(created.id);
     }
     setNewSubName('');
+    setNewSubError(null);
     setNewSubOpen(false);
   };
 
@@ -368,8 +382,12 @@ export function AdminFileBrowser({ visible, onClose }: Props) {
     if (name === renSubTarget.name) { setRenSubTarget(null); return; }
     // Checked here so the message names the real reason; the unique index
     // refuses it either way.
-    if (subfolders.some(sf => sf.id !== renSubTarget.id && sf.name.toLowerCase() === name.toLowerCase())) {
-      setRenSubError('This client already has a folder by that name here.');
+    // Only its siblings matter now: "2024" under Chase and "2024" under Amex
+    // are two different folders, and the index allows both.
+    const siblings = subfolders.filter(sf =>
+      (sf.parent_subfolder_id ?? null) === (renSubTarget.parent_subfolder_id ?? null));
+    if (siblings.some(sf => sf.id !== renSubTarget.id && sf.name.toLowerCase() === name.toLowerCase())) {
+      setRenSubError('There is already a folder by that name here.');
       return;
     }
     setSubBusy(true);
@@ -389,10 +407,19 @@ export function AdminFileBrowser({ visible, onClose }: Props) {
     setSubBusy(false);
     if (ok) {
       const id = delSubTarget.id;
-      setSubfolders(prev => prev.filter(s => s.id !== id));
-      // Files that were in it become unfiled locally (FK reset to null).
-      setFiles(prev => prev.map(f => f.subfolder_id === id ? { ...f, subfolder_id: null } : f));
-      if (activeSubfolder === id) setActiveSubfolder('all');
+      // The database cascades to everything inside it; mirror that here rather
+      // than leaving children pointing at a folder that has gone.
+      const gone = new Set([id, ...descendantIds(subfolders, id)]);
+      setSubfolders(prev => prev.filter(s => !gone.has(s.id)));
+      // Files that were in any of them become unfiled (FK reset to null).
+      setFiles(prev => prev.map(f => (f.subfolder_id && gone.has(f.subfolder_id))
+        ? { ...f, subfolder_id: null } : f));
+      if (gone.has(activeSubfolder)) setActiveSubfolder('all');
+      // Standing inside what was deleted? Step out to the nearest survivor.
+      if (subCwd && gone.has(subCwd)) {
+        const above = subfolderPath(subfolders, subCwd).map(p => p.id).filter(pid => !gone.has(pid));
+        setSubCwd(above.length ? above[above.length - 1] : null);
+      }
     }
     setDelSubTarget(null);
   };
@@ -424,7 +451,12 @@ export function AdminFileBrowser({ visible, onClose }: Props) {
     if (fileFilter === 'rejected' && f.approval_status !== 'rejected')     return false;
     if (fileFilter === 'approved' && f.approval_status !== 'approved')     return false;
     if (activeSubfolder === 'none' && f.subfolder_id)                      return false;
-    if (activeSubfolder !== 'all' && activeSubfolder !== 'none' && f.subfolder_id !== activeSubfolder) return false;
+    // A folder shows its own files AND everything filed further in, so a
+    // parent is not misleadingly empty while its children hold everything.
+    if (activeSubfolder !== 'all' && activeSubfolder !== 'none') {
+      const within = new Set([activeSubfolder, ...descendantIds(subfolders, activeSubfolder)]);
+      if (!f.subfolder_id || !within.has(f.subfolder_id)) return false;
+    }
     if (fileQuery.trim() && !f.name.toLowerCase().includes(fileQuery.toLowerCase())) return false;
     return true;
   });
@@ -463,23 +495,62 @@ export function AdminFileBrowser({ visible, onClose }: Props) {
           </TouchableOpacity>
         );
       })}
-      {subfolders.map(sf => {
+      {/* Where we are, when we have stepped inside something. */}
+      {subCwd && subfolderPath(subfolders, subCwd).map((crumb, i, all) => (
+        <React.Fragment key={crumb.id}>
+          {i === 0 && (
+            <TouchableOpacity
+              style={fb.subChip}
+              onPress={() => { setSubCwd(null); setActiveSubfolder('all'); }}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="arrow-up" size={13} color="#B5905B" />
+              <Text style={fb.subChipText}>Top</Text>
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity
+            style={[fb.subChip, i === all.length - 1 && fb.subChipActive]}
+            onPress={() => { setSubCwd(crumb.id); setActiveSubfolder(crumb.id); }}
+            activeOpacity={0.8}
+          >
+            <Ionicons
+              name="folder-open"
+              size={13}
+              color={i === all.length - 1 ? '#1C1713' : '#B5905B'}
+            />
+            <Text style={[fb.subChipText, i === all.length - 1 && fb.subChipTextActive]}>{crumb.name}</Text>
+          </TouchableOpacity>
+        </React.Fragment>
+      ))}
+
+      {/* The folders sitting at this level. */}
+      {subfolders.filter(sf => (sf.parent_subfolder_id ?? null) === subCwd).map(sf => {
         const active = withFileFilters && activeSubfolder === sf.id;
-        const cnt = files.filter(f => f.subfolder_id === sf.id).length;
+        const within = new Set([sf.id, ...descendantIds(subfolders, sf.id)]);
+        const cnt = files.filter(f => f.subfolder_id && within.has(f.subfolder_id)).length;
+        const hasChildren = subfolders.some(x => x.parent_subfolder_id === sf.id);
         return (
           <TouchableOpacity
             key={sf.id}
             style={[fb.subChip, active && fb.subChipActive]}
-            onPress={() => withFileFilters ? setActiveSubfolder(sf.id) : setDelSubTarget(sf)}
+            onPress={() => {
+              if (!withFileFilters) { setDelSubTarget(sf); return; }
+              // First tap filters to it; tapping the one already open steps in.
+              if (activeSubfolder === sf.id) setSubCwd(sf.id);
+              else setActiveSubfolder(sf.id);
+            }}
             onLongPress={() => { setRenSubName(sf.name); setRenSubError(null); setRenSubTarget(sf); }}
             delayLongPress={350}
             activeOpacity={0.8}
           >
-            <Ionicons name="folder" size={13} color={active ? '#1C1713' : '#B5905B'} />
+            <Ionicons name={hasChildren ? 'folder-open' : 'folder'} size={13} color={active ? '#1C1713' : '#B5905B'} />
             <Text style={[fb.subChipText, active && fb.subChipTextActive]}>{sf.name}</Text>
             {withFileFilters && cnt > 0 && <Text style={[fb.subChipCount, active && { color: '#1C1713' }]}>{cnt}</Text>}
             {active && (
               <>
+                <TouchableOpacity onPress={() => setSubCwd(sf.id)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+                  <Ionicons name="enter-outline" size={13} color="#1C1713" />
+                </TouchableOpacity>
                 <TouchableOpacity
                   onPress={() => { setRenSubName(sf.name); setRenSubError(null); setRenSubTarget(sf); }}
                   hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
@@ -494,9 +565,11 @@ export function AdminFileBrowser({ visible, onClose }: Props) {
           </TouchableOpacity>
         );
       })}
-      <TouchableOpacity style={fb.subNewChip} onPress={() => { setNewSubName(''); setNewSubOpen(true); }} activeOpacity={0.8}>
+      <TouchableOpacity style={fb.subNewChip} onPress={() => { setNewSubName(''); setNewSubError(null); setNewSubOpen(true); }} activeOpacity={0.8}>
         <Ionicons name="add" size={15} color="#E8B923" />
-        <Text style={fb.subNewText}>New Subfolder</Text>
+        <Text style={fb.subNewText} numberOfLines={1}>
+          {subCwd ? `New folder in ${subfolderPath(subfolders, subCwd).slice(-1)[0]?.name ?? ''}` : 'New Subfolder'}
+        </Text>
       </TouchableOpacity>
     </ScrollView>
   );
@@ -1117,7 +1190,10 @@ export function AdminFileBrowser({ visible, onClose }: Props) {
             <View style={[fb.rejectIconWrap, { backgroundColor: 'rgba(232,185,35,0.15)' }]}><Ionicons name="folder-outline" size={26} color="#E8B923" /></View>
             <Text style={fb.rejectModalTitle}>New Subfolder</Text>
             <Text style={fb.rejectModalSub} numberOfLines={2}>Inside {(nav as any).folder?.label ?? 'this folder'}</Text>
-            <TextInput style={fb.rejectInput} placeholder="Subfolder name" placeholderTextColor="#94A3B8" value={newSubName} onChangeText={setNewSubName} autoFocus onSubmitEditing={handleCreateSubfolder} />
+            <TextInput style={fb.rejectInput} placeholder="Subfolder name" placeholderTextColor="#94A3B8" value={newSubName} onChangeText={t => { setNewSubName(t); setNewSubError(null); }} autoFocus onSubmitEditing={handleCreateSubfolder} />
+            {newSubError ? (
+              <Text style={[fb.rejectModalSub, { color: '#EF4444', marginTop: 2, fontSize: 12 }]}>{newSubError}</Text>
+            ) : null}
             <View style={fb.rejectModalBtns}>
               <TouchableOpacity style={fb.rejectCancelBtn} onPress={() => setNewSubOpen(false)}><Text style={fb.rejectCancelText}>Cancel</Text></TouchableOpacity>
               <TouchableOpacity style={[fb.rejectConfirmBtn, { backgroundColor: '#E8B923' }, (subBusy || !newSubName.trim()) && { opacity: 0.5 }]} onPress={handleCreateSubfolder} disabled={subBusy || !newSubName.trim()}>
