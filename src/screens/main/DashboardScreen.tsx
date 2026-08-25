@@ -208,12 +208,17 @@ function MiniChart({ data, loading }: { data: ChartPoint[]; loading: boolean }) 
           const isHighest = item.docs === maxVal && item.docs > 0;
           return (
             <View key={item.month} style={chartStyles.barWrapper}>
-              <View style={chartStyles.barColumn}>
+              {/* Kept for every column, empty or not, so the row above the bars
+                  is always the same height and the badge cannot ride up over
+                  the card's title on a narrow screen. */}
+              <View style={chartStyles.valueRow}>
                 {isHighest && (
                   <View style={chartStyles.barTooltip}>
                     <Text style={chartStyles.barTooltipText}>{item.docs}</Text>
                   </View>
                 )}
+              </View>
+              <View style={chartStyles.barColumn}>
                 <View
                   style={[
                     chartStyles.bar,
@@ -224,7 +229,10 @@ function MiniChart({ data, loading }: { data: ChartPoint[]; loading: boolean }) 
                   ]}
                 />
               </View>
-              <Text style={[chartStyles.barMonth, isHighest && { color: Colors.primary, fontWeight: '700' }]}>
+              <Text
+                style={[chartStyles.barMonth, isHighest && { color: Colors.primary, fontWeight: '700' }]}
+                numberOfLines={1}
+              >
                 {item.month}
               </Text>
             </View>
@@ -236,22 +244,26 @@ function MiniChart({ data, loading }: { data: ChartPoint[]; loading: boolean }) 
 }
 
 const chartStyles = StyleSheet.create({
-  container: { height: 120, justifyContent: 'center' },
-  empty: { alignItems: 'center', gap: 8 },
+  // Tall enough for the value row, the bars and the month beneath them.
+  container: { height: 148, justifyContent: 'flex-end' },
+  empty: { alignItems: 'center', justifyContent: 'center', gap: 8, height: '100%' },
   emptyText: { color: Colors.textMuted, fontSize: 13 },
-  bars: { flexDirection: 'row', alignItems: 'flex-end', height: '100%', gap: 6 },
-  barWrapper: { flex: 1, alignItems: 'center', height: '100%', justifyContent: 'flex-end' },
-  barColumn: { width: '100%', alignItems: 'center', flex: 1, justifyContent: 'flex-end', position: 'relative' },
+  // A small gap: six columns have to fit the narrowest phone.
+  bars: { flexDirection: 'row', alignItems: 'flex-end', height: '100%', gap: 4 },
+  barWrapper: { flex: 1, minWidth: 0, alignItems: 'center', height: '100%' },
+  valueRow: { height: 20, justifyContent: 'flex-end', alignItems: 'center' },
+  barColumn: { width: '100%', alignItems: 'center', flex: 1, justifyContent: 'flex-end' },
   barTooltip: {
-    position: 'absolute',
-    top: -20,
     backgroundColor: Colors.primary,
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 5,
+    marginBottom: 4,
   },
   barTooltipText: { color: Colors.white, fontSize: 9, fontWeight: '700' },
-  bar: { width: '75%', borderRadius: 5, minHeight: 8 },
+  // Percentage width so it tracks the column, capped so a wide card does not
+  // turn six bars into six slabs.
+  bar: { width: '70%', maxWidth: 34, borderRadius: 5, minHeight: 8 },
   barMonth: { color: Colors.textMuted, fontSize: 10, marginTop: 6, fontWeight: '500' },
 });
 
