@@ -50,6 +50,12 @@ interface Props {
   onBack: () => void;
   /** Opens this client's financial dashboard, when one has been built. */
   onOpenDashboard?: () => void;
+  /**
+   * The folder that was open last time. This screen is unmounted whenever
+   * another tab is shown, so where you were has to be kept above it.
+   */
+  openFolderKey?: string | null;
+  onFolderChange?: (key: string | null) => void;
 }
 
 
@@ -287,7 +293,9 @@ const rq = StyleSheet.create({
 
 // ── Main Screen ───────────────────────────────────────────────────────────────
 
-export function ClientDocumentsScreen({ client, onBack, onOpenDashboard }: Props) {
+export function ClientDocumentsScreen({
+  client, onBack, onOpenDashboard, openFolderKey = null, onFolderChange,
+}: Props) {
   // Built per client from their own workbook, so most clients have none.
   const clientDashboard = dashboardForClient(client);
   // Renaming a subfolder from where it is actually browsed. Only the staff-made
@@ -303,7 +311,13 @@ export function ClientDocumentsScreen({ client, onBack, onOpenDashboard }: Props
   const [uploadOpen, setUploadOpen] = useState(false);
   const [requestOpen, setRequestOpen] = useState(false);
   // null → the folder list; otherwise the folder being looked inside.
-  const [activeFolderKey, setActiveFolderKey] = useState<string | null>(null);
+  const [activeFolderKey, setActiveFolder] = useState<string | null>(openFolderKey);
+  // One setter, so the parent is told every time — there is no way to change
+  // the folder here and forget to report it.
+  const setActiveFolderKey = useCallback((key: string | null) => {
+    setActiveFolder(key);
+    onFolderChange?.(key);
+  }, [onFolderChange]);
   // Staff can file a document into a subfolder from the upload or the file
   // browser. Those are real folders to the client, so they have to appear here
   // too — grouping by the upload label alone hid them on this screen.
@@ -416,9 +430,12 @@ export function ClientDocumentsScreen({ client, onBack, onOpenDashboard }: Props
   const clientSlug = client.full_name || client.email;
 
   // A folder that empties out (last file deleted) must not strand the view.
+  // Not while loading, though: the folder list is empty until the documents
+  // arrive, and clearing then would throw away the folder we came back to.
   useEffect(() => {
+    if (loading) return;
     if (activeFolderKey && !folders.some(f => f.key === activeFolderKey)) setActiveFolderKey(null);
-  }, [folders, activeFolderKey]);
+  }, [loading, folders, activeFolderKey]);
 
   const renderFolderCard = ({ item }: { item: FolderBucket }) => {
     const unread = unreadIn(item.data);

@@ -78,13 +78,19 @@ export function AdminNavigator({ onLogout }: { onLogout: () => void }) {
   // Set from the client's own page; cleared on the way back, which is what puts
   // that client back on screen.
   const [showDashboard, setShowDashboard] = useState(false);
+  // Which folder of theirs was open. Held here because the client's page is
+  // unmounted when another tab is shown, and its own state goes with it.
+  const [clientFolderKey, setClientFolderKey] = useState<string | null>(null);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
 
   const visibleItems = NAV_ITEMS.filter(i => !i.adminOnly || isAdmin);
 
+  // Switching tabs used to forget which client was open, so going to Documents
+  // and back to Clients meant searching for them again. The tab changes; where
+  // you were does not. Leaving the client is what the back arrow on their page
+  // is for.
   const handleTabPress = (name: AdminTab) => {
     setActiveTab(name);
-    setSelectedClient(null);
     setShowDashboard(false);
   };
 
@@ -107,7 +113,9 @@ export function AdminNavigator({ onLogout }: { onLogout: () => void }) {
       return (
         <ClientDocumentsScreen
           client={selectedClient}
-          onBack={() => setSelectedClient(null)}
+          openFolderKey={clientFolderKey}
+          onFolderChange={setClientFolderKey}
+          onBack={() => { setSelectedClient(null); setClientFolderKey(null); }}
           onOpenDashboard={() => setShowDashboard(true)}
         />
       );
@@ -115,7 +123,18 @@ export function AdminNavigator({ onLogout }: { onLogout: () => void }) {
     switch (activeTab) {
       case 'Dashboard': return <AdminDashboardScreen onViewAllDocuments={() => setActiveTab('Documents')} />;
       case 'Documents': return <AdminDocumentsScreen />;
-      case 'Clients':   return <ClientListScreen onSelectClient={c => { setSelectedClient(c); setShowDashboard(false); }} />;
+      case 'Clients':
+        return (
+          <ClientListScreen
+            onSelectClient={c => {
+              // A different client starts at their folder list, not wherever
+              // the last one was left.
+              if (c.id !== selectedClient?.id) setClientFolderKey(null);
+              setSelectedClient(c);
+              setShowDashboard(false);
+            }}
+          />
+        );
       case 'Staff':     return <StaffManagementScreen />;
       case 'Workflow':  return <WorkflowDashboardScreen />;
       case 'Reports':   return <FinancialReportsScreen onBack={() => handleTabPress('Dashboard')} />;

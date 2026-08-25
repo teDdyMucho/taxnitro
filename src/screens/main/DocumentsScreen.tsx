@@ -1129,6 +1129,28 @@ function DetailRow({ icon, label, value, color }: {
 
 type Nav = 'root' | 'sub' | 'group' | 'docs';
 
+/**
+ * Where the reader last was. This screen is unmounted whenever another tab is
+ * shown, taking its navigation with it, so coming back from Dashboard used to
+ * mean starting at the top and clicking down again.
+ *
+ * Kept in the module rather than threaded through the navigator: it is one
+ * screen, and this is a convenience, not state anything else depends on.
+ * Folders are stored by key and looked up again on the way back, so a folder
+ * that has since gone simply does not restore.
+ *
+ * Stamped with the user, so the next person to sign in on this device starts at
+ * the root rather than wherever the last one was. Session-only by design — a
+ * reload starts at the root too.
+ */
+let lastPlace: {
+  userId: string;
+  nav: Nav;
+  rootKey: string | null;
+  groupKey: string | null;
+  subKey: string | null;
+} | null = null;
+
 export function DocumentsScreen() {
   const { user, isLoading: authLoading } = useAuth();
   const insets   = useSafeAreaInsets();
@@ -1141,10 +1163,38 @@ export function DocumentsScreen() {
   const [documents, setDocuments] = useState<Document[]>([]);
   const [loading,   setLoading]   = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const [nav,        setNav]       = useState<Nav>('root');
-  const [activeRoot, setActiveRoot] = useState<RootFolder | null>(null);
-  const [activeGroup, setActiveGroup] = useState<SubFolder | null>(null);   // nested group (Monthly Reporting)
-  const [activeSub,  setActiveSub]  = useState<SubFolder | null>(null);
+  // Restored once, from wherever this reader was before the tab changed.
+  const restored = useMemo(() => {
+    if (!user?.id || lastPlace?.userId !== user.id) return null;
+    const root = FOLDERS.find(r => r.key === lastPlace!.rootKey) ?? null;
+    if (!root) return null;
+    const group = lastPlace!.groupKey
+      ? root.subFolders.find(f => f.key === lastPlace!.groupKey) ?? null
+      : null;
+    const sub = lastPlace!.subKey
+      ? (group?.children ?? root.subFolders).find(f => f.key === lastPlace!.subKey) ?? null
+      : null;
+    // A saved position that no longer resolves is not worth restoring badly.
+    if (lastPlace!.nav !== 'root' && !root) return null;
+    return { nav: lastPlace!.nav, root, group, sub };
+  }, [user?.id]);
+
+  const [nav,        setNav]       = useState<Nav>(restored?.nav ?? 'root');
+  const [activeRoot, setActiveRoot] = useState<RootFolder | null>(restored?.root ?? null);
+  const [activeGroup, setActiveGroup] = useState<SubFolder | null>(restored?.group ?? null);   // nested group (Monthly Reporting)
+  const [activeSub,  setActiveSub]  = useState<SubFolder | null>(restored?.sub ?? null);
+
+  // Recorded on every move, so leaving the tab needs no special handling.
+  useEffect(() => {
+    if (!user?.id) return;
+    lastPlace = {
+      userId: user.id,
+      nav,
+      rootKey: activeRoot?.key ?? null,
+      groupKey: activeGroup?.key ?? null,
+      subKey: activeSub?.key ?? null,
+    };
+  }, [user?.id, nav, activeRoot, activeGroup, activeSub]);
   const [selectedDoc, setSelectedDoc] = useState<Document | null>(null);
 
   const load = useCallback(async (isRefresh = false) => {
