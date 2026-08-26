@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Colors } from '../../constants/colors';
@@ -95,13 +95,23 @@ export function FinancialReportsScreen({ onBack }: { onBack?: () => void }) {
               activeOpacity={0.85}
               onPress={() => setOpenId(client.id)}
             >
-              <LinearGradient
-                colors={[Colors.primary, Colors.accent]}
-                start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-                style={s.avatar}
-              >
-                <Text style={s.avatarText}>{mkInitials(client.full_name)}</Text>
-              </LinearGradient>
+              {dashboard.logo ? (
+                // The client's own mark, on a light tile: these are lifted off a
+                // white sheet and several are dark ink on transparency.
+                <View style={[s.avatar, s.avatarLogo]}>
+                  <Image source={dashboard.logo} style={s.avatarImg} resizeMode="contain" />
+                </View>
+              ) : (
+                // 2G3B Eats has no mark in their workbook, so they keep initials
+                // rather than an empty circle where everyone else has a logo.
+                <LinearGradient
+                  colors={[Colors.primary, Colors.accent]}
+                  start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+                  style={s.avatar}
+                >
+                  <Text style={s.avatarText}>{mkInitials(client.full_name)}</Text>
+                </LinearGradient>
+              )}
               <View style={{ flex: 1, minWidth: 0 }}>
                 <Text style={s.cardName} numberOfLines={1}>{client.full_name || 'Client'}</Text>
                 <Text style={s.cardMeta} numberOfLines={1}>{client.email}</Text>
@@ -133,6 +143,11 @@ const s = StyleSheet.create({
   },
   avatar: { width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center' },
   avatarText: { color: Colors.primaryDeep, fontWeight: '800', fontSize: 14 },
+  avatarLogo: {
+    backgroundColor: Colors.white, padding: 5,
+    borderWidth: 1, borderColor: Colors.border,
+  },
+  avatarImg: { width: '100%', height: '100%' },
   cardName: { fontSize: 15, fontWeight: '700', color: Colors.textPrimary },
   cardMeta: { fontSize: 12, color: Colors.textMuted, marginTop: 2 },
   pill: {
