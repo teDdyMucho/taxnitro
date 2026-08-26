@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator,
+  View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, Image,
   TextInput, useWindowDimensions, Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -236,6 +236,13 @@ export function ClientDashboardScreen({
         style={s.masthead}
       >
         <View style={s.mastheadTop}>
+          {dashboard.logo && (
+            // On a light tile, because these come off a white sheet: several are
+            // dark ink on transparent and would vanish straight into the masthead.
+            <View style={s.logoTile}>
+              <Image source={dashboard.logo} style={s.logoImg} resizeMode="contain" />
+            </View>
+          )}
           <View style={{ flex: 1, minWidth: 220 }}>
             <Text style={s.mastheadTitle}>Monthly Financial Report</Text>
             <Text style={s.mastheadMeta}>{dashboard.name} {dashboard.subtitle}</Text>
@@ -648,6 +655,11 @@ const s = StyleSheet.create({
 
   masthead: { paddingHorizontal: 24, paddingTop: 26, paddingBottom: 16, marginBottom: 22 },
   mastheadTop: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-start', gap: 14 },
+  logoTile: {
+    width: 64, height: 64, borderRadius: 12, padding: 7,
+    backgroundColor: Colors.white, alignItems: 'center', justifyContent: 'center',
+  },
+  logoImg: { width: '100%', height: '100%' },
   mastheadTitle: { color: Colors.white, fontSize: 24, fontWeight: '800', letterSpacing: 0.2 },
   mastheadMeta: { color: 'rgba(255,255,255,0.55)', fontSize: 12, marginTop: 5 },
   preparedBy: { alignItems: 'flex-end' },

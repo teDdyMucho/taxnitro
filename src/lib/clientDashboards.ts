@@ -1,3 +1,4 @@
+import type { ImageSourcePropType } from 'react-native';
 import type { ClientSheets } from '../data/clientSheets';
 import { UE_ROWS, type ForecastMode, type RowMap } from './ueModel';
 
@@ -31,6 +32,12 @@ export interface ClientDashboard {
   name: string;
   /** The line under it — usually the rest of the legal name. */
   subtitle: string;
+  /**
+   * Their mark, lifted out of their own workbook — the same one at the top of
+   * the report Paul sends. Optional: 2G3B Eats has none in theirs, and a missing
+   * logo should leave the masthead reading normally rather than leave a hole.
+   */
+  logo?: ImageSourcePropType;
   /**
    * That client's workbook. A function rather than the data itself, so one
    * client's financials load only when their report is opened rather than
@@ -184,6 +191,7 @@ const ENTRIES: Entry[] = [
       label: 'Financial Dashboard',
       name: 'UNIQUELY ENOUGH',
       subtitle: 'Behavioral Health LLC',
+      logo: require('../../assets/clients/uniquely-enough.png'),
       load: () => import('../data/ueSheets').then(m => m.UE_SHEETS),
       rows: UE_ROWS,
       forecast: 'rebuild',
@@ -196,6 +204,7 @@ const ENTRIES: Entry[] = [
       label: 'Financial Dashboard',
       name: '1ST STEP TO GREATNESS',
       subtitle: 'Childcare & Early Education',
+      logo: require('../../assets/clients/first-step-to-greatness.png'),
       load: () => import('../data/firstStepSheets').then(m => m.FIRST_STEP_SHEETS),
       rows: FIRST_STEP_ROWS,
       forecast: 'workbook',
@@ -220,6 +229,7 @@ const ENTRIES: Entry[] = [
       label: 'Financial Dashboard',
       name: 'ACCESS GRANTED',
       subtitle: 'Education',
+      logo: require('../../assets/clients/access-granted-education.png'),
       load: () => import('../data/accessGrantedSheets').then(m => m.ACCESS_GRANTED_SHEETS),
       rows: ACCESS_GRANTED_ROWS,
       forecast: 'workbook',
@@ -232,6 +242,7 @@ const ENTRIES: Entry[] = [
       label: 'Financial Dashboard',
       name: 'BATTLE PROTECTION',
       subtitle: 'Agency',
+      logo: require('../../assets/clients/battle-protection-agency.png'),
       load: () => import('../data/battleProtectionSheets').then(m => m.BATTLE_PROTECTION_SHEETS),
       rows: BATTLE_PROTECTION_ROWS,
       forecast: 'workbook',
@@ -244,6 +255,7 @@ const ENTRIES: Entry[] = [
       label: 'Financial Dashboard',
       name: 'STEER',
       subtitle: 'LLC',
+      logo: require('../../assets/clients/steer-llc.png'),
       load: () => import('../data/steerSheets').then(m => m.STEER_SHEETS),
       rows: STEER_ROWS,
       forecast: 'workbook',
