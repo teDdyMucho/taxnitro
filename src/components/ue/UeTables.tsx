@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import { Colors } from '../../constants/colors';
-import type { GridRow, StatementRow } from '../../data/clientSheets';
+import type { GridRow, StatementCell, StatementRow } from '../../data/clientSheets';
 import { MONTHS, money, pct } from '../../lib/ueModel';
 
 // The workbook's presentation tabs, rendered as tables.
@@ -98,6 +98,25 @@ export function UeGridTable({ rows, flagCol }: { rows: GridRow[]; flagCol?: numb
   );
 }
 
+/**
+ * A statement cell as it should read.
+ *
+ * The foot of FS-R holds the workbook's reconciliation checks, which say 'OK'
+ * rather than a figure. Passing those through money() would print them as
+ * dollars, so text is shown as written.
+ */
+/** Spreadsheet error values, which are text in the sheet but mean "no figure". */
+const SHEET_ERRORS = ['#DIV/0!', '#REF!', '#VALUE!', '#N/A', '#NAME?', '#NULL!', '#NUM!'];
+
+const cellText = (v: StatementCell): string => {
+  if (v == null) return '';
+  if (typeof v !== 'string') return money(v);
+  // Shown as a dash rather than as the raw error. A client reading their own
+  // statement should see that a figure is missing, not a spreadsheet code — and
+  // the workbook is where it has to be put right.
+  return SHEET_ERRORS.includes(v.trim()) ? '—' : v;
+};
+
 const ACCOUNT_W = 240;
 const MONTH_W = 104;
 
@@ -128,22 +147,22 @@ export function UeStatement({ rows, forecastFrom }: { rows: StatementRow[]; fore
                 <Text style={[s.cell, bold && s.strong, { width: ACCOUNT_W }]}>{r.label}</Text>
                 {r.y2025.map((v, i) => (
                   <Text key={`p${i}`} style={[s.cell, s.num, bold && s.strong, { width: MONTH_W }]}>
-                    {v == null ? '' : money(v)}
+                    {cellText(v)}
                   </Text>
                 ))}
                 <Text style={[s.cell, s.num, bold && s.strong, { width: MONTH_W }]}>
-                  {r.t2025 == null ? '' : money(r.t2025)}
+                  {cellText(r.t2025)}
                 </Text>
                 {r.y2026.map((v, i) => (
                   <Text
                     key={`c${i}`}
                     style={[s.cell, s.num, bold && s.strong, isFc(i) && s.fc, { width: MONTH_W }]}
                   >
-                    {v == null ? '' : money(v)}
+                    {cellText(v)}
                   </Text>
                 ))}
                 <Text style={[s.cell, s.num, bold && s.strong, { width: MONTH_W }]}>
-                  {r.t2026 == null ? '' : money(r.t2026)}
+                  {cellText(r.t2026)}
                 </Text>
               </View>
             );

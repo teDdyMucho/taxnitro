@@ -1,22 +1,101 @@
-import type { StatementRow, ClientSheets } from '../data/clientSheets';
+import type { StatementCell, StatementRow, ClientSheets } from '../data/clientSheets';
 
-// The Uniquely Enough workbook, as calculation rather than presentation.
+// An FTG client workbook, as calculation rather than presentation.
 //
-// Everything here is pure: give it the sheets and a set of assumptions and it
-// hands back figures. No DOM, no state, no formatting decisions that belong to
-// the screen — so the arithmetic can be checked on its own.
+// Everything here is pure: give it the sheets, a set of assumptions and the
+// client's row map, and it hands back figures. No DOM, no state, no formatting
+// decisions that belong to the screen — so the arithmetic can be checked on its
+// own.
 //
-// Row numbers are the workbook's own. FS-R row 34 is Total Income, 60 is Total
-// Operating Expense, 72 is Net Income, and so on; the workbook's formulas
-// address those rows, so we do too.
+// Row numbers are the workbook's own, and THEY DIFFER BY CLIENT. Uniquely
+// Enough puts Total Income on FS-R row 34; 1st Step to Greatness puts it on 36
+// and carries a cost-of-services block Uniquely Enough has no equivalent for.
+// So the map is an argument, never a constant here — reading row 34 of a
+// workbook that keeps revenue on 36 produces figures that look entirely
+// plausible and are wrong, which is the worst way for this to fail.
+//
+// Every entry point demands a map for that reason. There is deliberately no
+// default: forgetting to pass one is a compile error rather than a silent
+// mis-read.
 
 export const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 /** Jul 2026 is the last booked month — August onward is forecast. */
 export const LAST_ACTUAL = 6;
 
-const ROW = {
-  income: 33, totalIncome: 34,
+/**
+ * Where each figure lives in one client's FS-R / FS-A.
+ *
+ * Read it off the workbook's own column B/C labels. Getting one of these wrong
+ * does not throw — it quietly reports the neighbouring line — so check it
+ * against the sheet rather than assuming another client's numbering carries
+ * over.
+ */
+export interface RowMap {
+  /** The revenue detail lines, in workbook order — what the commentary names. */
+  income: number[];
+  /**
+   * The single revenue line a rebuilt forecast grows. Absent where revenue does
+   * not work that way: 1st Step to Greatness carries three revenue lines on
+   * three different rules, which is one of the reasons their figures come
+   * straight from their workbook instead of being rebuilt here.
+   */
+  growRow?: number;
+  totalIncome: number;
+  /**
+   * The rows the workbook's own TOTAL INCOME card adds up, read off its Dashboard
+   * formula. It is not always the revenue total: Uniquely Enough's card adds
+   * other income, 1st Step to Greatness' does not — so this is stated per client
+   * rather than assumed.
+   */
+  headlineIncome: number[];
+  /**
+   * The rows behind the TOTAL EXPENSE card and the expense analysis, likewise
+   * read off the workbook. 1st Step to Greatness has a cost-of-services block
+   * that belongs here and that Uniquely Enough has no equivalent of; leaving it
+   * out would understate their spend by the whole block.
+   */
+  headlineExpense: number[];
+  /** Wages, taxes, benefits, contract labour — the rows added payroll splits across. */
+  payroll: number[];
+  /** The operating-expense block, first row to last, inclusive. */
+  opexFirst: number;
+  opexLast: number;
+  /**
+   * Rows inside that range that are subtotals rather than spending lines.
+   *
+   * STEER carries a "Total Payroll Block" at row 45, in the middle of its own
+   * expenses, and its TOTAL EXPENSES formula steps over it —
+   * SUM(AA40:AA44)+SUM(AA46:AA64). Counting it would double the payroll and would
+   * name a subtotal as the month's biggest mover in the commentary.
+   */
+  opexSkip?: number[];
+  totalOpex: number;
+  // ── Below here: only where the workbook has them ──────────────────────────
+  // Not every client's statement carries these. Access Granted Education runs
+  // straight from total expenses to net income with no other-income block and no
+  // operating-income subtotal at all. They are needed to REBUILD a forecast, so
+  // a client missing them is shown their workbook's own figures instead.
+  /** Net operating income: revenue less the opex block. */
+  grossProfit?: number;
+  otherIncome?: number[];
+  totalOtherIncome?: number;
+  otherExpense?: number[];
+  totalOtherExpense?: number;
+  netOther?: number;
+  netIncome: number;
+  cash: number;
+  currentAssets: number;
+  cards: number;
+  currentLiabilities: number;
+  draws: number;
+  equity: number;
+}
+
+/** Uniquely Enough Behavioral Health LLC. Verified against their v2 workbook. */
+export const UE_ROWS: RowMap = {
+  income: [33], growRow: 33, totalIncome: 34,
+  headlineIncome: [34, 66], headlineExpense: [60, 70],
   payroll: [37, 38, 39, 40],
   opexFirst: 37, opexLast: 59, totalOpex: 60, grossProfit: 62,
   otherIncome: [64, 65], totalOtherIncome: 66,
@@ -26,10 +105,43 @@ const ROW = {
   draws: 91, equity: 94,
 };
 
-const PAYROLL_ROWS = ROW.payroll;
-const OPEX_ROWS = Array.from({ length: ROW.opexLast - ROW.opexFirst + 1 }, (_, k) => ROW.opexFirst + k);
-const GROW_ROWS = OPEX_ROWS.filter(r => !PAYROLL_ROWS.includes(r));
-const FLAT_ROWS = [64, 65, 68, 69];
+/**
+ * Where a client's Aug–Dec 2026 figures come from.
+ *
+ * 'rebuild' recomputes them here from the scenario levers, which requires the
+ * client's workbook to forecast the way this model does.
+ *
+ * 'workbook' takes the figures the client's own workbook already computed. It is
+ * for clients whose forecast works differently — 1st Step to Greatness prices
+ * cost of services as a percentage of revenue and pays its payroll rows out of a
+ * pool, neither of which this model does — where rebuilding would produce
+ * confident, wrong numbers. Their scenario picker does nothing, and the
+ * Assumptions tab says so.
+ */
+export type ForecastMode = 'rebuild' | 'workbook';
+
+/** A map plus the row lists that follow from it, worked out once per call. */
+interface Rows extends RowMap {
+  /** Every operating-expense line. */
+  opex: number[];
+  /** The opex lines that are not payroll — these scale with cost growth. */
+  grow: number[];
+  /** Other income and other expense, which the forecast holds flat. */
+  flat: number[];
+}
+
+const derive = (m: RowMap): Rows => {
+  const skip = m.opexSkip ?? [];
+  const opex = Array
+    .from({ length: m.opexLast - m.opexFirst + 1 }, (_, k) => m.opexFirst + k)
+    .filter(r => !skip.includes(r));
+  return {
+    ...m,
+    opex,
+    grow: opex.filter(r => !m.payroll.includes(r)),
+    flat: [...(m.otherIncome ?? []), ...(m.otherExpense ?? [])],
+  };
+};
 
 // ── Formatting ───────────────────────────────────────────────────────────────
 // Kept beside the model because every surface shows the same shapes: whole
@@ -105,14 +217,15 @@ const avgFebJul = (fsa: Fsr, row: number) => {
   return v.length ? v.reduce((a, b) => a + b, 0) / v.length : 0;
 };
 
-export function buildModel(sheets: ClientSheets, a: Assumptions): Model {
+export function buildModel(sheets: ClientSheets, a: Assumptions, map: RowMap): Model {
+  const R = derive(map);
   const fsa = byRow(sheets['FS-A']);
   const avg = (row: number) => avgFebJul(fsa, row);
   const i = SCENARIOS.indexOf(a.scenario);
   // 1 · historical basis
-  const baseRev = avg(ROW.totalIncome);
-  const payBlock = PAYROLL_ROWS.reduce((s, r) => s + avg(r), 0);
-  const totalOpex = avg(ROW.totalOpex);
+  const baseRev = avg(R.totalIncome);
+  const payBlock = R.payroll.reduce((s, r) => s + avg(r), 0);
+  const totalOpex = avg(R.totalOpex);
   // 5 · monthly impact
   const unlocked = a.recovered[i] * a.unbilledHrs * a.weeks * a.rate;
   const captureM = a.capture[i] / 12;
@@ -120,9 +233,10 @@ export function buildModel(sheets: ClientSheets, a: Assumptions): Model {
   const salarySave = a.salarySave[i] / 12;
   // 7 · shares that split the added payroll across the four payroll rows
   const shares: Record<number, number> = {};
-  PAYROLL_ROWS.forEach(r => { shares[r] = payBlock ? avg(r) / payBlock : 0; });
+  R.payroll.forEach(r => { shares[r] = payBlock ? avg(r) / payBlock : 0; });
   return {
-    index: i, baseRev, payBlock, totalOpex, netOther: avg(ROW.netOther),
+    index: i, baseRev, payBlock, totalOpex,
+    netOther: R.netOther == null ? 0 : avg(R.netOther),
     unlocked, captureM, revUplift: unlocked + captureM,
     supCost, salarySave, addedPayroll: supCost - salarySave,
     revGrowth: a.revGrowth[i], costGrowth: a.costGrowth[i], shares,
@@ -138,43 +252,80 @@ export function buildModel(sheets: ClientSheets, a: Assumptions): Model {
  *   flat    = avg(Feb–Jul)
  * Returns a fresh copy; the source sheets are never mutated.
  */
-export function buildForecast(sheets: ClientSheets, a: Assumptions): Fsr {
-  const m = buildModel(sheets, a);
+export function buildForecast(
+  sheets: ClientSheets, a: Assumptions, map: RowMap, mode: ForecastMode = 'rebuild',
+): Fsr {
+  const R = derive(map);
+
+  // Copied either way, so a caller can never write back into the source sheets.
+  const asWorkbook = (): Fsr => {
+    const out: Fsr = {};
+    sheets['FS-R'].forEach(r => { out[r.r] = { ...r, y2025: [...r.y2025], y2026: [...r.y2026] }; });
+    return out;
+  };
+
+  // The rebuild needs every one of these. Missing any of them means this model
+  // cannot honestly produce the client's forecast, so their workbook's own
+  // figures stand rather than a partial rebuild that looks complete.
+  if (
+    mode === 'workbook' ||
+    R.growRow == null || R.grossProfit == null || R.netOther == null ||
+    R.totalOtherIncome == null || R.totalOtherExpense == null ||
+    R.otherIncome == null || R.otherExpense == null
+  ) return asWorkbook();
+
+  const m = buildModel(sheets, a, map);
   const fsa = byRow(sheets['FS-A']);
   const avg = (row: number) => avgFebJul(fsa, row);
-  const fsr: Fsr = {};
-  sheets['FS-R'].forEach(r => { fsr[r.r] = { ...r, y2025: [...r.y2025], y2026: [...r.y2026] }; });
+  const fsr: Fsr = asWorkbook();
+  const growRow = R.growRow;
 
   const set = (row: number, mo: number, v: number) => { if (fsr[row]) fsr[row].y2026[mo] = v; };
   const get = (row: number, mo: number) => (fsr[row]?.y2026?.[mo] ?? 0) as number;
 
   for (let mo = LAST_ACTUAL + 1; mo < 12; mo++) {
     const n = mo - LAST_ACTUAL;                      // 1..5, the workbook's row-6 offset
-    set(ROW.income, mo, m.baseRev * Math.pow(1 + m.revGrowth, n) + m.revUplift);
-    set(ROW.totalIncome, mo, get(ROW.income, mo));
-    PAYROLL_ROWS.forEach(r => set(r, mo, avg(r) + m.addedPayroll * m.shares[r]));
-    GROW_ROWS.forEach(r => set(r, mo, avg(r) * Math.pow(1 + m.costGrowth, n)));
-    set(ROW.totalOpex, mo, OPEX_ROWS.reduce((s, r) => s + get(r, mo), 0));
-    set(ROW.grossProfit, mo, get(ROW.totalIncome, mo) - get(ROW.totalOpex, mo));
-    FLAT_ROWS.forEach(r => set(r, mo, avg(r)));
-    set(ROW.totalOtherIncome, mo, ROW.otherIncome.reduce((s, r) => s + get(r, mo), 0));
-    set(ROW.totalOtherExpense, mo, ROW.otherExpense.reduce((s, r) => s + get(r, mo), 0));
-    set(ROW.netOther, mo, get(ROW.totalOtherIncome, mo) - get(ROW.totalOtherExpense, mo));
-    set(ROW.netIncome, mo, get(ROW.grossProfit, mo) + get(ROW.netOther, mo));
+    set(growRow, mo, m.baseRev * Math.pow(1 + m.revGrowth, n) + m.revUplift);
+    set(R.totalIncome, mo, get(growRow, mo));
+    R.payroll.forEach(r => set(r, mo, avg(r) + m.addedPayroll * m.shares[r]));
+    R.grow.forEach(r => set(r, mo, avg(r) * Math.pow(1 + m.costGrowth, n)));
+    set(R.totalOpex, mo, R.opex.reduce((s, r) => s + get(r, mo), 0));
+    set(R.grossProfit, mo, get(R.totalIncome, mo) - get(R.totalOpex, mo));
+    R.flat.forEach(r => set(r, mo, avg(r)));
+    set(R.totalOtherIncome, mo, R.otherIncome.reduce((s, r) => s + get(r, mo), 0));
+    set(R.totalOtherExpense, mo, R.otherExpense.reduce((s, r) => s + get(r, mo), 0));
+    set(R.netOther, mo, get(R.totalOtherIncome, mo) - get(R.totalOtherExpense, mo));
+    set(R.netIncome, mo, get(R.grossProfit, mo) + get(R.netOther, mo));
   }
   return fsr;
 }
 
 // ── Reading the restated statements ──────────────────────────────────────────
 
-export const r26 = (fsr: Fsr, row: number, m: number) => (fsr[row]?.y2026?.[m] ?? 0) as number;
-export const r25 = (fsr: Fsr, row: number, m: number) => (fsr[row]?.y2025?.[m] ?? 0) as number;
+/**
+ * A statement cell is only a figure when it is actually a number.
+ *
+ * Battle Protection's workbook carries '#DIV/0!' across its whole Aug–Dec 2026
+ * forecast, and a spreadsheet error must never become arithmetic here: adding it
+ * produces NaN, and NaN formatted as money reads as a real, wrong figure.
+ */
+const num = (v: StatementCell | undefined): number =>
+  typeof v === 'number' && Number.isFinite(v) ? v : 0;
 
-const income26 = (f: Fsr, m: number) => r26(f, ROW.totalIncome, m);
-const income25 = (f: Fsr, m: number) => r25(f, ROW.totalIncome, m);
-const expense26 = (f: Fsr, m: number) => r26(f, ROW.totalOpex, m) + r26(f, ROW.totalOtherExpense, m);
-const expense25 = (f: Fsr, m: number) => r25(f, ROW.totalOpex, m) + r25(f, ROW.totalOtherExpense, m);
-const payrollOf = (f: Fsr, m: number) => PAYROLL_ROWS.reduce((s, r) => s + r26(f, r, m), 0);
+export const r26 = (fsr: Fsr, row: number, m: number) => num(fsr[row]?.y2026?.[m]);
+export const r25 = (fsr: Fsr, row: number, m: number) => num(fsr[row]?.y2025?.[m]);
+
+/** Whether the workbook actually states this figure, as opposed to erroring. */
+export const stated = (fsr: Fsr, row: number, m: number): boolean => {
+  const v = fsr[row]?.y2026?.[m];
+  return typeof v === 'number' && Number.isFinite(v);
+};
+
+const income26 = (R: Rows, f: Fsr, m: number) => r26(f, R.totalIncome, m);
+const income25 = (R: Rows, f: Fsr, m: number) => r25(f, R.totalIncome, m);
+const expense26 = (R: Rows, f: Fsr, m: number) => R.headlineExpense.reduce((s, r) => s + r26(f, r, m), 0);
+const expense25 = (R: Rows, f: Fsr, m: number) => R.headlineExpense.reduce((s, r) => s + r25(f, r, m), 0);
+const payrollOf = (R: Rows, f: Fsr, m: number) => R.payroll.reduce((s, r) => s + r26(f, r, m), 0);
 const sumTo = (fn: (m: number) => number, m: number) => {
   let s = 0;
   for (let i = 0; i <= m; i++) s += fn(i);
@@ -194,14 +345,14 @@ const lyLabel = (m: number) => MONTHS[m] + ' 2025';
 interface Driver { label: string; change: number }
 
 /** The biggest mover in each direction — the workbook names these in its commentary. */
-function drivers(f: Fsr, m: number) {
+function drivers(R: Rows, f: Fsr, m: number) {
   const mk = (rows: number[]): Driver[] => rows
     .map(r => ({
       label: f[r]?.label || '',
       change: r26(f, r, m) - (m === 0 ? r25(f, r, 11) : r26(f, r, m - 1)),
     }))
     .filter(x => x.label);
-  const exp = mk(OPEX_ROWS), inc = mk([ROW.income]);
+  const exp = mk(R.opex), inc = mk(R.income);
   const max = (a: Driver[]) => a.reduce((x, y) => (y.change > x.change ? y : x), a[0]);
   const min = (a: Driver[]) => a.reduce((x, y) => (y.change < x.change ? y : x), a[0]);
   return { incUp: max(inc), incDown: min(inc), expUp: max(exp), expDown: min(exp) };
@@ -217,6 +368,12 @@ export interface InsightCard { title: string; value: string; sub: string; note: 
 export interface Dashboard {
   label: string;
   isForecast: boolean;
+  /**
+   * False when the workbook does not state this month's bottom line — it errored
+   * rather than computing. The screen shows that plainly instead of drawing
+   * cards from zeroes, which would read as a month of no costs and no profit.
+   */
+  available: boolean;
   income: number; expense: number; net: number; margin: number;
   kpis: Kpi[];
   incomeSeries: Series; expenseSeries: Series;
@@ -225,11 +382,35 @@ export interface Dashboard {
   balanceCards: InsightCard[]; ratioCards: InsightCard[];
 }
 
-export function buildDashboard(f: Fsr, m: number): Dashboard {
-  const inc = income26(f, m), exp = expense26(f, m), net = inc - exp;
-  const pI = m === 0 ? income25(f, 11) : income26(f, m - 1);
-  const pE = m === 0 ? expense25(f, 11) : expense26(f, m - 1);
-  const pN = pI - pE;
+export function buildDashboard(f: Fsr, m: number, map: RowMap): Dashboard {
+  const R = derive(map);
+  const inc = income26(R, f, m), exp = expense26(R, f, m);
+  const pI = m === 0 ? income25(R, f, 11) : income26(R, f, m - 1);
+  const pE = m === 0 ? expense25(R, f, 11) : expense26(R, f, m - 1);
+
+  // The workbook uses two definitions of income and shows both on one page.
+  //
+  // Its headline TOTAL INCOME card is revenue PLUS other income — Dashboard!C7
+  // is 'Working Sheet'!AA12 + AA20 — while its Income Analysis table below is
+  // revenue alone. Following only one of them would put this screen out of step
+  // with the workbook the client is also reading, so both are kept: `head` for
+  // the cards, `inc` for the table, the chart and the commentary.
+  //
+  // It also makes net income agree with FS-R row 72, which is revenue plus other
+  // income less both expense blocks. Taking the card figure from revenue alone
+  // understated it by exactly the month's other income.
+  const headOf = (mm: number, ly = false) =>
+    R.headlineIncome.reduce((t, r) => t + (ly ? r25(f, r, mm) : r26(f, r, mm)), 0);
+  const head = headOf(m);
+  const pH = m === 0 ? headOf(11, true) : headOf(m - 1);
+
+  // Net income is the statement's own bottom line rather than income less
+  // expense. For Uniquely Enough the two agree; for 1st Step to Greatness they
+  // sit $0.31 apart, because their headline income card leaves out the other
+  // income that their NET INCOME line includes. Reporting a figure the FS-R tab
+  // contradicts is the thing worth avoiding.
+  const net = r26(f, R.netIncome, m);
+  const pN = m === 0 ? r25(f, R.netIncome, 11) : r26(f, R.netIncome, m - 1);
   const label = MONTHS[m] + ' 2026';
 
   const kpi = (name: string, cur: number, prev: number, value: string, positive: boolean): Kpi => ({
@@ -242,8 +423,8 @@ export function buildDashboard(f: Fsr, m: number): Dashboard {
 
   // Series stop at the selected month: a chart should not draw months the
   // reader has not opened yet.
-  const i26 = MONTHS.map((_, i) => (i <= m ? income26(f, i) : 0));
-  const e26 = MONTHS.map((_, i) => (i <= m ? expense26(f, i) : 0));
+  const i26 = MONTHS.map((_, i) => (i <= m ? income26(R, f, i) : 0));
+  const e26 = MONTHS.map((_, i) => (i <= m ? expense26(R, f, i) : 0));
 
   const rows = (a: number, p: number, ly: number, yc: number, yp: number): AnalysisRow[] => [
     { metric: `Month Actual (${label})`, amount: a, variance: null, variancePct: null },
@@ -251,16 +432,16 @@ export function buildDashboard(f: Fsr, m: number): Dashboard {
     { metric: `vs Same Month LY (${lyLabel(m)})`, amount: ly, variance: a - ly, variancePct: div(a - ly, ly) },
     { metric: `YTD 2026 (Jan-${MONTHS[m]}) vs same period 2025`, amount: yc, variance: yc - yp, variancePct: div(yc - yp, yp) },
   ];
-  const y26i = sumTo(i => income26(f, i), m), y25i = sumTo(i => income25(f, i), m);
-  const y26e = sumTo(i => expense26(f, i), m), y25e = sumTo(i => expense25(f, i), m);
+  const y26i = sumTo(i => income26(R, f, i), m), y25i = sumTo(i => income25(R, f, i), m);
+  const y26e = sumTo(i => expense26(R, f, i), m), y25e = sumTo(i => expense25(R, f, i), m);
 
-  const d = drivers(f, m), dI = inc - pI, dE = exp - pE;
+  const d = drivers(R, f, m), dI = inc - pI, dE = exp - pE;
   const incomeComment = inc === 0
     ? `No income has been posted for ${label} yet — select a closed month to see commentary.`
     : `Income closed at ${kfmt(inc)} for ${label}, ${dI >= 0 ? 'higher' : 'lower'} by ${pct(Math.abs(div(dI, pI)))} `
       + `(${money(Math.abs(dI))}) vs ${priorLabel(m)}, mainly due to ${dI >= 0 ? 'higher' : 'lower'} `
       + `${(dI >= 0 ? d.incUp : d.incDown).label} (${money(Math.abs((dI >= 0 ? d.incUp : d.incDown).change))}). `
-      + `Against ${lyLabel(m)}, income is ${inc >= income25(f, m) ? 'up' : 'down'} ${pct(Math.abs(div(inc - income25(f, m), income25(f, m))))}, `
+      + `Against ${lyLabel(m)}, income is ${inc >= income25(R, f, m) ? 'up' : 'down'} ${pct(Math.abs(div(inc - income25(R, f, m), income25(R, f, m))))}, `
       + `while YTD 2026 of ${kfmt(y26i)} is ${pct(Math.abs(div(y26i - y25i, y25i)))} ${y26i >= y25i ? 'ahead of' : 'behind'} the same period in 2025.`;
 
   let expenseComment: string;
@@ -273,59 +454,60 @@ export function buildDashboard(f: Fsr, m: number): Dashboard {
     // Only named when a line actually moved the other way — as the workbook does.
     if (up && off.change < 0) s += `, partially offset by lower ${off.label} (${money(Math.abs(off.change))})`;
     if (!up && off.change > 0) s += `, partially offset by higher ${off.label} (${money(off.change)})`;
-    s += `. Against ${lyLabel(m)}, spend is ${exp >= expense25(f, m) ? 'up' : 'down'} ${pct(Math.abs(div(exp - expense25(f, m), expense25(f, m))))}, `
+    s += `. Against ${lyLabel(m)}, spend is ${exp >= expense25(R, f, m) ? 'up' : 'down'} ${pct(Math.abs(div(exp - expense25(R, f, m), expense25(R, f, m))))}, `
        + `and YTD 2026 spend of ${kfmt(y26e)} is ${pct(Math.abs(div(y26e - y25e, y25e)))} ${y26e >= y25e ? 'above' : 'below'} 2025`
        + `, leaving ${net >= 0 ? 'net income' : 'a net loss'} for the month of ${kfmt(Math.abs(net))}.`;
     expenseComment = s;
   }
 
-  const cash = r26(f, ROW.cash, m), cards = r26(f, ROW.cards, m), equity = r26(f, ROW.equity, m);
-  const pay = payrollOf(f, m);
-  const ca = r26(f, ROW.currentAssets, m), cl = r26(f, ROW.currentLiabilities, m);
-  const draws = -r26(f, ROW.draws, m);
+  const cash = r26(f, R.cash, m), cards = r26(f, R.cards, m), equity = r26(f, R.equity, m);
+  const pay = payrollOf(R, f, m);
+  const ca = r26(f, R.currentAssets, m), cl = r26(f, R.currentLiabilities, m);
+  const draws = -r26(f, R.draws, m);
   const prev = (row: number) => (m === 0 ? r25(f, row, 11) : r26(f, row, m - 1));
   const days = div(cash, pay / 30);
 
   return {
     label,
     isForecast: m > LAST_ACTUAL,
-    income: inc, expense: exp, net, margin: div(net, inc),
+    available: stated(f, R.netIncome, m),
+    income: head, expense: exp, net, margin: div(net, head),
     kpis: [
-      kpi('Total Income', inc, pI, money(inc), inc - pI >= 0),
+      kpi('Total Income', head, pH, money(head), head - pH >= 0),
       kpi('Total Expense', exp, pE, money(exp), exp - pE <= 0),
       kpi('Net Income', net, pN, money(net), net >= 0),
-      { label: 'Net Margin', value: pct(div(net, inc)), delta: `Prior month ${pct(div(pN, pI))}`, deltaPct: null, positive: net >= 0 },
+      { label: 'Net Margin', value: pct(div(net, head)), delta: `Prior month ${pct(div(pN, pH))}`, deltaPct: null, positive: net >= 0 },
     ],
     incomeSeries: {
       current: i26,
-      prior: MONTHS.map((_, i) => income25(f, i)),
+      prior: MONTHS.map((_, i) => income25(R, f, i)),
       trend: i26.map((v, i) => (i > m ? 0 : i < 2 ? v : (i26[i] + i26[i - 1] + i26[i - 2]) / 3)),
     },
     expenseSeries: {
       current: e26,
-      prior: MONTHS.map((_, i) => expense25(f, i)),
+      prior: MONTHS.map((_, i) => expense25(R, f, i)),
       trend: e26.map(v => v * 1.4),
     },
-    incomeRows: rows(inc, pI, income25(f, m), y26i, y25i),
-    expenseRows: rows(exp, pE, expense25(f, m), y26e, y25e),
+    incomeRows: rows(inc, pI, income25(R, f, m), y26i, y25i),
+    expenseRows: rows(exp, pE, expense25(R, f, m), y26e, y25e),
     incomeComment,
     expenseComment,
     balanceCards: [
       {
         title: 'Cash & Bank', value: money(cash),
-        sub: `Prior month ${money(prev(ROW.cash))} (${pct(div(cash, prev(ROW.cash)) - 1)})`,
+        sub: `Prior month ${money(prev(R.cash))} (${pct(div(cash, prev(R.cash)) - 1)})`,
         note: `Covers about ${days.toFixed(1)} days of payroll. ` + (cash < pay / 2
           ? 'That is under half a month — fund payroll and payroll taxes before any other spend.'
           : 'Hold at least 15 days of payroll as a floor.'),
       },
       {
-        title: 'Credit Cards', value: money(cards), sub: `Prior month ${money(prev(ROW.cards))}`,
+        title: 'Credit Cards', value: money(cards), sub: `Prior month ${money(prev(R.cards))}`,
         note: `Card balances are ${pct(div(cards, cash))} of cash on hand. ` + (div(cards, cash) > 0.25
           ? 'Pay down monthly to avoid interest.'
           : 'Comfortably covered — keep clearing the balance in full each month.'),
       },
       {
-        title: 'Total Equity', value: money(equity), sub: `Prior month ${money(prev(ROW.equity))}`,
+        title: 'Total Equity', value: money(equity), sub: `Prior month ${money(prev(R.equity))}`,
         note: `Book equity after owner draws of ${money(draws)} YTD. ` + (equity > 0
           ? 'Positive and building.'
           : 'Negative — retained losses exceed contributed capital.'),
@@ -340,7 +522,7 @@ export function buildDashboard(f: Fsr, m: number): Dashboard {
     ratioCards: [
       {
         title: 'Current Ratio', value: div(ca, cl).toFixed(2) + 'x',
-        sub: `Prior month ${div(prev(ROW.currentAssets), prev(ROW.currentLiabilities)).toFixed(2)}x   |   Target 1.20x`,
+        sub: `Prior month ${div(prev(R.currentAssets), prev(R.currentLiabilities)).toFixed(2)}x   |   Target 1.20x`,
         note: 'Current assets divided by current liabilities — can the company pay what falls due within a year? '
           + (div(ca, cl) < 1
             ? 'Below 1.00x it cannot, and lenders or bonding agents decline at this level.'
@@ -352,7 +534,7 @@ export function buildDashboard(f: Fsr, m: number): Dashboard {
       },
       {
         title: 'Working Capital', value: money(ca - cl),
-        sub: `Prior mo. ${money(prev(ROW.currentAssets) - prev(ROW.currentLiabilities))}  |  Target: 1 mo payroll`,
+        sub: `Prior mo. ${money(prev(R.currentAssets) - prev(R.currentLiabilities))}  |  Target: 1 mo payroll`,
         note: 'Current assets less current liabilities — the cash cushion for running the business. '
           + (ca - cl < 0
             ? 'Negative, which means payroll taxes and loans are financing operations, so growth has to come from margin rather than cash.'
@@ -453,14 +635,13 @@ export function appliedToForecast(m: Model) {
 }
 
 /** 8 · Forecast outcome — live from the rebuilt FS-R. */
-export function forecastOutcome(f: Fsr) {
+export function forecastOutcome(f: Fsr, map: RowMap) {
   return [
-    { label: 'Jan–Jul 2026 net income (actual, already booked)', amount: sumRange(f, ROW.netIncome, 0, LAST_ACTUAL), strong: false },
-    { label: 'Aug–Dec 2026 revenue (forecast)', amount: sumRange(f, ROW.totalIncome, LAST_ACTUAL + 1, 11), strong: false },
-    { label: 'Aug–Dec 2026 net income (forecast)', amount: sumRange(f, ROW.netIncome, LAST_ACTUAL + 1, 11), strong: false },
-    { label: 'FY2026 revenue (actual + forecast)', amount: sumRange(f, ROW.totalIncome, 0, 11), strong: true },
-    { label: 'FY2026 net income (actual + forecast)', amount: sumRange(f, ROW.netIncome, 0, 11), strong: true },
+    { label: 'Jan–Jul 2026 net income (actual, already booked)', amount: sumRange(f, map.netIncome, 0, LAST_ACTUAL), strong: false },
+    { label: 'Aug–Dec 2026 revenue (forecast)', amount: sumRange(f, map.totalIncome, LAST_ACTUAL + 1, 11), strong: false },
+    { label: 'Aug–Dec 2026 net income (forecast)', amount: sumRange(f, map.netIncome, LAST_ACTUAL + 1, 11), strong: false },
+    { label: 'FY2026 revenue (actual + forecast)', amount: sumRange(f, map.totalIncome, 0, 11), strong: true },
+    { label: 'FY2026 net income (actual + forecast)', amount: sumRange(f, map.netIncome, 0, 11), strong: true },
   ];
 }
 
-export { ROW };

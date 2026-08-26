@@ -16,17 +16,26 @@
 export type GridCell = string | number | null;
 export type GridRow = GridCell[];
 
+/**
+ * A cell of a financial statement.
+ *
+ * Almost always a figure, but the workbook's reconciliation block at the foot
+ * of FS-R reads 'OK' rather than a number, and that is the one line staff most
+ * want to see — so text is part of the shape rather than something to discard.
+ */
+export type StatementCell = number | string | null;
+
 /** A line of a financial statement, keyed by its row number in the workbook. */
 export interface StatementRow {
   /** Row number in the source workbook — formulas address these. */
   r: number;
   label: string;
   /** Jan–Dec 2025, one entry per month. */
-  y2025: (number | null)[];
-  t2025: number | null;
+  y2025: StatementCell[];
+  t2025: StatementCell;
   /** Jan–Dec 2026. Aug onward is forecast, rebuilt from the assumptions. */
-  y2026: (number | null)[];
-  t2026: number | null;
+  y2026: StatementCell[];
+  t2026: StatementCell;
 }
 
 export interface ClientSheets {

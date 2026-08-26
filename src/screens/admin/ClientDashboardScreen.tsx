@@ -13,7 +13,7 @@ import { UeGridTable, UeStatement } from '../../components/ue/UeTables';
 import {
   MONTHS, LAST_ACTUAL, SCENARIOS, DEFAULT_ASSUMPTIONS, LEVERS, SHARED_INPUTS,
   RECOMMENDATIONS, buildForecast, buildModel, buildDashboard, historicalBasis,
-  monthlyImpact, appliedToForecast, forecastOutcome, money, pct, signed, div,
+  monthlyImpact, appliedToForecast, forecastOutcome, stated, money, pct, signed, div,
   type Assumptions, type Scenario, type LeverKey, type SharedKey, type AnalysisRow, type InsightCard,
 } from '../../lib/ueModel';
 
@@ -91,9 +91,19 @@ export function ClientDashboardScreen({
     if (!tabs.some(t => t.key === tab)) setTab('dash');
   }, [tabs, tab]);
 
-  const fsr = useMemo(() => (sheets ? buildForecast(sheets, assumptions) : null), [sheets, assumptions]);
-  const model = useMemo(() => (sheets ? buildModel(sheets, assumptions) : null), [sheets, assumptions]);
-  const dash = useMemo(() => (fsr ? buildDashboard(fsr, month) : null), [fsr, month]);
+  const rows = dashboard.rows;
+
+  // Some clients' workbooks forecast in ways this model does not reproduce, so
+  // their Aug–Dec figures are taken as the workbook computed them and the
+  // scenario controls are shown as inert rather than quietly doing nothing.
+  const liveScenario = dashboard.forecast === 'rebuild';
+  const fsr = useMemo(
+    () => (sheets ? buildForecast(sheets, assumptions, rows, dashboard.forecast) : null),
+    [sheets, assumptions, rows, dashboard.forecast]);
+  const model = useMemo(
+    () => (sheets ? buildModel(sheets, assumptions, rows) : null), [sheets, assumptions, rows]);
+  const dash = useMemo(
+    () => (fsr ? buildDashboard(fsr, month, rows) : null), [fsr, month, rows]);
 
   if (!sheets || !fsr || !dash || !model) {
     return (
@@ -239,18 +249,41 @@ export function ClientDashboardScreen({
           {MONTHS.map((mo, i) => (
             <Pressable key={mo} onPress={() => setMonth(i)} style={[s.monthChip, month === i && s.monthChipOn]}>
               <Text style={[s.monthChipText, month === i && s.monthChipTextOn]}>{mo} 26</Text>
-              {i > LAST_ACTUAL && <Text style={[s.monthChipFc, month === i && s.monthChipFcOn]}>forecast</Text>}
+              {i > LAST_ACTUAL && (
+                <Text style={[s.monthChipFc, month === i && s.monthChipFcOn]}>
+                  {stated(fsr, rows.netIncome, i) ? 'forecast' : 'unavailable'}
+                </Text>
+              )}
             </Pressable>
           ))}
         </ScrollView>
       </LinearGradient>
 
       <View style={s.pad}>
+        {!dash.available ? (
+          // Drawing the usual cards here would fill them from zeroes and read as
+          // a month with no costs and no profit, which is worse than saying
+          // nothing. The workbook has to be fixed for these months to appear.
+          <View style={s.warn}>
+            <Ionicons name="alert-circle-outline" size={18} color={Colors.error} />
+            <View style={{ flex: 1 }}>
+              <Text style={s.warnHead}>{dash.label} is not available</Text>
+              <Text style={s.warnText}>
+                This client's workbook does not compute {dash.label} — the forecast columns return a
+                spreadsheet error rather than a figure, so there is nothing to report for this month.
+                The closed months are unaffected; pick one of those above. This needs fixing in the
+                workbook itself, after which resharing it will bring the month back.
+              </Text>
+            </View>
+          </View>
+        ) : (
+          <>
         {dash.isForecast && (
           <View style={s.note}>
             <Ionicons name="information-circle-outline" size={16} color={Colors.primaryDark} />
             <Text style={s.noteText}>
-              {dash.label} is a forecast, not a closed month. It moves with the scenario on the Assumptions tab.
+              {dash.label} is a forecast, not a closed month.
+              {liveScenario ? ' It moves with the scenario on the Assumptions tab.' : ''}
             </Text>
           </View>
         )}
@@ -334,6 +367,8 @@ export function ClientDashboardScreen({
             </View>
           ))}
         </View>
+          </>
+        )}
       </View>
     </>
   );
@@ -342,17 +377,38 @@ export function ClientDashboardScreen({
     <>
       {subhead(
         'Scenario Assumptions',
-        'Edit the highlighted cells. Picking a scenario updates the Aug–Dec 2026 forecast on FS-R, and the Dashboard along with it. The historical basis is live from FS-A actuals.',
+        liveScenario
+          ? 'Edit the highlighted cells. Picking a scenario updates the Aug–Dec 2026 forecast on FS-R, and the Dashboard along with it. The historical basis is live from FS-A actuals.'
+          : 'The historical basis below is live from FS-A actuals. The scenario levers are shown for reference only for this client — see the note below.',
       )}
       <View style={s.pad}>
+        {!liveScenario && (
+          <View style={s.note}>
+            <Ionicons name="information-circle-outline" size={16} color={Colors.primaryDark} />
+            <Text style={s.noteText}>
+              This client’s workbook forecasts differently from the scenario model below — it prices
+              cost of services as a share of revenue and pays its payroll lines out of a pool. Their
+              Aug–Dec 2026 figures are therefore shown exactly as their workbook computed them, and
+              picking a scenario here will not change them. Everything else on this dashboard is
+              live. To move their forecast, change it in the workbook and reshare it.
+            </Text>
+          </View>
+        )}
         <View style={s.panel}>
-          <Text style={s.panelHead}>Selected Scenario</Text>
+          <Text style={s.panelHead}>
+            {liveScenario ? 'Selected Scenario' : 'Selected Scenario — not applied for this client'}
+          </Text>
           <View style={[s.panelBody, s.scenRow]}>
             {SCENARIOS.map(sc => (
               <Pressable
                 key={sc}
+                disabled={!liveScenario}
                 onPress={() => setAssumptions(a => ({ ...a, scenario: sc as Scenario }))}
-                style={[s.scenChip, assumptions.scenario === sc && s.scenChipOn]}
+                style={[
+                  s.scenChip,
+                  assumptions.scenario === sc && s.scenChipOn,
+                  !liveScenario && s.scenChipOff,
+                ]}
               >
                 <Text style={[s.scenText, assumptions.scenario === sc && s.scenTextOn]}>{sc}</Text>
               </Pressable>
@@ -432,7 +488,11 @@ export function ClientDashboardScreen({
         </View>
 
         <View style={s.panel}>
-          <Text style={s.panelHead}>6 · Applied to forecast — these feed FS-R (Aug–Dec 2026)</Text>
+          <Text style={s.panelHead}>
+            {liveScenario
+              ? '6 · Applied to forecast — these feed FS-R (Aug–Dec 2026)'
+              : '6 · Applied to forecast — reference only; FS-R comes from the workbook'}
+          </Text>
           {appliedToForecast(model).map(r => (
             <View key={r.label} style={s.tRow}>
               <Text style={[s.tCell, { flex: 3 }]}>{r.label}</Text>
@@ -443,7 +503,7 @@ export function ClientDashboardScreen({
 
         <View style={s.panel}>
           <Text style={s.panelHead}>8 · Forecast outcome — live from FS-R</Text>
-          {forecastOutcome(fsr).map(r => (
+          {forecastOutcome(fsr, rows).map(r => (
             <View key={r.label} style={s.tRow}>
               <Text style={[s.tCell, r.strong && s.tStrong, { flex: 3 }]}>{r.label}</Text>
               <Text style={[s.tCell, s.tNum, r.strong && s.tStrong, { flex: 1.2 }]}>{money(r.amount)}</Text>
@@ -491,13 +551,16 @@ export function ClientDashboardScreen({
         return (
           <>
             {subhead('FS-R — Restated & Forecast',
-              'Restated statements. January to July 2026 are booked actuals; August to December are forecast from the scenario levers.')}
+              liveScenario
+                ? 'Restated statements. January to July 2026 are booked actuals; August to December are forecast from the scenario levers.'
+                : 'Restated statements. January to July 2026 are booked actuals; August to December are the forecast as this client’s own workbook computed it.')}
             <View style={s.pad}>
               <View style={s.note}>
                 <Ionicons name="information-circle-outline" size={16} color={Colors.primaryDark} />
                 <Text style={s.noteText}>
-                  Jan–Jul 2026 are booked actuals. Aug–Dec 2026 are forecast, shaded below, and move
-                  with the scenario on the Assumptions tab.
+                  {liveScenario
+                    ? 'Jan–Jul 2026 are booked actuals. Aug–Dec 2026 are forecast, shaded below, and move with the scenario on the Assumptions tab.'
+                    : 'Jan–Jul 2026 are booked actuals. Aug–Dec 2026 are forecast, shaded below, and are shown exactly as this client’s workbook computed them — the scenario picker does not move them.'}
                 </Text>
               </View>
               <UeStatement rows={Object.values(fsr)} forecastFrom={LAST_ACTUAL} />
@@ -606,6 +669,13 @@ const s = StyleSheet.create({
     borderWidth: 1, borderColor: '#F0E2C0', borderRadius: 12, padding: 12, marginBottom: 16,
   },
   noteText: { flex: 1, color: Colors.textSecondary, fontSize: 12, lineHeight: 18 },
+  warn: {
+    flexDirection: 'row', alignItems: 'flex-start', gap: 10,
+    padding: 14, borderRadius: 10, marginBottom: 14,
+    borderWidth: 1, borderColor: Colors.error, backgroundColor: Colors.bgDeep,
+  },
+  warnHead: { color: Colors.error, fontSize: 13, fontWeight: '800', marginBottom: 4 },
+  warnText: { color: Colors.textSecondary, fontSize: 12, lineHeight: 18 },
 
   band: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 18 },
   bandCell: {
@@ -674,6 +744,7 @@ const s = StyleSheet.create({
   subheadLead: { color: 'rgba(255,255,255,0.5)', fontSize: 12, lineHeight: 19, marginTop: 6, maxWidth: 720 },
 
   scenRow: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
+  scenChipOff: { opacity: 0.45 },
   scenChip: {
     paddingHorizontal: 14, paddingVertical: 8, borderRadius: 9,
     borderWidth: 1, borderColor: Colors.border, backgroundColor: Colors.bgDeep,
