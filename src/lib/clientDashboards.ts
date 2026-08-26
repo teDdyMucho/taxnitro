@@ -19,9 +19,18 @@ import { UE_ROWS, type ForecastMode, type RowMap } from './ueModel';
 // neighbouring line rather than failing, so it has to be read off each workbook
 // and checked against it.
 //
-// Clients are matched on their name or email rather than an id, because the same
-// practice appears under slightly different names across the books and the portal
-// ("Uniquely Enough LLC" in one, a person's name and a company email in the other).
+// Clients are matched on their exact sign-in email, listed per dashboard.
+//
+// This began as a pattern match on name and email, which does not survive contact
+// with the real accounts. Two of the six carry nothing a pattern could catch:
+// 2G3B Eats signs in as Jody Lopez at a personal gmail address, and STEER's
+// domain glues the name to the city (steerphx.com), so a word-boundary match
+// misses it. Loosening the patterns to reach them is the wrong direction — a
+// pattern loose enough to match "steer" anywhere would eventually match a second
+// client, and that failure shows one business another's books.
+//
+// An exact email cannot collide. If someone's address changes their dashboard
+// disappears until it is listed here, which is the safe way round.
 
 export interface ClientDashboard {
   /** Stable id for this dashboard. */
@@ -179,13 +188,14 @@ const FIRST_STEP_ROWS: RowMap = {
 };
 
 interface Entry {
-  match: RegExp;
+  /** The client's exact sign-in email(s), lower case. */
+  emails: string[];
   dashboard: ClientDashboard;
 }
 
 const ENTRIES: Entry[] = [
   {
-    match: /uniquely\s*enough/i,
+    emails: ['stephanie@uniquelyenough.com'],
     dashboard: {
       key: 'uniquely-enough',
       label: 'Financial Dashboard',
@@ -198,7 +208,7 @@ const ENTRIES: Entry[] = [
     },
   },
   {
-    match: /1st\s*step|first\s*step|1sg/i,
+    emails: ['1ststep2greatness@gmail.com'],
     dashboard: {
       key: 'first-step-to-greatness',
       label: 'Financial Dashboard',
@@ -211,7 +221,7 @@ const ENTRIES: Entry[] = [
     },
   },
   {
-    match: /2g3b|2\s*g\s*3\s*b/i,
+    emails: ['jodylopez4@gmail.com'],
     dashboard: {
       key: '2g3b-eats',
       label: 'Financial Dashboard',
@@ -223,7 +233,7 @@ const ENTRIES: Entry[] = [
     },
   },
   {
-    match: /access\s*granted/i,
+    emails: ['mr.grant@accessgrantededu.com'],
     dashboard: {
       key: 'access-granted-education',
       label: 'Financial Dashboard',
@@ -236,7 +246,7 @@ const ENTRIES: Entry[] = [
     },
   },
   {
-    match: /battle\s*protection|bpa/i,
+    emails: ['kristina@battleprotectionagency.com'],
     dashboard: {
       key: 'battle-protection-agency',
       label: 'Financial Dashboard',
@@ -249,7 +259,7 @@ const ENTRIES: Entry[] = [
     },
   },
   {
-    match: /steer/i,
+    emails: ['corey.benson@steerphx.com'],
     dashboard: {
       key: 'steer-llc',
       label: 'Financial Dashboard',
@@ -267,9 +277,9 @@ const ENTRIES: Entry[] = [
 export function dashboardForClient(
   client: { full_name?: string | null; email?: string | null } | null | undefined,
 ): ClientDashboard | null {
-  if (!client) return null;
-  const haystack = `${client.full_name ?? ''} ${client.email ?? ''}`;
-  return ENTRIES.find(e => e.match.test(haystack))?.dashboard ?? null;
+  const email = client?.email?.trim().toLowerCase();
+  if (!email) return null;
+  return ENTRIES.find(e => e.emails.includes(email))?.dashboard ?? null;
 }
 
 /** Every dashboard that exists — used to list who has one. */
