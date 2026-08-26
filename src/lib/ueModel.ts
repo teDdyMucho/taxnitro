@@ -362,12 +362,25 @@ function drivers(R: Rows, f: Fsr, m: number) {
 
 export interface Kpi { label: string; value: string; delta: string; deltaPct: string | null; positive: boolean }
 export interface Series { current: number[]; prior: number[]; trend: number[] }
-export interface AnalysisRow { metric: string; amount: number; variance: number | null; variancePct: number | null }
+/**
+ * A line of the income or expense analysis.
+ *
+ * A null means the workbook has nothing to compare against, not that the figure
+ * is zero — 2G3B Eats and STEER posted the whole of 2025 as a single December
+ * catch-up, so eleven of their prior-year months are simply absent.
+ */
+export interface AnalysisRow { metric: string; amount: number | null; variance: number | null; variancePct: number | null }
 export interface InsightCard { title: string; value: string; sub: string; note: string }
 
 export interface Dashboard {
   label: string;
   isForecast: boolean;
+  /**
+   * How many months of the prior year the books actually contain. Where this is
+   * one, the year-on-year chart is a single bar and comparisons against it mean
+   * nothing — the screen says so rather than leaving it to be misread.
+   */
+  priorYearMonths: number;
   /**
    * False when the workbook does not state this month's bottom line — it errored
    * rather than computing. The screen shows that plainly instead of drawing
@@ -426,11 +439,22 @@ export function buildDashboard(f: Fsr, m: number, map: RowMap): Dashboard {
   const i26 = MONTHS.map((_, i) => (i <= m ? income26(R, f, i) : 0));
   const e26 = MONTHS.map((_, i) => (i <= m ? expense26(R, f, i) : 0));
 
+  // Nothing on the prior-year side means nothing to compare to. Reporting a rise
+  // "against" an absent month reads as growth that did not happen, and a
+  // percentage off a zero base is not a percentage at all.
+  //
+  // The two rows carry different figures: the like-for-like row shows last
+  // year's, which is what goes missing, while the year-to-date row shows this
+  // year's, which stands on its own — so only its comparison is withheld.
   const rows = (a: number, p: number, ly: number, yc: number, yp: number): AnalysisRow[] => [
     { metric: `Month Actual (${label})`, amount: a, variance: null, variancePct: null },
     { metric: `vs Prior Month (${priorLabel(m)})`, amount: p, variance: a - p, variancePct: div(a - p, p) },
-    { metric: `vs Same Month LY (${lyLabel(m)})`, amount: ly, variance: a - ly, variancePct: div(a - ly, ly) },
-    { metric: `YTD 2026 (Jan-${MONTHS[m]}) vs same period 2025`, amount: yc, variance: yc - yp, variancePct: div(yc - yp, yp) },
+    ly === 0
+      ? { metric: `vs Same Month LY (${lyLabel(m)})`, amount: null, variance: null, variancePct: null }
+      : { metric: `vs Same Month LY (${lyLabel(m)})`, amount: ly, variance: a - ly, variancePct: div(a - ly, ly) },
+    yp === 0
+      ? { metric: `YTD 2026 (Jan-${MONTHS[m]}) vs same period 2025`, amount: yc, variance: null, variancePct: null }
+      : { metric: `YTD 2026 (Jan-${MONTHS[m]}) vs same period 2025`, amount: yc, variance: yc - yp, variancePct: div(yc - yp, yp) },
   ];
   const y26i = sumTo(i => income26(R, f, i), m), y25i = sumTo(i => income25(R, f, i), m);
   const y26e = sumTo(i => expense26(R, f, i), m), y25e = sumTo(i => expense25(R, f, i), m);
@@ -470,6 +494,8 @@ export function buildDashboard(f: Fsr, m: number, map: RowMap): Dashboard {
   return {
     label,
     isForecast: m > LAST_ACTUAL,
+    priorYearMonths: MONTHS.reduce(
+      (n, _, i) => n + (Math.abs(income25(R, f, i)) > 0.5 ? 1 : 0), 0),
     available: stated(f, R.netIncome, m),
     income: head, expense: exp, net, margin: div(net, head),
     kpis: [

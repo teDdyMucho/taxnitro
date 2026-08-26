@@ -333,6 +333,22 @@ export function ClientDashboardScreen({
           </View>
         </View>
 
+        {dash.priorYearMonths <= 1 && (
+          // Two of these clients closed the whole of 2025 into December, so the
+          // grey series is one bar and the like-for-like rows have nothing on the
+          // other side. Said once here rather than left to be read as a collapse.
+          <View style={s.note}>
+            <Ionicons name="information-circle-outline" size={16} color={Colors.primaryDark} />
+            <Text style={s.noteText}>
+              {dash.priorYearMonths === 0
+                ? 'There is no 2025 in these books, so the 2025 series is empty and the like-for-like comparisons are left blank.'
+                : 'This client’s 2025 was posted as a single catch-up entry in December rather than month by month. '
+                  + 'That is the one 2025 bar on each chart, and it is why the like-for-like rows below read as a dash: '
+                  + 'there is no matching month to compare against, not a fall to nothing.'}
+            </Text>
+          </View>
+        )}
+
         <View style={[s.duo, !wide && s.duoStack]}>
           <View style={[s.panel, s.duoItem]}>
             <Text style={s.panelHead}>Income analysis · {dash.label}</Text>
