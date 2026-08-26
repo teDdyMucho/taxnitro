@@ -10,7 +10,8 @@ import { Colors } from '../constants/colors';
 import { useAuth } from '../context/AuthContext';
 import { useSheetStyles } from '../hooks/useSheetStyles';
 import { uploadDocumentToStorage, createDocumentRecord, Document } from '../db/documents';
-import { isStaffLabelFolder, staffLabelsForFolder } from '../db/requirements';
+import { isStaffLabelFolder, staffLabelsForFolder, monthOf } from '../db/requirements';
+import { PeriodPicker, shortMonthLabel } from './PeriodPicker';
 import { getAllClients, Profile } from '../db/profiles';
 import {
   listSubfolders, createSubfolder, moveDocumentToSubfolder, Subfolder,
@@ -71,6 +72,8 @@ type PickedFile = {
   /** Subfolder within that folder, or null for the folder root. */
   subfolderId: string | null;
   subfolderName: string | null;
+  /** The month this file is about, 'YYYY-MM'. */
+  period: string;
   /**
    * What this file IS, for the folders that deliver something — a Query Sheet,
    * a P&L. Prefixed onto the name at upload, which is how the client tells one
@@ -92,6 +95,7 @@ function fromDomFiles(
   folderKey: string,
   sub: Subfolder | null,
   label: string | null,
+  period: string,
 ): PickedFile[] {
   return files.map(f => ({
     id: nextFileId(),
@@ -99,6 +103,7 @@ function fromDomFiles(
     subfolderId: sub?.id ?? null,
     subfolderName: sub?.name ?? null,
     label,
+    period,
     // uploadDocumentToStorage fetches this URI on web, and fetch reads blob: URLs.
     uri: URL.createObjectURL(f),
     name: f.name,
@@ -138,6 +143,8 @@ export function AdminUploadModal({ visible, onClose, onUploaded, fixedClient }: 
   const setClient = setPickedClient;
   // Deliverable folders ask what the file is before it can be queued.
   const [docLabel, setDocLabel] = useState<string | null>(null);
+  // The month the files are about. This month unless told otherwise.
+  const [period, setPeriod] = useState<string>(monthOf());
   const [folderKey, setFolderKey] = useState<string | null>(null);
   const needsLabel   = !!folderKey && isStaffLabelFolder(folderKey);
 
@@ -260,13 +267,14 @@ export function AdminUploadModal({ visible, onClose, onUploaded, fixedClient }: 
       key: string; folderKey: string; folderLabel: string;
       subfolderId: string | null; subfolderName: string | null;
       label: string | null;
+      period: string;
       files: PickedFile[];
     };
     const byDest = new Map<string, Bucket>();
     const order = UPLOAD_FOLDERS.flatMap(g => g.folders).map(f => f.key);
 
     picked.forEach(f => {
-      const key = `${f.folderKey}::${f.subfolderId ?? ''}::${f.label ?? ''}`;
+      const key = `${f.folderKey}::${f.subfolderId ?? ''}::${f.label ?? ''}::${f.period}`;
       const bucket = byDest.get(key);
       if (bucket) bucket.files.push(f);
       else byDest.set(key, {
@@ -276,6 +284,7 @@ export function AdminUploadModal({ visible, onClose, onUploaded, fixedClient }: 
         subfolderId: f.subfolderId,
         subfolderName: f.subfolderName,
         label: f.label,
+        period: f.period,
         files: [f],
       });
     });
@@ -317,6 +326,7 @@ export function AdminUploadModal({ visible, onClose, onUploaded, fixedClient }: 
         subfolderId: subfolder?.id ?? null,
         subfolderName: subfolder?.name ?? null,
         label: needsLabel ? docLabel : null,
+        period,
         uri: a.uri,
         name: a.name,
         mimeType: a.mimeType ?? 'application/octet-stream',
@@ -338,7 +348,7 @@ export function AdminUploadModal({ visible, onClose, onUploaded, fixedClient }: 
       setDragOver(false);
       if (!canAddFiles || !folderKey) return;
       const files: File[] = Array.from(e.dataTransfer?.files ?? []);
-      if (files.length) addFiles(fromDomFiles(files, folderKey, subfolder, needsLabel ? docLabel : null));
+      if (files.length) addFiles(fromDomFiles(files, folderKey, subfolder, needsLabel ? docLabel : null, period));
     },
   } : {};
 
@@ -370,6 +380,7 @@ export function AdminUploadModal({ visible, onClose, onUploaded, fixedClient }: 
             documentType: bucket.folderKey,
             uploadedByRole: (user?.role === 'admin' ? 'admin' : 'staff'),
             uploadedBy: user?.email ?? 'staff',
+            period: file.period,
           });
           if (doc) {
             uploaded.push(doc);
@@ -531,6 +542,14 @@ export function AdminUploadModal({ visible, onClose, onUploaded, fixedClient }: 
                   </>
                 )}
 
+                {/* Step 2c: which month these files are about */}
+                {folderKey && (
+                  <>
+                    <Text style={s.label}>Month</Text>
+                    <PeriodPicker value={period} onChange={setPeriod} />
+                  </>
+                )}
+
                 {/* Step 3: subfolder (after folder) — optional, per client */}
                 {client && folderKey && (
                   <>
@@ -665,6 +684,7 @@ export function AdminUploadModal({ visible, onClose, onUploaded, fixedClient }: 
                               Files go to “{FOLDER_LABEL[folderKey]}
                               {subfolder ? ` › ${subfolder.name}` : ''}”
                               {docLabel ? `, as ${docLabel}` : ''}
+                              {` · ${shortMonthLabel(period)}`}
                             </Text>
                           </>
                         ) : (
@@ -689,6 +709,7 @@ export function AdminUploadModal({ visible, onClose, onUploaded, fixedClient }: 
                                 {bucket.folderLabel}
                                 {bucket.subfolderName ? ` › ${bucket.subfolderName}` : ''}
                                 {bucket.label ? ` · ${bucket.label}` : ''}
+                                {` · ${shortMonthLabel(bucket.period)}`}
                               </Text>
                               <Text style={s.folderGroupCount}>{bucket.files.length}</Text>
                               {!busy && (

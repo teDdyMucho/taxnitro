@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, useRef } from 'react';
+import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import {
   View,
   Text,
@@ -491,6 +491,9 @@ export function AdminDocumentsScreen() {
   const [browserOpen, setBrowserOpen] = useState(false);
   // The list answers "what came in"; the tree answers "where does it live".
   const [view, setView] = useState<'list' | 'folders'>('list');
+  // Which month to show, or 'all'. The month a document COVERS, not the day it
+  // arrived — that is the whole reason it is tagged.
+  const [period, setPeriod] = useState<string>('all');
   const [uploadOpen, setUploadOpen] = useState(false);
 
   const load = useCallback(async (isRefresh = false) => {
@@ -509,16 +512,31 @@ export function AdminDocumentsScreen() {
 
   const pendingCount = documents.filter(d => (d.approval_status ?? 'approved') === 'pending').length;
 
+  /** The month a document covers, falling back to when it arrived. */
+  const periodOf = (d: Document) => d.period || monthOf(d.created_at);
+
+  // Every month that actually has something in it, newest first — offering a
+  // month with nothing behind it is just a dead end.
+  const monthsPresent = useMemo(
+    () => [...new Set(documents.map(periodOf))].sort((a, b) => b.localeCompare(a)),
+    [documents],
+  );
+
   const filtered = documents.filter(d => {
     const approval = d.approval_status ?? 'approved';
     if (filter === 'pending' && approval !== 'pending') return false;
     if (filter !== 'all' && filter !== 'pending' && d.document_type !== filter) return false;
+    if (period !== 'all' && periodOf(d) !== period) return false;
     if (!query.trim()) return true;
     return (
       d.name?.toLowerCase().includes(query.toLowerCase()) ||
       d.email?.toLowerCase().includes(query.toLowerCase())
     );
-  });
+  })
+    // Newest month first; within a month, the newest upload.
+    .sort((a, b) =>
+      periodOf(b).localeCompare(periodOf(a))
+      || new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
   const { isPhone } = useResponsive();
 
@@ -808,6 +826,37 @@ export function AdminDocumentsScreen() {
       </View>}
 
       {/* ── Filter dropdown (per-folder, grouped) ── */}
+      {/* Month — the month a document covers, across every folder. */}
+      {view === 'list' && monthsPresent.length > 1 && (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={s.monthBar}
+          contentContainerStyle={s.monthBarContent}
+        >
+          {['all', ...monthsPresent].map(m => {
+            const on = period === m;
+            return (
+              <TouchableOpacity
+                key={m}
+                style={[s.monthChip, on && s.monthChipOn]}
+                onPress={() => setPeriod(m)}
+                activeOpacity={0.8}
+              >
+                <Ionicons
+                  name={m === 'all' ? 'albums-outline' : on ? 'calendar' : 'calendar-outline'}
+                  size={12}
+                  color={on ? '#2C2320' : '#B5905B'}
+                />
+                <Text style={[s.monthChipText, on && s.monthChipTextOn]}>
+                  {m === 'all' ? 'All months' : formatMonthLabel(m)}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+      )}
+
       {view === 'list' && <View style={s.filterWrap}>
         <TouchableOpacity style={s.filterBtn} onPress={() => setFilterOpen(true)} activeOpacity={0.8}>
           <Ionicons name="funnel-outline" size={15} color="#B5905B" />
@@ -983,6 +1032,16 @@ const s = StyleSheet.create({
     backgroundColor: '#E8B923', paddingHorizontal: 12,
   },
   uploadHeaderText: { color: '#2C2320', fontSize: 13, fontWeight: '800' },
+  monthBar: { flexGrow: 0, marginTop: 10 },
+  monthBarContent: { paddingHorizontal: 16, gap: 6 },
+  monthChip: {
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    paddingHorizontal: 11, paddingVertical: 6, borderRadius: 9,
+    borderWidth: 1, borderColor: '#E8E0D0', backgroundColor: '#FFFFFF',
+  },
+  monthChipOn: { backgroundColor: '#E8B923', borderColor: '#E8B923' },
+  monthChipText: { fontSize: 11.5, fontWeight: '600', color: '#6B5E52' },
+  monthChipTextOn: { color: '#2C2320', fontWeight: '800' },
   browseBtnOn: { backgroundColor: '#E8B923', borderColor: '#E8B923' },
   browseBtn: {
     width: 36, height: 36, borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.15)',

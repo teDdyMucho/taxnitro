@@ -11,6 +11,7 @@ import { useAuth } from '../context/AuthContext';
 import { useSheetStyles } from '../hooks/useSheetStyles';
 import { uploadDocumentToStorage, createDocumentRecord, Document } from '../db/documents';
 import { moveDocumentToSubfolder } from '../db/subfolders';
+import { PeriodPicker } from './PeriodPicker';
 import {
   RequiredItem, RequirementService, BANK_STATEMENTS_KEY,
   itemsForClient, collectorFolderForService, createPendingRequirement,
@@ -169,6 +170,9 @@ export function ClientUploadModal({
   const sheet = useSheetStyles('md');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [note, setNote] = useState('');
+  // The month these files are about, which is not always the month they are
+  // being sent in — a January statement can arrive in March.
+  const [period, setPeriod] = useState<string>(monthOf());
   const [picked, setPicked] = useState<PickedFile[]>([]);
   const [dragOver, setDragOver] = useState(false);
   const [sent, setSent] = useState(0);          // files finished, for the progress line
@@ -276,7 +280,7 @@ export function ClientUploadModal({
 
   const reset = () => {
     picked.forEach(revoke);
-    setSelectedId(null); setNote(''); setPicked([]);
+    setSelectedId(null); setNote(''); setPicked([]); setPeriod(monthOf());
     setDragOver(false); setSent(0); setBusy(false); setDone(false);
     setUploadedCount(0); setConfirmRemove(null);
     setOverflow({ up: false, down: false });
@@ -369,6 +373,7 @@ export function ClientUploadModal({
             documentType: option.folder,
             uploadedByRole: 'client',
             uploadedBy: user.email,
+            period,
           });
           if (doc) {
             if (notify) {
@@ -617,6 +622,17 @@ export function ClientUploadModal({
                       </View>
                     ))}
                   </View>
+                )}
+
+                {selected && (
+                  <>
+                    <Text style={s.label}>Month</Text>
+                    <PeriodPicker
+                      value={period}
+                      onChange={setPeriod}
+                      hint="Which month are these for? Not today's date — the month the documents cover."
+                    />
+                  </>
                 )}
 
                 <Text style={s.label}>Note <Text style={s.optional}>(optional)</Text></Text>

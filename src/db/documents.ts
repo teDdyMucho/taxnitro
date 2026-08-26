@@ -21,6 +21,12 @@ export interface Document {
   uploaded_by?: string | null;
   /** Subfolder this file was filed into by staff, or null for the folder root. */
   subfolder_id?: string | null;
+  /**
+   * The month this document is ABOUT, as 'YYYY-MM' — not when it was uploaded.
+   * A January statement handed over in March is '2026-01', so sorting by date
+   * means what anyone reading it expects. See database/document_period.sql.
+   */
+  period?: string | null;
   created_at: string;
   updated_at?: string;
 }
@@ -269,6 +275,8 @@ export async function createDocumentRecord(params: {
   documentType: string;
   uploadedByRole?: 'client' | 'staff' | 'admin';  // default 'client'
   uploadedBy?: string;                              // uploader id/email
+  /** The month it covers, 'YYYY-MM'. Left out, the column defaults to now. */
+  period?: string | null;
 }): Promise<Document | null> {
   const role = params.uploadedByRole ?? 'client';
   // Client uploads await ADMIN approval. Staff-delivered files await CLIENT approval,
@@ -282,6 +290,9 @@ export async function createDocumentRecord(params: {
     status: 'new',
     approval_status: 'pending',
     uploaded_by_role: role,
+    // Only sent when the uploader said which month; otherwise the column's own
+    // default fills it in, rather than this overwriting it with null.
+    ...(params.period ? { period: params.period } : {}),
     uploaded_by: params.uploadedBy ?? null,
   };
 

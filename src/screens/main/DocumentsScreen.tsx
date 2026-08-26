@@ -152,6 +152,12 @@ const FOLDERS: RootFolder[] = [
 
 function displayName(doc: Document): string { return doc.file_name || doc.name || 'Document'; }
 function fmtDate(d: string) { return new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }); }
+
+/**
+ * The month a document covers. Falls back to when it was uploaded, for rows
+ * that predate the column — the same guess the app used to make everywhere.
+ */
+function periodOf(doc: Document): string { return doc.period || monthOf(doc.created_at); }
 type FilterType = 'all' | 'new' | 'viewed';
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -474,18 +480,24 @@ function DocListView({ sf, root, rootColor, documents, refreshing, onRefresh, on
     let items = search ? [...documents] : [...scoped];
     if (search) items = items.filter(d => displayName(d).toLowerCase().includes(search.toLowerCase()));
     if (filter !== 'all') items = items.filter(d => d.status === filter);
-    return items.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    // Newest month first, and within a month the newest upload. The month is
+    // what the document is ABOUT; created_at only breaks the tie.
+    return items.sort((a, b) =>
+      (periodOf(b)).localeCompare(periodOf(a))
+      || new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
   }, [documents, scoped, search, filter]);
 
-  // Required Info folders group their docs by month (JUL 2026 …) via section headers.
-  const groupByMonth = isRequirementFolder(sf.key);
+  // Every folder groups by month now, not just Required Info: the whole point
+  // of tagging a document with the month it covers is being able to find it by
+  // date wherever it happens to be filed.
+  const groupByMonth = true;
   type ListRow = { type: 'header'; month: string } | { type: 'doc'; doc: Document };
   const listRows: ListRow[] = useMemo(() => {
     if (!groupByMonth) return filtered.map(d => ({ type: 'doc', doc: d }));
     const rows: ListRow[] = [];
     let currentMonth = '';
     for (const d of filtered) {
-      const m = monthOf(d.created_at);
+      const m = periodOf(d);
       if (m !== currentMonth) { currentMonth = m; rows.push({ type: 'header', month: m }); }
       rows.push({ type: 'doc', doc: d });
     }
@@ -985,7 +997,8 @@ function DocDetailPage({ doc, sf, root, fileOwnerId, userEmail, onClose, onMarkV
         <View style={dp.section}>
           <Text style={dp.sectionLabel}>File Details</Text>
           <View style={dp.metaCard}>
-            <DetailRow icon="calendar-outline" label="Date Uploaded" value={fmtDate(doc.created_at)} color={sf.color} />
+            <DetailRow icon="calendar-outline" label="For the month of" value={formatMonthLabel(periodOf(doc))} color={sf.color} />
+            <DetailRow icon="cloud-upload-outline" label="Date Uploaded" value={fmtDate(doc.created_at)} color={sf.color} />
             <View style={dp.div} />
             <DetailRow icon="folder-outline"   label="Folder"        value={sf.label}                color={sf.color} />
             <View style={dp.div} />
