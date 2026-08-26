@@ -1,8 +1,11 @@
-"""Every figure in a generated client module, checked back against its workbook.
+"""Every figure in a client's generated modules, checked back against its workbook.
 
 Reads the .ts as data rather than as text, so this compares numbers instead of
 formatting. Run it after xlsx2ts.py, and again whenever a workbook is reshared —
 a client's figures reaching the app unchecked is the failure worth ruling out.
+
+Both modules are checked: the statements the client sees, and the notes module
+beside it (<module>Notes.ts) that only staff are sent.
 
   python scripts/verify-client-sheets.py <workbook.xlsx> <module.ts> <BS tab> <PL tab>
 
@@ -13,17 +16,30 @@ import openpyxl
 sys.stdout.reconfigure(encoding='utf-8')
 
 xlsx, ts, bs_tab, pl_tab = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
-# Read the module through node, so its own syntax decides what the values are.
-mjs = re.sub(r'^import type.*$', '', open(ts, encoding='utf-8').read(), flags=re.M).replace(': ClientSheets', '')
-tmp = os.path.abspath(ts) + '.check.mjs'
-open(tmp, 'w', encoding='utf-8').write(mjs)
-url = 'file:///' + tmp.replace(chr(92), '/')
-proc = subprocess.run(['node', '--input-type=module', '-e',
-                       'const m = await import("' + url + '"); console.log(JSON.stringify(m.default));'],
-                      capture_output=True, text=True, encoding='utf-8')
-if proc.returncode:
-    print(proc.stderr[:1500]); sys.exit(1)
-data = json.loads(proc.stdout)
+
+
+def load(path):
+    """A generated module's values, read through node so its syntax decides."""
+    src = re.sub(r'^import type.*$', '', open(path, encoding='utf-8').read(), flags=re.M)
+    src = src.replace(': ClientSheets', '').replace(': ClientNotes', '')
+    tmp = os.path.abspath(path) + '.check.mjs'
+    open(tmp, 'w', encoding='utf-8').write(src)
+    url = 'file:///' + tmp.replace(chr(92), '/')
+    proc = subprocess.run(
+        ['node', '--input-type=module', '-e',
+         'const m = await import("' + url + '"); console.log(JSON.stringify(m.default));'],
+        capture_output=True, text=True, encoding='utf-8')
+    os.remove(tmp)
+    if proc.returncode:
+        print(proc.stderr[:1500]); sys.exit(1)
+    return json.loads(proc.stdout)
+
+
+data = load(ts)
+notes_path = (ts[:-3] if ts.endswith('.ts') else ts) + 'Notes.ts'
+if not os.path.exists(notes_path):
+    print(f'missing notes module: {notes_path}'); sys.exit(1)
+data.update(load(notes_path))
 
 wb = openpyxl.load_workbook(xlsx, data_only=True)
 C25, T25, C26, T26 = 6, 18, 20, 32

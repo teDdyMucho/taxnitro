@@ -1,5 +1,5 @@
 import type { ImageSourcePropType } from 'react-native';
-import type { ClientSheets } from '../data/clientSheets';
+import type { ClientNotes, ClientSheets } from '../data/clientSheets';
 import { UE_ROWS, type ForecastMode, type RowMap } from './ueModel';
 
 // Which clients have a financial dashboard, and where its figures come from.
@@ -53,6 +53,15 @@ export interface ClientDashboard {
    * riding along in the bundle every other user downloads.
    */
   load: () => Promise<ClientSheets>;
+  /**
+   * FTG's working notes on this client — Findings for Review and TL;DR.
+   *
+   * A separate module, and a separate fetch, so that a client viewing their own
+   * report never downloads them. Hiding the tabs was not enough: while the notes
+   * shared a module with the statements, their whole text sat in the JavaScript
+   * the client's browser had already loaded.
+   */
+  loadNotes: () => Promise<ClientNotes>;
   /**
    * Where the figures sit in THIS client's FS-R / FS-A. Read off their workbook;
    * see RowMap. Never reuse another client's.
@@ -203,6 +212,7 @@ const ENTRIES: Entry[] = [
       subtitle: 'Behavioral Health LLC',
       logo: require('../../assets/clients/uniquely-enough.png'),
       load: () => import('../data/ueSheets').then(m => m.UE_SHEETS),
+      loadNotes: () => import('../data/ueSheetsNotes').then(m => m.UE_NOTES),
       rows: UE_ROWS,
       forecast: 'rebuild',
     },
@@ -216,6 +226,7 @@ const ENTRIES: Entry[] = [
       subtitle: 'Childcare & Early Education',
       logo: require('../../assets/clients/first-step-to-greatness.png'),
       load: () => import('../data/firstStepSheets').then(m => m.FIRST_STEP_SHEETS),
+      loadNotes: () => import('../data/firstStepSheetsNotes').then(m => m.FIRST_STEP_NOTES),
       rows: FIRST_STEP_ROWS,
       forecast: 'workbook',
     },
@@ -228,6 +239,7 @@ const ENTRIES: Entry[] = [
       name: '2G3B EATS LLC',
       subtitle: 'Event Catering',
       load: () => import('../data/twoG3BSheets').then(m => m.TWO_G_THREE_B_SHEETS),
+      loadNotes: () => import('../data/twoG3BSheetsNotes').then(m => m.TWO_G_THREE_B_NOTES),
       rows: TWO_G_THREE_B_ROWS,
       forecast: 'workbook',
     },
@@ -241,6 +253,7 @@ const ENTRIES: Entry[] = [
       subtitle: 'Education',
       logo: require('../../assets/clients/access-granted-education.png'),
       load: () => import('../data/accessGrantedSheets').then(m => m.ACCESS_GRANTED_SHEETS),
+      loadNotes: () => import('../data/accessGrantedSheetsNotes').then(m => m.ACCESS_GRANTED_NOTES),
       rows: ACCESS_GRANTED_ROWS,
       forecast: 'workbook',
     },
@@ -254,6 +267,7 @@ const ENTRIES: Entry[] = [
       subtitle: 'Agency',
       logo: require('../../assets/clients/battle-protection-agency.png'),
       load: () => import('../data/battleProtectionSheets').then(m => m.BATTLE_PROTECTION_SHEETS),
+      loadNotes: () => import('../data/battleProtectionSheetsNotes').then(m => m.BATTLE_PROTECTION_NOTES),
       rows: BATTLE_PROTECTION_ROWS,
       forecast: 'workbook',
     },
@@ -267,6 +281,7 @@ const ENTRIES: Entry[] = [
       subtitle: 'LLC',
       logo: require('../../assets/clients/steer-llc.png'),
       load: () => import('../data/steerSheets').then(m => m.STEER_SHEETS),
+      loadNotes: () => import('../data/steerSheetsNotes').then(m => m.STEER_NOTES),
       rows: STEER_ROWS,
       forecast: 'workbook',
     },

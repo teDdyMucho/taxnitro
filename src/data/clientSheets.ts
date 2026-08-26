@@ -38,12 +38,36 @@ export interface StatementRow {
   t2026: StatementCell;
 }
 
+/**
+ * The tabs of a client's workbook that the client themselves may see.
+ *
+ * Their own statements and the assumptions behind the forecast. Nothing here is
+ * anything they do not already have in their books.
+ */
 export interface ClientSheets {
-  'Findings for Review': GridRow[];
-  'TL;DR': GridRow[];
   ASSUMPTIONS: GridRow[];
   'Balance Sheet': GridRow[];
   'Profit and Loss': GridRow[];
   'FS-R': StatementRow[];
   'FS-A': StatementRow[];
+}
+
+/**
+ * FTG's own working notes on a client — kept in a separate module, and fetched
+ * only for staff.
+ *
+ * These are drafts. Paul: "yung mga findings for review, nakahide pa sakanila if
+ * ever, for polishing pa siya." They read as blunt assessments of the client's
+ * own bookkeeping — 2G3B's names a personal account and counts cards with
+ * negative balances — so a client reading an unfinished one would be a real
+ * problem.
+ *
+ * Hiding the tab was not enough. While these travelled in the same module as the
+ * statements, every word was in the JavaScript the client's own browser
+ * downloaded, readable by anyone who opened the developer tools. Splitting the
+ * module is what actually keeps them from being sent.
+ */
+export interface ClientNotes {
+  'Findings for Review': GridRow[];
+  'TL;DR': GridRow[];
 }

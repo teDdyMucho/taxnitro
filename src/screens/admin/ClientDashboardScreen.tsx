@@ -6,7 +6,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Colors } from '../../constants/colors';
-import type { ClientSheets } from '../../data/clientSheets';
+import type { ClientNotes, ClientSheets } from '../../data/clientSheets';
 import type { ClientDashboard } from '../../lib/clientDashboards';
 import { UeBarChart } from '../../components/ue/UeBarChart';
 import { UeGridTable, UeStatement } from '../../components/ue/UeTables';
@@ -63,6 +63,7 @@ export function ClientDashboardScreen({
   const wide = width >= 900;
 
   const [sheets, setSheets] = useState<ClientSheets | null>(null);
+  const [notes, setNotes] = useState<ClientNotes | null>(null);
   const [tab, setTab] = useState<TabKey>('dash');
   const [month, setMonth] = useState(7);
   const [assumptions, setAssumptions] = useState<Assumptions>(DEFAULT_ASSUMPTIONS);
@@ -79,6 +80,19 @@ export function ClientDashboardScreen({
       .catch(e => console.error(`ClientDashboard [${dashboard.key}]: could not load the workbook`, e));
     return () => { live = false; };
   }, [dashboard]);
+
+  // FTG's notes are fetched separately, and only for staff. This is the whole
+  // reason they live in their own module: a client's browser never asks for the
+  // file, so there is nothing in it for them to read.
+  useEffect(() => {
+    let live = true;
+    setNotes(null);
+    if (!staffView) return () => { live = false; };
+    dashboard.loadNotes()
+      .then(data => { if (live) setNotes(data); })
+      .catch(e => console.error(`ClientDashboard [${dashboard.key}]: could not load the notes`, e));
+    return () => { live = false; };
+  }, [dashboard, staffView]);
 
   const tabs = useMemo(
     () => [...NAV, ...STATEMENTS].filter(t => staffView || !t.staffOnly),
@@ -551,11 +565,11 @@ export function ClientDashboardScreen({
       case 'findings':
         return gridPage('Findings for Review',
           'CFO / controller findings and recommendations, sourced from the profit and loss and balance sheet tabs.',
-          sheets['Findings for Review'], 6);
+          notes?.['Findings for Review'] ?? [], 6);
       case 'tldr':
         return gridPage('TL;DR',
           'Monthly / YTD financial summary prepared by Finance Therapy Group.',
-          sheets['TL;DR'].map(r => r.slice(0, 6)));
+          (notes?.['TL;DR'] ?? []).map(r => r.slice(0, 6)));
       case 'bs':
         return gridPage('Balance Sheet',
           'Balance sheet as provided — the source behind the restated statements.', sheets['Balance Sheet']);
