@@ -95,47 +95,37 @@ export function FinancialReportsScreen({ onBack }: { onBack?: () => void }) {
               activeOpacity={0.85}
               onPress={() => setOpenId(client.id)}
             >
-              {dashboard.logo && (
-                // The client's mark again, large and faint behind the row, on a
-                // panel whose leading edge is cut on the diagonal.
-                //
-                // The panel is skewed and the image skewed back by the same
-                // amount, so the edge slants while the logo itself stays square.
-                // It sits under everything and takes no touches: it is there to
-                // make the row recognisable in a glance down the list, not to be
-                // read or pressed.
-                <View style={s.markClip} pointerEvents="none">
-                  <View style={s.markInner}>
-                    <Image source={dashboard.logo} style={s.mark} resizeMode="contain" />
-                  </View>
-                </View>
-              )}
-              {dashboard.logo ? (
-                // The client's own mark, on a light tile: these are lifted off a
-                // white sheet and several are dark ink on transparency.
-                <View style={[s.avatar, s.avatarLogo]}>
-                  <Image source={dashboard.logo} style={s.avatarImg} resizeMode="contain" />
-                </View>
-              ) : (
-                // 2G3B Eats has no mark in their workbook, so they keep initials
-                // rather than an empty circle where everyone else has a logo.
-                <LinearGradient
-                  colors={[Colors.primary, Colors.accent]}
-                  start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-                  style={s.avatar}
-                >
-                  <Text style={s.avatarText}>{mkInitials(client.full_name)}</Text>
-                </LinearGradient>
-              )}
               <View style={{ flex: 1, minWidth: 0 }}>
                 <Text style={s.cardName} numberOfLines={1}>{client.full_name || 'Client'}</Text>
                 <Text style={s.cardMeta} numberOfLines={1}>{client.email}</Text>
+                <View style={s.pill}>
+                  <Ionicons name="stats-chart-outline" size={13} color={Colors.primaryDeep} />
+                  <Text style={s.pillText}>{dashboard.label}</Text>
+                </View>
               </View>
-              <View style={s.pill}>
-                <Ionicons name="stats-chart-outline" size={13} color={Colors.primaryDeep} />
-                <Text style={s.pillText}>{dashboard.label}</Text>
+
+              {/*
+                The client's own mark, running off the right edge and dissolving
+                back into the card — the gradient is laid over it left to right,
+                opaque where the text is and clear at the edge, so there is no
+                line where one stops and the other starts.
+
+                2G3B Eats has no mark in their workbook, so their row shows the
+                same shape with their initials instead of an empty space.
+              */}
+              <View style={s.bleed} pointerEvents="none">
+                {dashboard.logo ? (
+                  <Image source={dashboard.logo} style={s.bleedLogo} resizeMode="contain" />
+                ) : (
+                  <Text style={s.bleedInitials}>{mkInitials(client.full_name)}</Text>
+                )}
+                <LinearGradient
+                  colors={[Colors.bgCard, 'rgba(255,255,255,0.55)', 'rgba(255,255,255,0)']}
+                  locations={[0, 0.45, 1]}
+                  start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }}
+                  style={s.bleedFade}
+                />
               </View>
-              <Ionicons name="chevron-forward" size={18} color={Colors.textMuted} />
             </TouchableOpacity>
           ))
         )}
@@ -152,36 +142,27 @@ const s = StyleSheet.create({
   sub: { color: 'rgba(255,255,255,0.5)', fontSize: 12.5, lineHeight: 19, marginTop: 6, maxWidth: 640 },
   body: { padding: 20, gap: 12 },
   card: {
-    flexDirection: 'row', alignItems: 'center', gap: 14,
+    flexDirection: 'row', alignItems: 'center',
     backgroundColor: Colors.bgCard, borderWidth: 1, borderColor: Colors.border,
-    borderRadius: 16, paddingHorizontal: 18, paddingVertical: 20,
-    // The faint mark is clipped to the card, so it cannot spill past the corners.
+    borderRadius: 16, paddingLeft: 20, paddingVertical: 18, minHeight: 104,
+    // The mark runs to the edge, so it is clipped to the rounded corners.
     overflow: 'hidden',
   },
-  // Skewed, so its leading edge slants. Anchored to the right and taller than the
-  // card so the slant runs clean off the top and bottom rather than stopping.
-  markClip: {
-    position: 'absolute', top: -20, bottom: -20, right: -30, width: 210,
-    overflow: 'hidden', transform: [{ skewX: '-12deg' }],
+  // Full height and hard against the right edge, so the mark bleeds off it.
+  bleed: {
+    alignSelf: 'stretch', width: 150, marginVertical: -18, marginLeft: 8,
+    alignItems: 'center', justifyContent: 'center',
   },
-  // Skewed back by the same angle, so the logo inside is not leaning.
-  markInner: {
-    flex: 1, alignItems: 'center', justifyContent: 'center',
-    paddingRight: 34, transform: [{ skewX: '12deg' }],
-  },
-  mark: { width: 128, height: 68, opacity: 0.09 },
-  avatar: { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center' },
-  avatarText: { color: Colors.primaryDeep, fontWeight: '800', fontSize: 15 },
-  avatarLogo: {
-    backgroundColor: Colors.white, padding: 5,
-    borderWidth: 1, borderColor: Colors.border,
-  },
-  avatarImg: { width: '100%', height: '100%' },
+  bleedLogo: { width: '82%', height: '68%' },
+  bleedInitials: { fontSize: 34, fontWeight: '800', color: Colors.border, letterSpacing: 1 },
+  // Laid over the mark, opaque at the text side and clear at the edge.
+  bleedFade: { position: 'absolute', top: 0, bottom: 0, left: 0, width: 76 },
   cardName: { fontSize: 15.5, fontWeight: '700', color: Colors.textPrimary },
   cardMeta: { fontSize: 12, color: Colors.textMuted, marginTop: 3 },
   pill: {
-    flexDirection: 'row', alignItems: 'center', gap: 5,
+    flexDirection: 'row', alignItems: 'center', gap: 5, alignSelf: 'flex-start',
     backgroundColor: Colors.primary, borderRadius: 9, paddingHorizontal: 10, paddingVertical: 6,
+    marginTop: 12,
   },
   pillText: { color: Colors.primaryDeep, fontSize: 11.5, fontWeight: '800' },
   empty: { alignItems: 'center', gap: 8, paddingVertical: 60, paddingHorizontal: 24 },
