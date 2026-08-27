@@ -1,5 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Image } from 'react-native';
+import {
+  View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Image,
+  useWindowDimensions,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Colors } from '../../constants/colors';
@@ -28,6 +31,10 @@ const mkInitials = (name: string) =>
 export function FinancialReportsScreen({ onBack }: { onBack?: () => void }) {
   const [rows, setRows] = useState<WithDashboard[] | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
+  // A row on a wide screen is far wider than it is tall, and the motif is sized
+  // from that height — so without more height it ends up a sliver at the end.
+  const { width } = useWindowDimensions();
+  const wide = width >= 720;
 
   useEffect(() => {
     let live = true;
@@ -91,7 +98,7 @@ export function FinancialReportsScreen({ onBack }: { onBack?: () => void }) {
           rows.map(({ client, dashboard }) => (
             <TouchableOpacity
               key={client.id}
-              style={s.card}
+              style={[s.card, wide && s.cardWide]}
               activeOpacity={0.85}
               onPress={() => setOpenId(client.id)}
             >
@@ -107,7 +114,7 @@ export function FinancialReportsScreen({ onBack }: { onBack?: () => void }) {
                 <Image
                   source={require('../../../assets/report-row-motif.png')}
                   style={s.motifImg}
-                  resizeMode="cover"
+                  resizeMode="contain"
                 />
                 <LinearGradient
                   colors={[Colors.bgCard, 'rgba(255,255,255,0.6)', 'rgba(255,255,255,0)']}
@@ -164,11 +171,14 @@ const s = StyleSheet.create({
     // The motif runs to the edge, so it is clipped to the rounded corners.
     overflow: 'hidden',
   },
-  // Half the row on a wide screen, and never below the width it already has on a
-  // phone — where it reads well and should not shrink to chase the percentage.
+  cardWide: { paddingVertical: 30, paddingHorizontal: 22 },
+  // Held to the right at the motif's own proportions, so its width follows the
+  // row's height and the chart is never cropped. Giving it a share of the width
+  // instead stretched the box to more than twice the image's shape, and cover
+  // then cut the bars off top and bottom — which is what made it look enormous.
   motif: {
     position: 'absolute', top: 0, bottom: 0, right: 0,
-    width: '50%', minWidth: 210, opacity: 0.5,
+    aspectRatio: 620 / 250, opacity: 0.5,
   },
   motifImg: { width: '100%', height: '100%' },
   // Laid over its leading edge, so it dissolves into the card instead of
