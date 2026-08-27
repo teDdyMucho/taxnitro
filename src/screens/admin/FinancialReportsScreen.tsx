@@ -95,31 +95,32 @@ export function FinancialReportsScreen({ onBack }: { onBack?: () => void }) {
               activeOpacity={0.85}
               onPress={() => setOpenId(client.id)}
             >
+              {dashboard.logo ? (
+                // The client's own mark, on a light tile: these are lifted off a
+                // white sheet and several are dark ink on transparency.
+                <View style={[s.avatar, s.avatarLogo]}>
+                  <Image source={dashboard.logo} style={s.avatarImg} resizeMode="contain" />
+                </View>
+              ) : (
+                // 2G3B Eats has no mark in their workbook, so they keep initials
+                // rather than an empty circle where everyone else has a logo.
+                <LinearGradient
+                  colors={[Colors.primary, Colors.accent]}
+                  start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+                  style={s.avatar}
+                >
+                  <Text style={s.avatarText}>{mkInitials(client.full_name)}</Text>
+                </LinearGradient>
+              )}
               <View style={{ flex: 1, minWidth: 0 }}>
                 <Text style={s.cardName} numberOfLines={1}>{client.full_name || 'Client'}</Text>
                 <Text style={s.cardMeta} numberOfLines={1}>{client.email}</Text>
-                <View style={s.pill}>
-                  <Ionicons name="stats-chart-outline" size={13} color={Colors.primaryDeep} />
-                  <Text style={s.pillText}>{dashboard.label}</Text>
-                </View>
               </View>
-
-              {/*
-                The client's own mark, running off the right edge and dissolving
-                back into the card — the gradient is laid over it left to right,
-                opaque where the text is and clear at the edge, so there is no
-                line where one stops and the other starts.
-
-                2G3B Eats has no mark in their workbook, so their row shows the
-                same shape with their initials instead of an empty space.
-              */}
-              <View style={s.bleed} pointerEvents="none">
-                {dashboard.cardLogo ? (
-                  <Image source={dashboard.cardLogo} style={s.bleedImg} resizeMode="cover" />
-                ) : (
-                  <Text style={s.bleedInitials}>{mkInitials(client.full_name)}</Text>
-                )}
+              <View style={s.pill}>
+                <Ionicons name="stats-chart-outline" size={13} color={Colors.primaryDeep} />
+                <Text style={s.pillText}>{dashboard.label}</Text>
               </View>
+              <Ionicons name="chevron-forward" size={18} color={Colors.textMuted} />
             </TouchableOpacity>
           ))
         )}
@@ -136,29 +137,22 @@ const s = StyleSheet.create({
   sub: { color: 'rgba(255,255,255,0.5)', fontSize: 12.5, lineHeight: 19, marginTop: 6, maxWidth: 640 },
   body: { padding: 20, gap: 12 },
   card: {
-    flexDirection: 'row', alignItems: 'center',
+    flexDirection: 'row', alignItems: 'center', gap: 12,
     backgroundColor: Colors.bgCard, borderWidth: 1, borderColor: Colors.border,
-    borderRadius: 16, paddingLeft: 22, paddingVertical: 22, minHeight: 132,
-    // The mark runs to the edge, so it is clipped to the rounded corners.
-    overflow: 'hidden',
+    borderRadius: 16, padding: 14,
   },
-  // Full height and hard against the right edge, so the mark bleeds off it.
-  // Full height, hard against the right edge, and given the same proportions as
-  // the image it holds — so the mark fills the row's height and is never cropped
-  // at any screen width. The fade into the card is part of the image itself.
-  bleed: {
-    alignSelf: 'stretch', marginVertical: -22, marginLeft: 8,
-    aspectRatio: 700 / 260,
-    alignItems: 'center', justifyContent: 'center',
+  avatar: { width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center' },
+  avatarText: { color: Colors.primaryDeep, fontWeight: '800', fontSize: 14 },
+  avatarLogo: {
+    backgroundColor: Colors.white, padding: 5,
+    borderWidth: 1, borderColor: Colors.border,
   },
-  bleedImg: { width: '100%', height: '100%' },
-  bleedInitials: { fontSize: 44, fontWeight: '800', color: Colors.border, letterSpacing: 2 },
-  cardName: { fontSize: 15.5, fontWeight: '700', color: Colors.textPrimary },
-  cardMeta: { fontSize: 12, color: Colors.textMuted, marginTop: 3 },
+  avatarImg: { width: '100%', height: '100%' },
+  cardName: { fontSize: 15, fontWeight: '700', color: Colors.textPrimary },
+  cardMeta: { fontSize: 12, color: Colors.textMuted, marginTop: 2 },
   pill: {
-    flexDirection: 'row', alignItems: 'center', gap: 5, alignSelf: 'flex-start',
+    flexDirection: 'row', alignItems: 'center', gap: 5,
     backgroundColor: Colors.primary, borderRadius: 9, paddingHorizontal: 10, paddingVertical: 6,
-    marginTop: 12,
   },
   pillText: { color: Colors.primaryDeep, fontSize: 11.5, fontWeight: '800' },
   empty: { alignItems: 'center', gap: 8, paddingVertical: 60, paddingHorizontal: 24 },
