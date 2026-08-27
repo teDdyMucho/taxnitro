@@ -95,6 +95,21 @@ export function FinancialReportsScreen({ onBack }: { onBack?: () => void }) {
               activeOpacity={0.85}
               onPress={() => setOpenId(client.id)}
             >
+              {dashboard.logo && (
+                // The client's mark again, large and faint behind the row, on a
+                // panel whose leading edge is cut on the diagonal.
+                //
+                // The panel is skewed and the image skewed back by the same
+                // amount, so the edge slants while the logo itself stays square.
+                // It sits under everything and takes no touches: it is there to
+                // make the row recognisable in a glance down the list, not to be
+                // read or pressed.
+                <View style={s.markClip} pointerEvents="none">
+                  <View style={s.markInner}>
+                    <Image source={dashboard.logo} style={s.mark} resizeMode="contain" />
+                  </View>
+                </View>
+              )}
               {dashboard.logo ? (
                 // The client's own mark, on a light tile: these are lifted off a
                 // white sheet and several are dark ink on transparency.
@@ -137,19 +152,33 @@ const s = StyleSheet.create({
   sub: { color: 'rgba(255,255,255,0.5)', fontSize: 12.5, lineHeight: 19, marginTop: 6, maxWidth: 640 },
   body: { padding: 20, gap: 12 },
   card: {
-    flexDirection: 'row', alignItems: 'center', gap: 12,
+    flexDirection: 'row', alignItems: 'center', gap: 14,
     backgroundColor: Colors.bgCard, borderWidth: 1, borderColor: Colors.border,
-    borderRadius: 16, padding: 14,
+    borderRadius: 16, paddingHorizontal: 18, paddingVertical: 20,
+    // The faint mark is clipped to the card, so it cannot spill past the corners.
+    overflow: 'hidden',
   },
-  avatar: { width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center' },
-  avatarText: { color: Colors.primaryDeep, fontWeight: '800', fontSize: 14 },
+  // Skewed, so its leading edge slants. Anchored to the right and taller than the
+  // card so the slant runs clean off the top and bottom rather than stopping.
+  markClip: {
+    position: 'absolute', top: -20, bottom: -20, right: -30, width: 210,
+    overflow: 'hidden', transform: [{ skewX: '-12deg' }],
+  },
+  // Skewed back by the same angle, so the logo inside is not leaning.
+  markInner: {
+    flex: 1, alignItems: 'center', justifyContent: 'center',
+    paddingRight: 34, transform: [{ skewX: '12deg' }],
+  },
+  mark: { width: 128, height: 68, opacity: 0.09 },
+  avatar: { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center' },
+  avatarText: { color: Colors.primaryDeep, fontWeight: '800', fontSize: 15 },
   avatarLogo: {
     backgroundColor: Colors.white, padding: 5,
     borderWidth: 1, borderColor: Colors.border,
   },
   avatarImg: { width: '100%', height: '100%' },
-  cardName: { fontSize: 15, fontWeight: '700', color: Colors.textPrimary },
-  cardMeta: { fontSize: 12, color: Colors.textMuted, marginTop: 2 },
+  cardName: { fontSize: 15.5, fontWeight: '700', color: Colors.textPrimary },
+  cardMeta: { fontSize: 12, color: Colors.textMuted, marginTop: 3 },
   pill: {
     flexDirection: 'row', alignItems: 'center', gap: 5,
     backgroundColor: Colors.primary, borderRadius: 9, paddingHorizontal: 10, paddingVertical: 6,
