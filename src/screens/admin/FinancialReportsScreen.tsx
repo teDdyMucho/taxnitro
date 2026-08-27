@@ -114,17 +114,11 @@ export function FinancialReportsScreen({ onBack }: { onBack?: () => void }) {
                 same shape with their initials instead of an empty space.
               */}
               <View style={s.bleed} pointerEvents="none">
-                {dashboard.logo ? (
-                  <Image source={dashboard.logo} style={s.bleedLogo} resizeMode="contain" />
+                {dashboard.cardLogo ? (
+                  <Image source={dashboard.cardLogo} style={s.bleedImg} resizeMode="cover" />
                 ) : (
                   <Text style={s.bleedInitials}>{mkInitials(client.full_name)}</Text>
                 )}
-                <LinearGradient
-                  colors={[Colors.bgCard, 'rgba(255,255,255,0.55)', 'rgba(255,255,255,0)']}
-                  locations={[0, 0.45, 1]}
-                  start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }}
-                  style={s.bleedFade}
-                />
               </View>
             </TouchableOpacity>
           ))
@@ -144,19 +138,21 @@ const s = StyleSheet.create({
   card: {
     flexDirection: 'row', alignItems: 'center',
     backgroundColor: Colors.bgCard, borderWidth: 1, borderColor: Colors.border,
-    borderRadius: 16, paddingLeft: 20, paddingVertical: 18, minHeight: 104,
+    borderRadius: 16, paddingLeft: 22, paddingVertical: 22, minHeight: 132,
     // The mark runs to the edge, so it is clipped to the rounded corners.
     overflow: 'hidden',
   },
   // Full height and hard against the right edge, so the mark bleeds off it.
+  // Full height, hard against the right edge, and given the same proportions as
+  // the image it holds — so the mark fills the row's height and is never cropped
+  // at any screen width. The fade into the card is part of the image itself.
   bleed: {
-    alignSelf: 'stretch', width: 150, marginVertical: -18, marginLeft: 8,
+    alignSelf: 'stretch', marginVertical: -22, marginLeft: 8,
+    aspectRatio: 700 / 260,
     alignItems: 'center', justifyContent: 'center',
   },
-  bleedLogo: { width: '82%', height: '68%' },
-  bleedInitials: { fontSize: 34, fontWeight: '800', color: Colors.border, letterSpacing: 1 },
-  // Laid over the mark, opaque at the text side and clear at the edge.
-  bleedFade: { position: 'absolute', top: 0, bottom: 0, left: 0, width: 76 },
+  bleedImg: { width: '100%', height: '100%' },
+  bleedInitials: { fontSize: 44, fontWeight: '800', color: Colors.border, letterSpacing: 2 },
   cardName: { fontSize: 15.5, fontWeight: '700', color: Colors.textPrimary },
   cardMeta: { fontSize: 12, color: Colors.textMuted, marginTop: 3 },
   pill: {
