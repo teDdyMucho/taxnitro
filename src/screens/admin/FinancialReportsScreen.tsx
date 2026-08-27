@@ -95,6 +95,27 @@ export function FinancialReportsScreen({ onBack }: { onBack?: () => void }) {
               activeOpacity={0.85}
               onPress={() => setOpenId(client.id)}
             >
+              {/*
+                The same motif behind every row: what the list is for, drawn at
+                the shape of a row rather than a logo cropped to fit one. Held to
+                the right and fading out to the left — the fade is in the image's
+                own transparency, so it dissolves into the card with no overlay
+                and no line where it stops. Behind everything, and takes no
+                touches.
+              */}
+              <View style={s.motif} pointerEvents="none">
+                <Image
+                  source={require('../../../assets/report-row-motif.png')}
+                  style={s.motifImg}
+                  resizeMode="cover"
+                />
+                <LinearGradient
+                  colors={[Colors.bgCard, 'rgba(255,255,255,0.6)', 'rgba(255,255,255,0)']}
+                  locations={[0, 0.4, 1]}
+                  start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }}
+                  style={s.motifFade}
+                />
+              </View>
               {dashboard.logo ? (
                 // The client's own mark, on a light tile: these are lifted off a
                 // white sheet and several are dark ink on transparency.
@@ -139,8 +160,21 @@ const s = StyleSheet.create({
   card: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
     backgroundColor: Colors.bgCard, borderWidth: 1, borderColor: Colors.border,
-    borderRadius: 16, padding: 14,
+    borderRadius: 16, paddingHorizontal: 16, paddingVertical: 18,
+    // The motif runs to the edge, so it is clipped to the rounded corners.
+    overflow: 'hidden',
   },
+  // Half the row on a wide screen, and never below the width it already has on a
+  // phone — where it reads well and should not shrink to chase the percentage.
+  motif: {
+    position: 'absolute', top: 0, bottom: 0, right: 0,
+    width: '50%', minWidth: 210, opacity: 0.5,
+  },
+  motifImg: { width: '100%', height: '100%' },
+  // Laid over its leading edge, so it dissolves into the card instead of
+  // starting on a line. In the screen rather than the image, so it lands in the
+  // right place at whatever width the motif is given.
+  motifFade: { position: 'absolute', top: 0, bottom: 0, left: 0, width: '62%' },
   avatar: { width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center' },
   avatarText: { color: Colors.primaryDeep, fontWeight: '800', fontSize: 14 },
   avatarLogo: {
