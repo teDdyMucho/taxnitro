@@ -44,6 +44,16 @@ def clean(v):
     return v
 
 
+def present(tab):
+    """Whether the workbook still shows this tab.
+
+    A hidden tab is one the workbook has withdrawn. Paul hid Findings for Review
+    in Access Granted Education's v3 — "wala nang findings for review" — and
+    carrying it across anyway would leave this app the one place it still shows.
+    """
+    return tab in wb.sheetnames and wb[tab].sheet_state == 'visible'
+
+
 def grid(tab):
     """A presentation tab, trimmed of the blank rows and columns around it."""
     ws = wb[tab]
@@ -118,13 +128,17 @@ def module(path, header, export, type_name, parts):
 
 # What the client may see: their own statements, and the assumptions behind the
 # forecast drawn from them.
-module(a.out, head, a.export, 'ClientSheets', [
+sheet_parts = [
     ('ASSUMPTIONS', fmt_grid(grid('ASSUMPTIONS'))),
     ("'Balance Sheet'", fmt_grid(grid(a.bs))),
     ("'Profit and Loss'", fmt_grid(grid(a.pl))),
     ("'FS-R'", fmt_stmt(statement('FS-R'))),
     ("'FS-A'", fmt_stmt(statement('FS-A'))),
-])
+]
+# Only where the workbook has one, and only while it is on show.
+if present('Financial Roadmap'):
+    sheet_parts.insert(1, ("'Financial Roadmap'", fmt_grid(grid('Financial Roadmap'))))
+module(a.out, head, a.export, 'ClientSheets', sheet_parts)
 
 # FTG's own notes, in a module of their own so that they are never part of what
 # a client's browser downloads.
@@ -137,8 +151,11 @@ notes_head = (
     "// client's own bookkeeping, and this module is imported only when a staff\n"
     "// member is viewing, so none of it reaches the client at all.\n"
 )
+notes_parts = []
+for tab in ('Findings for Review', 'TL;DR'):
+    if present(tab):
+        notes_parts.append((f"'{tab}'", fmt_grid(grid(tab))))
+    else:
+        print(f'  {tab:24} hidden in the workbook — left out')
 module(notes_out, notes_head, a.export.replace('_SHEETS', '_NOTES'),
-       'ClientNotes', [
-    ("'Findings for Review'", fmt_grid(grid('Findings for Review'))),
-    ("'TL;DR'", fmt_grid(grid('TL;DR'))),
-])
+       'ClientNotes', notes_parts)

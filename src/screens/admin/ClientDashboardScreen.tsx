@@ -28,12 +28,13 @@ import {
 // Findings for Review and TL;DR are internal working notes: they appear for
 // staff and admin, and never in a client's view.
 
-type TabKey = 'dash' | 'findings' | 'tldr' | 'assum' | 'fsr' | 'fsa' | 'bs' | 'pl';
+type TabKey = 'dash' | 'roadmap' | 'findings' | 'tldr' | 'assum' | 'fsr' | 'fsa' | 'bs' | 'pl';
 
 interface TabDef { key: TabKey; label: string; staffOnly?: boolean }
 
 const NAV: TabDef[] = [
   { key: 'dash', label: 'Dashboard' },
+  { key: 'roadmap', label: 'Financial Roadmap' },
   { key: 'findings', label: 'Findings for Review', staffOnly: true },
   { key: 'tldr', label: 'TL;DR', staffOnly: true },
   { key: 'assum', label: 'Assumptions' },
@@ -94,10 +95,20 @@ export function ClientDashboardScreen({
     return () => { live = false; };
   }, [dashboard, staffView]);
 
-  const tabs = useMemo(
-    () => [...NAV, ...STATEMENTS].filter(t => staffView || !t.staffOnly),
-    [staffView],
-  );
+  // A tab only stands where the workbook has something behind it. Not every
+  // client has a Financial Roadmap, and a workbook can withdraw a tab — Paul hid
+  // Findings for Review in Access Granted Education's v3, so it should not be
+  // sitting here empty for them while it is still real for everyone else.
+  const tabs = useMemo(() => {
+    const has: Partial<Record<TabKey, boolean>> = {
+      roadmap: (sheets?.['Financial Roadmap']?.length ?? 0) > 0,
+      findings: (notes?.['Findings for Review']?.length ?? 0) > 0,
+      tldr: (notes?.['TL;DR']?.length ?? 0) > 0,
+    };
+    return [...NAV, ...STATEMENTS]
+      .filter(t => staffView || !t.staffOnly)
+      .filter(t => has[t.key] !== false);
+  }, [staffView, sheets, notes]);
 
   // A client landing on a staff tab (say, from a stale link) is put back on the
   // dashboard rather than shown an empty page.
@@ -562,6 +573,10 @@ export function ClientDashboardScreen({
     switch (tab) {
       case 'dash': return dashboardPage;
       case 'assum': return assumptionsPage;
+      case 'roadmap':
+        return gridPage('Financial Roadmap',
+          'What has been agreed to happen, who owns it, and by when — from the client’s own workbook.',
+          sheets['Financial Roadmap'] ?? []);
       case 'findings':
         return gridPage('Findings for Review',
           'CFO / controller findings and recommendations, sourced from the profit and loss and balance sheet tabs.',

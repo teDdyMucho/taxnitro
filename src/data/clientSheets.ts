@@ -46,6 +46,12 @@ export interface StatementRow {
  */
 export interface ClientSheets {
   ASSUMPTIONS: GridRow[];
+  /**
+   * What FTG has asked the client to do, and by when — added to Access Granted
+   * Education's workbook in v3. Optional: only some clients have one, and a tab
+   * nobody has should not be a tab everybody sees.
+   */
+  'Financial Roadmap'?: GridRow[];
   'Balance Sheet': GridRow[];
   'Profit and Loss': GridRow[];
   'FS-R': StatementRow[];
@@ -68,6 +74,12 @@ export interface ClientSheets {
  * module is what actually keeps them from being sent.
  */
 export interface ClientNotes {
-  'Findings for Review': GridRow[];
-  'TL;DR': GridRow[];
+  /**
+   * Optional, because a workbook can withdraw it. Paul hid this tab in Access
+   * Granted Education's v3 — "wala nang findings for review" — and a tab hidden
+   * in the workbook should be hidden here too, rather than this app being the
+   * one place it still shows.
+   */
+  'Findings for Review'?: GridRow[];
+  'TL;DR'?: GridRow[];
 }

@@ -82,8 +82,12 @@ for tab, key in [('FS-R', 'FS-R'), ('FS-A', 'FS-A')]:
                 mismatch += 1
                 problems.append(f'{tab} r{r} {field}: workbook {want!r} vs module {got!r}')
 
-for key, tab in [('Findings for Review', 'Findings for Review'), ('TL;DR', 'TL;DR'),
-                 ('ASSUMPTIONS', 'ASSUMPTIONS'), ('Balance Sheet', bs_tab), ('Profit and Loss', pl_tab)]:
+# Only the tabs this client's modules actually carry — a workbook can add one
+# (Financial Roadmap) or withdraw one (Findings for Review, hidden in v3).
+TABS = [('Findings for Review', 'Findings for Review'), ('TL;DR', 'TL;DR'),
+        ('ASSUMPTIONS', 'ASSUMPTIONS'), ('Financial Roadmap', 'Financial Roadmap'),
+        ('Balance Sheet', bs_tab), ('Profit and Loss', pl_tab)]
+for key, tab in [(k, t) for k, t in TABS if k in data]:
     ws = wb[tab]
     for ri, row in enumerate(data[key], start=1):
         for ci, got in enumerate(row, start=1):
