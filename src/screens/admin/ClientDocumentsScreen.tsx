@@ -25,7 +25,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useSheetStyles } from '../../hooks/useSheetStyles';
 import {
   getDocumentsByEmail,
-  deleteDocument,
+  deleteDocumentWithReason,
   renameDocument,
   updateDocumentStatus,
   Document,
@@ -345,8 +345,11 @@ export function ClientDocumentsScreen({
 
   const handleDelete = async (doc: Document) => {
     const table = doc.document_type ?? '';
-    const ok = await deleteDocument(doc.id, table);
-    if (ok) setDocuments(prev => prev.filter(d => d.id !== doc.id));
+    const res = await deleteDocumentWithReason(doc.id, table);
+    // It used to fail in silence, which is how a delete that never happened
+    // still looked like one that did.
+    if (res.ok) setDocuments(prev => prev.filter(d => d.id !== doc.id));
+    else Alert.alert('Could not delete', res.error);
   };
 
   const handleRename = async (doc: Document, newName: string) => {

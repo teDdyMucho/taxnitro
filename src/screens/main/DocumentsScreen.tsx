@@ -37,7 +37,7 @@ import {
   updateDocumentStatus,
   uploadDocumentToStorage,
   createDocumentRecord,
-  deleteDocument,
+  deleteDocumentWithReason,
   renameDocument,
   moveDocumentToFolder,
   approveDocument,
@@ -49,7 +49,6 @@ import {
   isRequirementFolder,
   itemsForFolderAndClient,
   createPendingRequirement,
-  clearPendingRequirementForDocument,
   monthOf,
   formatMonthLabel,
   RequiredItem,
@@ -1462,15 +1461,15 @@ export function DocumentsScreen() {
             onDelete={async () => {
               const table = selectedDoc.document_type ?? '';
               const docId = selectedDoc.id;
-              const ok = await deleteDocument(docId, table);
-              if (ok) {
-                // If this file was fulfilling a required item, clear the pending slot
-                // so the dashboard radio goes back to grey (not stuck on "Pending").
-                await clearPendingRequirementForDocument(docId);
+              // The requirement slot is cleared inside the same transaction now,
+              // so the dashboard radio goes back to grey without a second call
+              // that could fail on its own.
+              const res = await deleteDocumentWithReason(docId, table);
+              if (res.ok) {
                 setDocuments(prev => prev.filter(d => d.id !== docId));
                 setSelectedDoc(null);
               } else {
-                Alert.alert('Could not delete', 'The file could not be deleted. You may not have permission to delete it — please contact an admin.');
+                Alert.alert('Could not delete', res.error);
               }
             }}
             onMove={async (toTable) => {

@@ -242,16 +242,36 @@ export async function uploadDocumentToStorage(
 // ── Delete a document row from its table ─────────────────────────────────────
 
 export async function deleteDocument(documentId: string, table: string): Promise<boolean> {
-  // Select the deleted rows back so we can tell a real delete from an RLS no-op.
-  // Under RLS a blocked delete matches 0 rows and returns NO error — without this
-  // check the caller would think it succeeded and the row reappears on refresh.
-  const { data, error } = await supabase.from(table).delete().eq('id', documentId).select('id');
-  if (error) { console.error(`deleteDocument [${table}]:`, error.message); return false; }
-  if (!data || data.length === 0) {
-    console.error(`deleteDocument [${table}]: 0 rows deleted (blocked by RLS or already gone)`);
-    return false;
+  return (await deleteDocumentWithReason(documentId, table)).ok;
+}
+
+/**
+ * Delete a document, saying why if it will not go.
+ *
+ * This used to delete straight from the folder table, which meant it ran under
+ * row-level security — and a folder whose delete policy never landed refuses in
+ * silence: nothing matches, no error comes back, and the file returns on the
+ * next refresh. That is what staff were hitting.
+ *
+ * It goes through a database function now (database/delete_document.sql), which
+ * checks who is asking in one place instead of relying on eighteen tables each
+ * having been given the right policy. The same function clears up after the
+ * file — its replies, the requirement it filled, the request it answered — so a
+ * delete leaves the same trace whoever does it.
+ */
+export async function deleteDocumentWithReason(
+  documentId: string,
+  table: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const { error } = await supabase.rpc('delete_document', {
+    p_id: documentId,
+    p_table: table,
+  });
+  if (error) {
+    console.error(`deleteDocument [${table}]:`, error.message);
+    return { ok: false, error: error.message };
   }
-  return true;
+  return { ok: true };
 }
 
 // ── Move a document to another folder ────────────────────────────────────────

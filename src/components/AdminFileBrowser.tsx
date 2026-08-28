@@ -17,7 +17,9 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import WebView from 'react-native-webview';
 import { supabase } from '../lib/supabase';
-import { approveDocument, rejectDocument, deleteDocument, moveDocumentToFolder } from '../db/documents';
+import {
+  approveDocument, rejectDocument, deleteDocumentWithReason, moveDocumentToFolder,
+} from '../db/documents';
 import { getClientServicesByEmail } from '../db/profiles';
 import { moveDestinations, folderLabel } from '../lib/folderCatalog';
 import type { Document } from '../db/documents';
@@ -27,7 +29,8 @@ import {
   useDownloadSelection, DownloadSelectionBar, DownloadNotice, SelectCheckbox,
 } from './DownloadSelectionBar';
 import {
-  listSubfolders, createSubfolder, renameSubfolder, deleteSubfolder, moveDocumentToSubfolder, Subfolder,
+  listSubfolders, createSubfolder, renameSubfolder, deleteSubfolder, moveDocumentToSubfolder,
+  moveSubfolderToFolder, Subfolder,
   subfolderPath, descendantIds,
 } from '../db/subfolders';
 
@@ -164,6 +167,7 @@ export function AdminFileBrowser({ visible, onClose }: Props) {
   const [convOpen, setConvOpen]           = useState(false);
   const [deleteTarget, setDeleteTarget]   = useState<{ file: FileRow; folderTable: string } | null>(null);
   const [deleteBusy, setDeleteBusy]       = useState(false);
+  const [deleteError, setDeleteError]     = useState<string | null>(null);
 
   // Subfolders (staff/admin created, global per folder table)
   const [subfolders, setSubfolders]       = useState<Subfolder[]>([]);
@@ -177,6 +181,10 @@ export function AdminFileBrowser({ visible, onClose }: Props) {
   const [newSubError, setNewSubError]     = useState<string | null>(null);
   const [subBusy, setSubBusy]             = useState(false);
   const [delSubTarget, setDelSubTarget]   = useState<Subfolder | null>(null);
+  // Moving a whole subfolder to another folder, contents and all.
+  const [subMove, setSubMove]             = useState<Subfolder | null>(null);
+  const [subMoveBusy, setSubMoveBusy]     = useState(false);
+  const [subMoveError, setSubMoveError]   = useState<string | null>(null);
   // Renaming, not deleting-and-recreating: the files keep pointing at the same
   // subfolder, so nothing has to be re-filed afterwards.
   const [renSubTarget, setRenSubTarget]   = useState<Subfolder | null>(null);
@@ -341,16 +349,20 @@ export function AdminFileBrowser({ visible, onClose }: Props) {
   const handleDelete = async () => {
     if (!deleteTarget || deleteBusy) return;
     setDeleteBusy(true);
-    const ok = await deleteDocument(deleteTarget.file.id, deleteTarget.folderTable as any);
+    setDeleteError(null);
+    const res = await deleteDocumentWithReason(deleteTarget.file.id, deleteTarget.folderTable);
     setDeleteBusy(false);
-    if (ok) {
-      const id = deleteTarget.file.id;
-      setFiles(prev => prev.filter(f => f.id !== id));
-      // If we were viewing the deleted file, step back to its file list.
-      setNav(prev => prev.kind === 'detail' && prev.file.id === id
-        ? { kind: 'files', category: prev.category, folder: prev.folder, client: prev.client }
-        : prev);
-    }
+
+    // A refusal now says why, and the dialog stays open holding it. It used to
+    // close on failure as though nothing had happened.
+    if (!res.ok) { setDeleteError(res.error); return; }
+
+    const id = deleteTarget.file.id;
+    setFiles(prev => prev.filter(f => f.id !== id));
+    // If we were viewing the deleted file, step back to its file list.
+    setNav(prev => prev.kind === 'detail' && prev.file.id === id
+      ? { kind: 'files', category: prev.category, folder: prev.folder, client: prev.client }
+      : prev);
     setDeleteTarget(null);
   };
 
@@ -434,11 +446,32 @@ export function AdminFileBrowser({ visible, onClose }: Props) {
   // What the client actually takes, so the sheet cannot offer a folder they
   // never open. Fetched when the sheet opens rather than held for every row.
   useEffect(() => {
-    if (!folderMove) { setFolderMoveServices(null); return; }
+    // Either kind of move needs it: one file, or a subfolder and its contents.
+    const email = folderMove?.email ?? subMove?.owner_email ?? null;
+    if (!email) { setFolderMoveServices(null); return; }
     let live = true;
-    getClientServicesByEmail(folderMove.email).then(s => { if (live) setFolderMoveServices(s); });
+    getClientServicesByEmail(email).then(s => { if (live) setFolderMoveServices(s); });
     return () => { live = false; };
-  }, [folderMove]);
+  }, [folderMove, subMove]);
+
+  const handleMoveSubfolder = async (toTable: string) => {
+    if (!subMove || subMoveBusy) return;
+    setSubMoveBusy(true);
+    setSubMoveError(null);
+    const res = await moveSubfolderToFolder(subMove.id, toTable);
+    setSubMoveBusy(false);
+
+    if (!res.ok) { setSubMoveError(res.error); return; }
+
+    // The subfolder and its files belong to another folder now, so both leave
+    // this view rather than lingering until the next load.
+    const gone = new Set([subMove.id, ...descendantIds(subfolders, subMove.id)]);
+    setSubfolders(prev => prev.filter(sf => !gone.has(sf.id)));
+    setFiles(prev => prev.filter(f => !(f.subfolder_id && gone.has(f.subfolder_id))));
+    if (gone.has(activeSubfolder)) setActiveSubfolder('all');
+    if (subCwd && gone.has(subCwd)) setSubCwd(null);
+    setSubMove(null);
+  };
 
   const handleMoveToFolder = async (toTable: string) => {
     if (!folderMove || folderMoveBusy) return;
@@ -591,6 +624,12 @@ export function AdminFileBrowser({ visible, onClose }: Props) {
                   hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
                 >
                   <Ionicons name="pencil" size={12} color="#1C1713" />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => { setSubMoveError(null); setSubMove(sf); }}
+                  hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                >
+                  <Ionicons name="swap-horizontal" size={13} color="#1C1713" />
                 </TouchableOpacity>
                 <TouchableOpacity onPress={() => setDelSubTarget(sf)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
                   <Ionicons name="close" size={13} color="#1C1713" />
@@ -1066,7 +1105,7 @@ export function AdminFileBrowser({ visible, onClose }: Props) {
         <TouchableOpacity
           style={[fb.headerIconBtn, { backgroundColor: 'rgba(239,68,68,0.15)' }]}
           activeOpacity={0.75}
-          onPress={() => setDeleteTarget({ file: nav.file, folderTable: nav.folder.table })}
+          onPress={() => { setDeleteError(null); setDeleteTarget({ file: nav.file, folderTable: nav.folder.table }); }}
         >
           <Ionicons name="trash-outline" size={16} color="#EF4444" />
         </TouchableOpacity>
@@ -1173,6 +1212,12 @@ export function AdminFileBrowser({ visible, onClose }: Props) {
             <Text style={fb.rejectModalTitle}>Delete File?</Text>
             <Text style={fb.rejectModalSub} numberOfLines={2}>{deleteTarget?.file.name}</Text>
             <Text style={[fb.rejectModalSub, { marginTop: 2, fontSize: 12 }]}>This permanently removes the file. This cannot be undone.</Text>
+            {deleteError && (
+              <View style={fb.moveError}>
+                <Ionicons name="alert-circle-outline" size={15} color="#B3261E" />
+                <Text style={fb.moveErrorText}>{deleteError}</Text>
+              </View>
+            )}
             <View style={fb.rejectModalBtns}>
               <TouchableOpacity style={fb.rejectCancelBtn} onPress={() => setDeleteTarget(null)}><Text style={fb.rejectCancelText}>Cancel</Text></TouchableOpacity>
               <TouchableOpacity style={[fb.rejectConfirmBtn, deleteBusy && { opacity: 0.5 }]} onPress={handleDelete} disabled={deleteBusy}>
@@ -1261,6 +1306,60 @@ export function AdminFileBrowser({ visible, onClose }: Props) {
                 {subBusy ? <ActivityIndicator size="small" color="#FFFFFF" /> : <Text style={fb.rejectConfirmText}>Delete</Text>}
               </TouchableOpacity>
             </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* ── Move a whole subfolder to another folder ── */}
+      <Modal visible={!!subMove} transparent animationType="fade" onRequestClose={() => setSubMove(null)}>
+        <Pressable style={fb.modalOverlay} onPress={() => !subMoveBusy && setSubMove(null)}>
+          <Pressable style={fb.rejectModal} onPress={() => {}}>
+            <View style={[fb.rejectIconWrap, { backgroundColor: 'rgba(232,185,35,0.15)' }]}>
+              <Ionicons name="swap-horizontal" size={26} color="#E8B923" />
+            </View>
+            <Text style={fb.rejectModalTitle}>Move Subfolder</Text>
+            <Text style={fb.rejectModalSub} numberOfLines={2}>{subMove?.name}</Text>
+            <Text style={[fb.rejectModalSub, { marginTop: 2, fontSize: 12 }]}>
+              Everything inside comes with it — the files, and any subfolders
+              nested in it. It arrives at the top of the folder you pick.
+            </Text>
+
+            {subMoveError && (
+              <View style={fb.moveError}>
+                <Ionicons name="alert-circle-outline" size={15} color="#B3261E" />
+                <Text style={fb.moveErrorText}>{subMoveError}</Text>
+              </View>
+            )}
+
+            <ScrollView style={{ maxHeight: 280, alignSelf: 'stretch', marginTop: 10 }} showsVerticalScrollIndicator={false}>
+              {moveDestinations(subMove?.parent_table ?? '', folderMoveServices).map(group => (
+                <View key={group.title}>
+                  <Text style={fb.moveGroupTitle}>{group.title.toUpperCase()}</Text>
+                  {group.folders.map(f => (
+                    <TouchableOpacity
+                      key={f.key}
+                      style={fb.moveRow}
+                      onPress={() => handleMoveSubfolder(f.key)}
+                      disabled={subMoveBusy}
+                    >
+                      <Ionicons name="folder-outline" size={15} color="#B5905B" />
+                      <Text style={fb.moveRowText} numberOfLines={1}>{f.label}</Text>
+                      {subMoveBusy
+                        ? <ActivityIndicator size="small" color="#B5905B" />
+                        : <Ionicons name="arrow-forward" size={15} color="#94A3B8" />}
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              ))}
+            </ScrollView>
+
+            <TouchableOpacity
+              style={[fb.replyBtn, { marginTop: 10, backgroundColor: '#F1F5F9' }]}
+              onPress={() => setSubMove(null)}
+              disabled={subMoveBusy}
+            >
+              <Text style={[fb.replyBtnText, { color: '#475569' }]}>Cancel</Text>
+            </TouchableOpacity>
           </Pressable>
         </Pressable>
       </Modal>

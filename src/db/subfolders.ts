@@ -151,3 +151,34 @@ export async function moveDocumentToSubfolder(
   if (error) { console.error(`moveDocumentToSubfolder [${table}]:`, error.message); return false; }
   return !!data && data.length > 0;
 }
+
+/**
+ * Move a subfolder, and everything in it, to another folder.
+ *
+ * Belly Jane: "gusto ko yung sub folder na un ma move ko lahat para kasama na
+ * ang laman." The files inside are rows in the folder's own table, so they move
+ * between tables along with it, and the tables that record which folder each
+ * document is in have to be corrected for every one of them.
+ *
+ * All of that is a database function (database/move_subfolder.sql) so it is one
+ * transaction — a subfolder half moved would leave files in one folder and the
+ * folder they belong to in another.
+ *
+ * Returns the reason on failure, because "why not?" is the first thing asked.
+ * The usual one is a name already in use at the destination, which the message
+ * names.
+ */
+export async function moveSubfolderToFolder(
+  subfolderId: string,
+  toTable: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const { error } = await supabase.rpc('move_subfolder', {
+    p_id: subfolderId,
+    p_to: toTable,
+  });
+  if (error) {
+    console.error(`moveSubfolderToFolder [-> ${toTable}]:`, error.message);
+    return { ok: false, error: error.message };
+  }
+  return { ok: true };
+}

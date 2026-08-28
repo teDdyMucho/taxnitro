@@ -5,6 +5,7 @@ import {
   StyleSheet,
   FlatList,
   TouchableOpacity,
+  Alert,
   TextInput,
   ActivityIndicator,
   RefreshControl,
@@ -33,7 +34,7 @@ import { AdminUploadModal } from '../../components/AdminUploadModal';
 import { AllClientFoldersView } from '../../components/AllClientFoldersView';
 import {
   getAllDocuments,
-  deleteDocument,
+  deleteDocumentWithReason,
   updateDocumentStatus,
   approveDocument,
   rejectDocument,
@@ -49,7 +50,6 @@ import {
   getBankAccountsByEmail,
   tagDocumentRequirement,
   approveRequirementForDocument,
-  clearPendingRequirementForDocument,
   rejectRequirementForDocument,
   getRequirementForDocument,
   monthOf,
@@ -553,10 +553,13 @@ export function AdminDocumentsScreen() {
   };
 
   const handleDelete = async (doc: Document) => {
-    if (await deleteDocument(doc.id, doc.document_type ?? '')) {
-      // Drop any pending requirement slot this file was fulfilling → radio back to grey.
-      await clearPendingRequirementForDocument(doc.id);
+    // The requirement slot it was filling is cleared in the same transaction, so
+    // the radio goes back to grey without a second call that could fail alone.
+    const res = await deleteDocumentWithReason(doc.id, doc.document_type ?? '');
+    if (res.ok) {
       setDocuments(prev => prev.filter(d => d.id !== doc.id));
+    } else {
+      Alert.alert('Could not delete', res.error);
     }
   };
 
