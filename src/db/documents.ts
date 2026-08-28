@@ -254,6 +254,48 @@ export async function deleteDocument(documentId: string, table: string): Promise
   return true;
 }
 
+// ── Move a document to another folder ────────────────────────────────────────
+
+/**
+ * Move one document from one folder to another.
+ *
+ * Every folder is its own table, so this moves the row between tables. Three
+ * other tables record which folder a document is in beside its id — the replies
+ * on it, the requirement it satisfies, and the request it answers — so the move
+ * is five statements, not one. They are done in a database function
+ * (database/move_document.sql) rather than here, because a failure halfway
+ * through leaves the file in two folders at once, or in one folder with its
+ * conversation pointing at the other. In there it is a single transaction.
+ *
+ * The document keeps its id, which is what leaves those links intact. It arrives
+ * at the new folder's root: a subfolder belongs to one folder, so the old one
+ * cannot come along.
+ *
+ * Returns an error message rather than just false, because "why not?" is the
+ * first thing anyone asks when a move is refused.
+ */
+export async function moveDocumentToFolder(
+  documentId: string,
+  fromTable: string,
+  toTable: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (fromTable === toTable) return { ok: true };
+
+  const { error } = await supabase.rpc('move_document', {
+    p_id: documentId,
+    p_from: fromTable,
+    p_to: toTable,
+  });
+
+  if (error) {
+    console.error(`moveDocumentToFolder [${fromTable} -> ${toTable}]:`, error.message);
+    // The function raises rather than returning false, so anything here is a
+    // real refusal worth repeating: not allowed, or the row was already gone.
+    return { ok: false, error: error.message };
+  }
+  return { ok: true };
+}
+
 // ── Rename (update name + file_name) ─────────────────────────────────────────
 
 export async function renameDocument(documentId: string, newName: string, table: string): Promise<boolean> {

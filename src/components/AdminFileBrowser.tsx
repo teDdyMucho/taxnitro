@@ -17,7 +17,9 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import WebView from 'react-native-webview';
 import { supabase } from '../lib/supabase';
-import { approveDocument, rejectDocument, deleteDocument } from '../db/documents';
+import { approveDocument, rejectDocument, deleteDocument, moveDocumentToFolder } from '../db/documents';
+import { getClientServicesByEmail } from '../db/profiles';
+import { moveDestinations, folderLabel } from '../lib/folderCatalog';
 import type { Document } from '../db/documents';
 import { useAuth } from '../context/AuthContext';
 import { FileConversationPanel } from './FileConversationPanel';
@@ -181,6 +183,11 @@ export function AdminFileBrowser({ visible, onClose }: Props) {
   const [renSubName, setRenSubName]       = useState('');
   const [renSubError, setRenSubError]     = useState<string | null>(null);
   const [moveTarget, setMoveTarget]       = useState<{ file: FileRow; folderTable: string } | null>(null);
+  // Moving to another FOLDER, as against another subfolder of this one.
+  const [folderMove, setFolderMove]       = useState<{ file: FileRow; from: string; email: string } | null>(null);
+  const [folderMoveServices, setFolderMoveServices] = useState<string[] | null>(null);
+  const [folderMoveBusy, setFolderMoveBusy]         = useState(false);
+  const [folderMoveError, setFolderMoveError]       = useState<string | null>(null);
 
   // ── Load categories ─────────────────────────────────────────────────────────
 
@@ -422,6 +429,34 @@ export function AdminFileBrowser({ visible, onClose }: Props) {
       }
     }
     setDelSubTarget(null);
+  };
+
+  // What the client actually takes, so the sheet cannot offer a folder they
+  // never open. Fetched when the sheet opens rather than held for every row.
+  useEffect(() => {
+    if (!folderMove) { setFolderMoveServices(null); return; }
+    let live = true;
+    getClientServicesByEmail(folderMove.email).then(s => { if (live) setFolderMoveServices(s); });
+    return () => { live = false; };
+  }, [folderMove]);
+
+  const handleMoveToFolder = async (toTable: string) => {
+    if (!folderMove || folderMoveBusy) return;
+    setFolderMoveBusy(true);
+    setFolderMoveError(null);
+    const res = await moveDocumentToFolder(folderMove.file.id, folderMove.from, toTable);
+    setFolderMoveBusy(false);
+
+    if (!res.ok) { setFolderMoveError(res.error); return; }
+
+    // It has left this folder, so it should leave this list — staying would
+    // show a file that is no longer here until the next refresh.
+    const id = folderMove.file.id;
+    setFiles(prev => prev.filter(f => f.id !== id));
+    setFolderMove(null);
+    setNav(prev => (prev.kind === 'detail' && prev.file.id === id
+      ? { kind: 'files', category: prev.category, folder: prev.folder, client: prev.client }
+      : prev));
   };
 
   const handleMoveToSubfolder = async (subfolderId: string | null) => {
@@ -976,6 +1011,14 @@ export function AdminFileBrowser({ visible, onClose }: Props) {
             <Ionicons name="swap-horizontal-outline" size={15} color="#1C1713" />
             <Text style={fb.replyBtnText}>Move to Subfolder</Text>
           </TouchableOpacity>
+          <TouchableOpacity
+            style={[fb.replyBtn, { marginTop: 8 }]}
+            onPress={() => { setFolderMoveError(null); setFolderMove({ file, from: folder.table, email: client.email }); }}
+            activeOpacity={0.82}
+          >
+            <Ionicons name="folder-outline" size={15} color="#1C1713" />
+            <Text style={fb.replyBtnText}>Move to Another Folder</Text>
+          </TouchableOpacity>
         </View>
 
         {/* Conversation reply preview */}
@@ -1222,6 +1265,60 @@ export function AdminFileBrowser({ visible, onClose }: Props) {
         </Pressable>
       </Modal>
 
+      {/* ── Move to another folder ── */}
+      <Modal visible={!!folderMove} transparent animationType="fade" onRequestClose={() => setFolderMove(null)}>
+        <Pressable style={fb.modalOverlay} onPress={() => !folderMoveBusy && setFolderMove(null)}>
+          <Pressable style={fb.rejectModal} onPress={() => {}}>
+            <View style={[fb.rejectIconWrap, { backgroundColor: 'rgba(232,185,35,0.15)' }]}>
+              <Ionicons name="folder-outline" size={26} color="#E8B923" />
+            </View>
+            <Text style={fb.rejectModalTitle}>Move to Another Folder</Text>
+            <Text style={fb.rejectModalSub} numberOfLines={2}>{folderMove?.file.name}</Text>
+            <Text style={[fb.rejectModalSub, { marginTop: 2, fontSize: 12 }]}>
+              Currently in {folderLabel(folderMove?.from ?? '')}. The file keeps its
+              replies and its approval; it lands at the top of the folder you pick.
+            </Text>
+
+            {folderMoveError && (
+              <View style={fb.moveError}>
+                <Ionicons name="alert-circle-outline" size={15} color="#B3261E" />
+                <Text style={fb.moveErrorText}>{folderMoveError}</Text>
+              </View>
+            )}
+
+            <ScrollView style={{ maxHeight: 300, alignSelf: 'stretch', marginTop: 10 }} showsVerticalScrollIndicator={false}>
+              {moveDestinations(folderMove?.from ?? '', folderMoveServices).map(group => (
+                <View key={group.title}>
+                  <Text style={fb.moveGroupTitle}>{group.title.toUpperCase()}</Text>
+                  {group.folders.map(f => (
+                    <TouchableOpacity
+                      key={f.key}
+                      style={fb.moveRow}
+                      onPress={() => handleMoveToFolder(f.key)}
+                      disabled={folderMoveBusy}
+                    >
+                      <Ionicons name="folder-outline" size={15} color="#B5905B" />
+                      <Text style={fb.moveRowText} numberOfLines={1}>{f.label}</Text>
+                      {folderMoveBusy
+                        ? <ActivityIndicator size="small" color="#B5905B" />
+                        : <Ionicons name="arrow-forward" size={15} color="#94A3B8" />}
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              ))}
+            </ScrollView>
+
+            <TouchableOpacity
+              style={[fb.replyBtn, { marginTop: 10, backgroundColor: '#F1F5F9' }]}
+              onPress={() => setFolderMove(null)}
+              disabled={folderMoveBusy}
+            >
+              <Text style={[fb.replyBtnText, { color: '#475569' }]}>Cancel</Text>
+            </TouchableOpacity>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
       {/* ── Move to subfolder picker ── */}
       <Modal visible={!!moveTarget} transparent animationType="fade" onRequestClose={() => setMoveTarget(null)}>
         <Pressable style={fb.modalOverlay} onPress={() => setMoveTarget(null)}>
@@ -1328,6 +1425,9 @@ const fb = StyleSheet.create({
   moveRow:       { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 12, paddingVertical: 12, borderRadius: 12, backgroundColor: '#F8FAFC', marginBottom: 6 },
   moveRowActive: { backgroundColor: '#ECFDF5', borderWidth: 1, borderColor: '#A7F3D0' },
   moveRowText:   { flex: 1, color: '#374151', fontSize: 13, fontWeight: '600' },
+  moveGroupTitle: { color: '#94A3B8', fontSize: 10, fontWeight: '800', letterSpacing: 0.8, marginTop: 10, marginBottom: 6 },
+  moveError:     { flexDirection: 'row', alignItems: 'flex-start', gap: 8, marginTop: 10, padding: 10, borderRadius: 10, backgroundColor: '#FEF2F2', borderWidth: 1, borderColor: '#FECACA' },
+  moveErrorText: { flex: 1, color: '#B3261E', fontSize: 12, lineHeight: 17 },
 
   // Breadcrumb
   breadcrumb: { flexDirection: 'row', alignItems: 'center', gap: 5, flexWrap: 'wrap', paddingHorizontal: 16, paddingVertical: 8, backgroundColor: '#FFFFFF', borderBottomWidth: 1, borderBottomColor: '#F1F5F9' },

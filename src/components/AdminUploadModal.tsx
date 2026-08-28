@@ -17,49 +17,9 @@ import {
   listSubfolders, createSubfolder, moveDocumentToSubfolder, Subfolder,
   subfolderPath,
 } from '../db/subfolders';
-
-// Every folder an admin/staff can upload into, grouped by suite. Full access.
-/**
- * Which service a folder belongs to, from its own key. Filing a document into a
- * folder the client does not take would leave it somewhere they never look —
- * their Documents tree is built from their services.
- */
-function serviceOfFolder(key: string): 'TAX' | 'BK' | 'CFO' {
-  if (key.startsWith('tax_')) return 'TAX';
-  if (key.startsWith('cfo_')) return 'CFO';
-  return 'BK';
-}
-
-const UPLOAD_FOLDERS: { title: string; folders: { key: string; label: string }[] }[] = [
-  { title: 'Tax Documents & Returns', folders: [
-    { key: 'tax_contracts',          label: 'Tax Contracts' },
-    { key: 'tax_invoices',           label: 'Tax Invoices' },
-    { key: 'tax_client_uploads',     label: 'Client Uploads' },
-    { key: 'tax_additional_docs',    label: 'Additional Tax Docs' },
-    { key: 'tax_return_information',  label: 'Tax Returns' },
-  ]},
-  { title: 'Bookkeeping & Financials', folders: [
-    { key: 'bk_contracts',           label: 'BK Contracts' },
-    { key: 'bk_invoices',            label: 'BK Invoices' },
-    { key: 'bk_bank_accounts',       label: 'Bank Accounts' },
-    { key: 'bk_final_pnl',           label: 'Additional BK Docs' },
-    { key: 'bk_mr_required_info',    label: 'Monthly Reporting (Required Info)' },
-    { key: 'bk_mr_client_review',    label: 'Monthly Reporting (For Client Review)' },
-    { key: 'bk_mr_final_statements', label: 'Monthly Reporting (Final Statements)' },
-  ]},
-  { title: 'CFO Advisory', folders: [
-    { key: 'cfo_contracts',           label: 'CFO Contracts' },
-    { key: 'cfo_invoices',            label: 'CFO Invoices' },
-    { key: 'cfo_additional_docs',     label: 'Additional CFO Docs' },
-    { key: 'cfo_mr_required_info',    label: 'Monthly Reporting (Required Info)' },
-    { key: 'cfo_mr_client_review',    label: 'Monthly Reporting (For Client Review)' },
-    { key: 'cfo_mr_final_statements', label: 'Monthly Reporting (Final Statements & Insights)' },
-  ]},
-];
-
-const FOLDER_LABEL: Record<string, string> = Object.fromEntries(
-  UPLOAD_FOLDERS.flatMap(g => g.folders.map(f => [f.key, f.label])),
-);
+import {
+  FOLDER_GROUPS as UPLOAD_FOLDERS, FOLDER_LABEL, serviceOfFolder,
+} from '../lib/folderCatalog';
 
 /**
  * One queued file, tagged with the folder it was added under, so a single

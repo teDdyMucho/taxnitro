@@ -14,6 +14,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabase } from '../lib/supabase';
 import { FOLDER_TABLES } from '../db/documents';
+import { folderLabel } from '../lib/folderCatalog';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -33,26 +34,6 @@ interface UnreadFile {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-const FOLDER_LABELS: Record<string, string> = {
-  tax_client_uploads:     'Client Uploads',
-  tax_additional_docs:    'Additional Tax Docs',
-  tax_contracts:          'Tax Contracts',
-  tax_invoices:           'Tax Invoices',
-  tax_return_information: 'Tax Returns',
-  bk_contracts:           'BK Contracts',
-  bk_invoices:            'BK Invoices',
-  bk_bank_accounts:       'Bank Accounts',
-  bk_final_pnl:           'Additional BK Docs',
-  bk_mr_required_info:    'Monthly Reporting (Required Info)',
-  bk_mr_client_review:    'Monthly Reporting (For Client Review)',
-  bk_mr_final_statements: 'Monthly Reporting (Final Statements)',
-  cfo_contracts:          'CFO Contracts',
-  cfo_invoices:           'CFO Invoices',
-  cfo_additional_docs:    'Additional CFO Docs',
-  cfo_mr_required_info:   'Monthly Reporting (Required Info)',
-  cfo_mr_client_review:   'Monthly Reporting (For Client Review)',
-  cfo_mr_final_statements:'Monthly Reporting (Final Statements & Insights)',
-};
 
 function fmtRelative(iso: string) {
   const ms = Date.now() - new Date(iso).getTime();
@@ -336,7 +317,7 @@ export function AdminReplyBell({ onMarkedRead }: Props) {
                         </View>
                         <View style={bs.itemFolderRow}>
                           <View style={bs.folderTag}>
-                            <Text style={bs.folderTagText}>{FOLDER_LABELS[item.folder_table] ?? item.folder_table}</Text>
+                            <Text style={bs.folderTagText}>{folderLabel(item.folder_table)}</Text>
                           </View>
                           <Text style={bs.itemSender}>{item.sender_name}</Text>
                         </View>

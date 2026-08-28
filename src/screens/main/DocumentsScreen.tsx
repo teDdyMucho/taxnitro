@@ -39,6 +39,7 @@ import {
   createDocumentRecord,
   deleteDocument,
   renameDocument,
+  moveDocumentToFolder,
   approveDocument,
   rejectDocument,
   Document,
@@ -57,6 +58,7 @@ import {
 
 const WEBHOOK_URL = 'https://primary-production-6722.up.railway.app/webhook/fileupload-mobileapp-ghl-ftg';
 import { supabase } from '../../lib/supabase';
+import { clientMoveDestinations, folderLabel, isStaffDeliveryFolder } from '../../lib/folderCatalog';
 
 const { width: SW } = Dimensions.get('window');
 
@@ -911,11 +913,14 @@ function RenameModal({ visible, current, onConfirm, onCancel }: {
 
 // ── Document detail — metadata page ──────────────────────────────────────────
 
-function DocDetailPage({ doc, sf, root, fileOwnerId, userEmail, onClose, onMarkViewed, onDelete, onRename, onApprovalChange }: {
+function DocDetailPage({ doc, sf, root, fileOwnerId, userEmail, services, onClose, onMarkViewed, onDelete, onRename, onMove, onApprovalChange }: {
   doc: Document; sf: SubFolder; root: RootFolder;
   fileOwnerId: string; userEmail: string;
   onClose: () => void; onMarkViewed: () => void;
   onDelete: () => void; onRename: (newName: string) => void;
+  services: string[];
+  /** Returns an error to show, or null when the file has moved. */
+  onMove: (toTable: string) => Promise<string | null>;
   onApprovalChange: (status: 'approved' | 'rejected', note: string | null) => void;
 }) {
   const insets = useSafeAreaInsets();
@@ -923,6 +928,16 @@ function DocDetailPage({ doc, sf, root, fileOwnerId, userEmail, onClose, onMarkV
   const [viewerOpen, setViewerOpen]           = useState(false);
   const [renameOpen, setRenameOpen]           = useState(false);
   const [deleteOpen, setDeleteOpen]           = useState(false);
+  const [moveOpen, setMoveOpen]               = useState(false);
+  const [moveBusy, setMoveBusy]               = useState(false);
+  const [moveError, setMoveError]             = useState<string | null>(null);
+
+  // A file the client sent in is theirs to re-file. What FTG delivered to them
+  // is not: moving one would put it somewhere they were never issued it.
+  const from = doc.document_type ?? '';
+  const canMove = doc.uploaded_by_role !== 'staff'
+    && doc.uploaded_by_role !== 'admin'
+    && !isStaffDeliveryFolder(from);
   const [conversationOpen, setConversationOpen] = useState(false);
   const [reviewBusy, setReviewBusy]           = useState(false);
 
@@ -972,6 +987,11 @@ function DocDetailPage({ doc, sf, root, fileOwnerId, userEmail, onClose, onMarkV
           </View>
         </View>
         <View style={dp.topBarRight}>
+          {canMove && (
+            <TouchableOpacity style={dp.iconBtn} onPress={() => { setMoveError(null); setMoveOpen(true); }}>
+              <Ionicons name="folder-outline" size={19} color={Colors.white} />
+            </TouchableOpacity>
+          )}
           <TouchableOpacity style={dp.iconBtn} onPress={() => setRenameOpen(true)}>
             <Ionicons name="pencil-outline" size={19} color={Colors.white} />
           </TouchableOpacity>
@@ -1111,6 +1131,58 @@ function DocDetailPage({ doc, sf, root, fileOwnerId, userEmail, onClose, onMarkV
         fileOwnerId={fileOwnerId}
         onClose={() => setConversationOpen(false)}
       />
+
+      {/* ── Move to another folder */}
+      <Modal visible={moveOpen} animationType="fade" transparent onRequestClose={() => setMoveOpen(false)}>
+        <Pressable style={rm.overlay} onPress={() => !moveBusy && setMoveOpen(false)}>
+          <Pressable style={rm.card} onPress={() => {}}>
+            <Text style={rm.title}>Move to Another Folder</Text>
+            <Text style={mv.sub}>
+              This file is in {folderLabel(from)}. Pick where it should be instead —
+              it keeps its name and any replies on it.
+            </Text>
+
+            {moveError && (
+              <View style={mv.error}>
+                <Ionicons name="alert-circle-outline" size={15} color="#B3261E" />
+                <Text style={mv.errorText}>{moveError}</Text>
+              </View>
+            )}
+
+            <ScrollView style={{ maxHeight: 280, alignSelf: 'stretch', marginTop: 10 }} showsVerticalScrollIndicator={false}>
+              {clientMoveDestinations(from, services).map(group => (
+                <View key={group.title}>
+                  <Text style={mv.groupTitle}>{group.title.toUpperCase()}</Text>
+                  {group.folders.map(f => (
+                    <TouchableOpacity
+                      key={f.key}
+                      style={mv.row}
+                      disabled={moveBusy}
+                      onPress={async () => {
+                        setMoveBusy(true);
+                        setMoveError(null);
+                        const err = await onMove(f.key);
+                        setMoveBusy(false);
+                        if (err) setMoveError(err); else setMoveOpen(false);
+                      }}
+                    >
+                      <Ionicons name="folder-outline" size={16} color={Colors.primary} />
+                      <Text style={mv.rowText} numberOfLines={1}>{f.label}</Text>
+                      {moveBusy
+                        ? <ActivityIndicator size="small" color={Colors.primary} />
+                        : <Ionicons name="arrow-forward" size={15} color={Colors.textMuted} />}
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              ))}
+            </ScrollView>
+
+            <TouchableOpacity style={[rm.cancelBtn, { marginTop: 12 }]} onPress={() => setMoveOpen(false)} disabled={moveBusy}>
+              <Text style={rm.cancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       {/* ── Delete confirmation modal */}
       <Modal visible={deleteOpen} animationType="fade" transparent onRequestClose={() => setDeleteOpen(false)}>
@@ -1379,6 +1451,7 @@ export function DocumentsScreen() {
             root={activeRoot}
             fileOwnerId={user?.id ?? ''}
             userEmail={user?.email ?? ''}
+            services={user?.services ?? []}
             onClose={() => setSelectedDoc(null)}
             onMarkViewed={() => markViewed(selectedDoc)}
             onApprovalChange={(status, note) => {
@@ -1399,6 +1472,17 @@ export function DocumentsScreen() {
               } else {
                 Alert.alert('Could not delete', 'The file could not be deleted. You may not have permission to delete it — please contact an admin.');
               }
+            }}
+            onMove={async (toTable) => {
+              const from = selectedDoc.document_type ?? '';
+              const docId = selectedDoc.id;
+              const res = await moveDocumentToFolder(docId, from, toTable);
+              if (!res.ok) return res.error;
+              // It is in another folder now, so it should leave this one rather
+              // than sit here until the next refresh.
+              setDocuments(prev => prev.filter(d => d.id !== docId));
+              setSelectedDoc(null);
+              return null;
             }}
             onRename={async (newName) => {
               const table = selectedDoc.document_type ?? '';
@@ -1715,6 +1799,17 @@ const rm = StyleSheet.create({
   cancelText: { color: Colors.textMuted, fontWeight: '600', fontSize: 15 },
   confirmBtn: { flex: 1, paddingVertical: 13, borderRadius: 13, backgroundColor: Colors.primary, alignItems: 'center' },
   confirmText:{ color: Colors.white, fontWeight: '700', fontSize: 15 },
+});
+
+// ── Move picker styles ────────────────────────────────────────────────────────
+
+const mv = StyleSheet.create({
+  sub:        { color: Colors.textMuted, fontSize: 12.5, lineHeight: 18, marginTop: 6, textAlign: 'center' },
+  groupTitle: { color: Colors.textMuted, fontSize: 10, fontWeight: '800', letterSpacing: 0.8, marginTop: 10, marginBottom: 6 },
+  row:        { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 12, paddingVertical: 12, borderRadius: 12, backgroundColor: Colors.bgDeep, marginBottom: 6 },
+  rowText:    { flex: 1, color: Colors.textPrimary, fontSize: 13, fontWeight: '600' },
+  error:      { flexDirection: 'row', alignItems: 'flex-start', gap: 8, marginTop: 10, padding: 10, borderRadius: 10, backgroundColor: '#FEF2F2', borderWidth: 1, borderColor: '#FECACA' },
+  errorText:  { flex: 1, color: '#B3261E', fontSize: 12, lineHeight: 17 },
 });
 
 // ── Delete confirm styles ─────────────────────────────────────────────────────

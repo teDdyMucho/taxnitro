@@ -107,6 +107,26 @@ export async function getAllClients(): Promise<Profile[]> {
   return (data ?? []).map(normalizeProfile);
 }
 
+/**
+ * Which services a client takes, by their email.
+ *
+ * Used when offering somewhere to move a document to: a folder outside their
+ * services is one they never open, so filing into it would lose the file in
+ * plain sight. Null when there is no such client, which the caller should read
+ * as "do not filter" rather than "no folders" — an older record may simply have
+ * nothing recorded.
+ */
+export async function getClientServicesByEmail(email: string): Promise<string[] | null> {
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('services')
+    .eq('email', email)
+    .maybeSingle();
+  if (error) { console.error('getClientServicesByEmail:', error.message); return null; }
+  const services = data?.services;
+  return Array.isArray(services) && services.length ? services : null;
+}
+
 export async function getAllStaff(): Promise<Profile[]> {
   // Include admins too — they show in the Staff tab (admins first), but their
   // role is not editable there (see StaffManagementScreen).
