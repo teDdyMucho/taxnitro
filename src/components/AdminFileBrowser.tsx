@@ -547,7 +547,15 @@ export function AdminFileBrowser({ visible, onClose }: Props) {
   // Subfolder chip bar — used at both the clients level and the file-list level,
   // so staff can create/manage subfolders even when the folder is empty.
   // `withFileFilters` shows the All Files / Unfiled chips (file-list only).
-  const renderSubfolderBar = (withFileFilters: boolean) => (
+  const renderSubfolderBar = (withFileFilters: boolean) => {
+    // The open subfolder, if one is. Its actions are spelled out below the chips
+    // rather than left as four small icons on the chip itself — Belly Jane
+    // reported the move as missing when it was one of them.
+    const openSub = withFileFilters && activeSubfolder !== 'all' && activeSubfolder !== 'none'
+      ? subfolders.find(sf => sf.id === activeSubfolder) ?? null
+      : null;
+    return (
+    <>
     <ScrollView horizontal showsHorizontalScrollIndicator={false} style={fb.subBar} contentContainerStyle={fb.subBarContent}>
       {withFileFilters && ([
         { id: 'all',  label: 'All Files', icon: 'albums-outline' as const },
@@ -646,7 +654,33 @@ export function AdminFileBrowser({ visible, onClose }: Props) {
         </Text>
       </TouchableOpacity>
     </ScrollView>
-  );
+    {openSub && (
+      <View style={fb.subActions}>
+        <Ionicons name="folder-open" size={13} color="#B5905B" />
+        <Text style={fb.subActionsName} numberOfLines={1}>{openSub.name}</Text>
+        <TouchableOpacity
+          style={fb.subActionBtn}
+          onPress={() => { setRenSubName(openSub.name); setRenSubError(null); setRenSubTarget(openSub); }}
+        >
+          <Ionicons name="pencil" size={12} color="#475569" />
+          <Text style={fb.subActionText}>Rename</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[fb.subActionBtn, fb.subActionMove]}
+          onPress={() => { setSubMoveError(null); setSubMove(openSub); }}
+        >
+          <Ionicons name="swap-horizontal" size={12} color="#1C1713" />
+          <Text style={[fb.subActionText, { color: '#1C1713' }]}>Move to another folder</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={fb.subActionBtn} onPress={() => setDelSubTarget(openSub)}>
+          <Ionicons name="trash-outline" size={12} color="#EF4444" />
+          <Text style={[fb.subActionText, { color: '#EF4444' }]}>Delete</Text>
+        </TouchableOpacity>
+      </View>
+    )}
+    </>
+    );
+  };
 
   const renderCategories = () => (
     <ScrollView contentContainerStyle={fb.scrollContent} showsVerticalScrollIndicator={false}>
@@ -1102,6 +1136,21 @@ export function AdminFileBrowser({ visible, onClose }: Props) {
         <TouchableOpacity style={fb.headerIconBtn} onPress={() => setViewFile({ url: nav.file.document_url, name: nav.file.name })} activeOpacity={0.75}>
           <Ionicons name="pencil-outline" size={16} color="rgba(255,255,255,0.7)" />
         </TouchableOpacity>
+        {/*
+          Beside delete, because that is where someone looks for what to do with
+          a file. The same action further down the page went unfound — Belly Jane
+          reported the move as missing while it was sitting below the fold.
+        */}
+        <TouchableOpacity
+          style={[fb.headerIconBtn, { backgroundColor: 'rgba(232,185,35,0.18)' }]}
+          activeOpacity={0.75}
+          onPress={() => {
+            setFolderMoveError(null);
+            setFolderMove({ file: nav.file, from: nav.folder.table, email: nav.client.email });
+          }}
+        >
+          <Ionicons name="folder-outline" size={16} color="#E8B923" />
+        </TouchableOpacity>
         <TouchableOpacity
           style={[fb.headerIconBtn, { backgroundColor: 'rgba(239,68,68,0.15)' }]}
           activeOpacity={0.75}
@@ -1524,6 +1573,19 @@ const fb = StyleSheet.create({
   moveRow:       { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 12, paddingVertical: 12, borderRadius: 12, backgroundColor: '#F8FAFC', marginBottom: 6 },
   moveRowActive: { backgroundColor: '#ECFDF5', borderWidth: 1, borderColor: '#A7F3D0' },
   moveRowText:   { flex: 1, color: '#374151', fontSize: 13, fontWeight: '600' },
+  subActions: {
+    flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 8,
+    paddingHorizontal: 14, paddingVertical: 10, marginHorizontal: 14, marginBottom: 8,
+    borderRadius: 12, backgroundColor: '#FFFBEB', borderWidth: 1, borderColor: '#FDE68A',
+  },
+  subActionsName: { color: '#78350F', fontSize: 12.5, fontWeight: '800', marginRight: 4 },
+  subActionBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8,
+    backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E5E7EB',
+  },
+  subActionMove: { backgroundColor: '#E8B923', borderColor: '#E8B923' },
+  subActionText: { color: '#475569', fontSize: 11.5, fontWeight: '700' },
   moveGroupTitle: { color: '#94A3B8', fontSize: 10, fontWeight: '800', letterSpacing: 0.8, marginTop: 10, marginBottom: 6 },
   moveError:     { flexDirection: 'row', alignItems: 'flex-start', gap: 8, marginTop: 10, padding: 10, borderRadius: 10, backgroundColor: '#FEF2F2', borderWidth: 1, borderColor: '#FECACA' },
   moveErrorText: { flex: 1, color: '#B3261E', fontSize: 12, lineHeight: 17 },

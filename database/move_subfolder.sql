@@ -45,6 +45,7 @@ declare
   v_me       uuid := auth.uid();
   v_me_email text;
   v_ids      uuid[];
+  v_doc_ids  uuid[];
   v_clash    text;
 begin
   if not public.is_folder_table(p_to) then
@@ -117,27 +118,29 @@ begin
     from public.%I where subfolder_id = any($1)
   $f$, p_to, v_from) using v_ids;
 
-  -- What moved, so the three link tables can be corrected for exactly those rows.
-  create temporary table if not exists moved_docs (id uuid) on commit drop;
-  delete from moved_docs;
-
+  -- Which documents moved, held in an array rather than a temporary table. The
+  -- table needed clearing before use, and a DELETE with no WHERE is refused here
+  -- — which is what "DELETE requires a WHERE clause" was.
   execute format(
-    'insert into moved_docs (id) select id from public.%I where subfolder_id = any($1)',
-    v_from) using v_ids;
+    'select array_agg(id) from public.%I where subfolder_id = any($1)', v_from)
+    into v_doc_ids using v_ids;
 
   execute format('delete from public.%I where subfolder_id = any($1)', v_from) using v_ids;
 
-  update public.file_conversations
-     set folder_table = p_to
-   where folder_table = v_from and file_id in (select id from moved_docs);
+  -- Nothing filed in it is not a failure — an empty subfolder still moves.
+  if v_doc_ids is not null then
+    update public.file_conversations
+       set folder_table = p_to
+     where folder_table = v_from and file_id = any(v_doc_ids);
 
-  update public.document_requirements
-     set document_table = p_to
-   where document_table = v_from and document_id in (select id from moved_docs);
+    update public.document_requirements
+       set document_table = p_to
+     where document_table = v_from and document_id = any(v_doc_ids);
 
-  update public.custom_document_requests
-     set document_table = p_to
-   where document_table = v_from and document_id in (select id from moved_docs);
+    update public.custom_document_requests
+       set document_table = p_to
+     where document_table = v_from and document_id = any(v_doc_ids);
+  end if;
 
   -- The subfolders themselves. The one being moved comes to rest at the
   -- destination's top level; the ones under it keep the shape they had.
