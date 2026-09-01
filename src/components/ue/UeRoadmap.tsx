@@ -201,7 +201,7 @@ export function UeRoadmap({ grid }: { grid: GridRow[] }) {
             return (
               <View key={a.no + a.title} style={s.timelineRow}>
                 <View style={s.rowLabel}>
-                  <Text style={s.rowLabelText} numberOfLines={1}>{a.no}. {a.title}</Text>
+                  <Text style={s.rowLabelText} numberOfLines={2}>{a.no}. {a.title}</Text>
                 </View>
                 <View style={{ flexDirection: 'row' }}>
                   {road.months.map((m, i) => {
@@ -286,19 +286,21 @@ const s = StyleSheet.create({
     backgroundColor: Colors.bgCard,
   },
   monthHeader: {
-    flexDirection: 'row', alignItems: 'center',
+    flexDirection: 'row', alignItems: 'center', minHeight: 42,
     borderBottomWidth: 1, borderBottomColor: Colors.border, paddingVertical: 8,
   },
   monthName: {
     width: MONTH_W, textAlign: 'center',
     color: Colors.textMuted, fontSize: 10.5, fontWeight: '700',
   },
+  // A floor on the height so a label that wraps to two lines does not make its
+  // row taller than the rest and pull the bars out of line with each other.
   timelineRow: {
-    flexDirection: 'row', alignItems: 'center',
+    flexDirection: 'row', alignItems: 'center', minHeight: 42,
     borderBottomWidth: 1, borderBottomColor: Colors.border, paddingVertical: 7,
   },
-  rowLabel: { width: 230, paddingHorizontal: 12 },
-  rowLabelText: { color: Colors.textSecondary, fontSize: 12, fontWeight: '600' },
+  rowLabel: { width: 300, paddingHorizontal: 14 },
+  rowLabelText: { color: Colors.textSecondary, fontSize: 12, fontWeight: '600', lineHeight: 16 },
   cell: { width: MONTH_W, height: 16, justifyContent: 'center' },
   // Square in the middle so consecutive months read as one bar, rounded at the
   // two ends so it reads as a span rather than a run of separate blocks.
