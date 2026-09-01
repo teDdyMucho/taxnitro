@@ -10,6 +10,7 @@ import type { ClientNotes, ClientSheets } from '../../data/clientSheets';
 import type { ClientDashboard } from '../../lib/clientDashboards';
 import { UeBarChart } from '../../components/ue/UeBarChart';
 import { UeGridTable, UeStatement } from '../../components/ue/UeTables';
+import { UeRoadmap } from '../../components/ue/UeRoadmap';
 import {
   MONTHS, LAST_ACTUAL, SCENARIOS, DEFAULT_ASSUMPTIONS, LEVERS, SHARED_INPUTS,
   RECOMMENDATIONS, buildForecast, buildModel, buildDashboard, historicalBasis,
@@ -574,9 +575,18 @@ export function ClientDashboardScreen({
       case 'dash': return dashboardPage;
       case 'assum': return assumptionsPage;
       case 'roadmap':
-        return gridPage('Financial Roadmap',
-          'What has been agreed to happen, who owns it, and by when — from the client’s own workbook.',
-          sheets['Financial Roadmap'] ?? []);
+        return (
+          <>
+            {subhead('Financial Roadmap',
+              'What has been agreed to happen, who owns it, and when it runs — from the client’s own workbook.')}
+            {/*
+              Not the generic grid. The sheet marks each month an action runs with
+              a 1 and paints those cells as a bar; poured through the grid they
+              came out as a wall of digits — Paul: "parang naka binary ba hehe."
+            */}
+            <UeRoadmap grid={sheets['Financial Roadmap'] ?? []} />
+          </>
+        );
       case 'findings':
         return gridPage('Findings for Review',
           'CFO / controller findings and recommendations, sourced from the profit and loss and balance sheet tabs.',
