@@ -106,6 +106,8 @@ export function DownloadSelectionBar({
   zipName,
   label = 'files',
   allowSelect = true,
+  onMoveSelected,
+  onDeleteSelected,
 }: {
   selection: DownloadSelection<any>;
   /** Everything currently listed — what "Select all" and folder download cover. */
@@ -115,6 +117,15 @@ export function DownloadSelectionBar({
   label?: string;
   /** Off where the rows aren't files — a folder list has nothing to tick. */
   allowSelect?: boolean;
+  /**
+   * What else can be done to a marked set, where the caller can do it.
+   *
+   * Belly Jane, on the files sitting outside any subfolder: "pano itong walang
+   * folder pano ko nalang edelete or ipasok sa newsubfolder para malipat ko?"
+   * One at a time is the answer without these.
+   */
+  onMoveSelected?: (ids: string[]) => void;
+  onDeleteSelected?: (ids: string[]) => void;
 }) {
   const { selecting, selected, busy, progress } = selection;
   const count    = selected.size;
@@ -180,6 +191,30 @@ export function DownloadSelectionBar({
         <Text style={s.cancelText}>Cancel</Text>
       </TouchableOpacity>
 
+      {onMoveSelected && (
+        <TouchableOpacity
+          style={[s.ghostBtn, (count === 0 || busy) && s.disabled]}
+          onPress={() => onMoveSelected([...selected])}
+          disabled={count === 0 || busy}
+          activeOpacity={0.8}
+        >
+          <Ionicons name="folder-outline" size={15} color="#B5905B" />
+          <Text style={s.ghostText}>Move</Text>
+        </TouchableOpacity>
+      )}
+
+      {onDeleteSelected && (
+        <TouchableOpacity
+          style={[s.ghostBtn, (count === 0 || busy) && s.disabled]}
+          onPress={() => onDeleteSelected([...selected])}
+          disabled={count === 0 || busy}
+          activeOpacity={0.8}
+        >
+          <Ionicons name="trash-outline" size={15} color="#EF4444" />
+          <Text style={[s.ghostText, { color: '#EF4444' }]}>Delete</Text>
+        </TouchableOpacity>
+      )}
+
       <TouchableOpacity
         style={[s.primaryBtn, (count === 0 || busy) && s.disabled]}
         onPress={() => selection.downloadSelected(items, zipName)}
@@ -212,6 +247,7 @@ const s = StyleSheet.create({
   bar: {
     flexDirection: 'row',
     alignItems: 'center',
+    flexWrap: 'wrap',
     gap: 8,
     paddingVertical: 8,
     marginBottom: 10,

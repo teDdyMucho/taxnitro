@@ -192,10 +192,13 @@ export function AdminFileBrowser({ visible, onClose }: Props) {
   const [renSubError, setRenSubError]     = useState<string | null>(null);
   const [moveTarget, setMoveTarget]       = useState<{ file: FileRow; folderTable: string } | null>(null);
   // Moving to another FOLDER, as against another subfolder of this one.
-  const [folderMove, setFolderMove]       = useState<{ file: FileRow; from: string; email: string } | null>(null);
+  const [folderMove, setFolderMove]       = useState<{ files: FileRow[]; from: string; email: string } | null>(null);
   const [folderMoveServices, setFolderMoveServices] = useState<string[] | null>(null);
   const [folderMoveBusy, setFolderMoveBusy]         = useState(false);
   const [folderMoveError, setFolderMoveError]       = useState<string | null>(null);
+  const [bulkDelete, setBulkDelete]       = useState<{ files: FileRow[]; from: string } | null>(null);
+  const [bulkBusy, setBulkBusy]           = useState(false);
+  const [bulkError, setBulkError]         = useState<string | null>(null);
 
   // ── Load categories ─────────────────────────────────────────────────────────
 
@@ -477,19 +480,65 @@ export function AdminFileBrowser({ visible, onClose }: Props) {
     if (!folderMove || folderMoveBusy) return;
     setFolderMoveBusy(true);
     setFolderMoveError(null);
-    const res = await moveDocumentToFolder(folderMove.file.id, folderMove.from, toTable);
+
+    // Each file is its own move, so a set can land partly. What went is dropped
+    // from the list and what did not is named, rather than the whole thing being
+    // called a failure and leaving nobody sure what moved.
+    const moved: string[] = [];
+    const failed: string[] = [];
+    for (const f of folderMove.files) {
+      const res = await moveDocumentToFolder(f.id, folderMove.from, toTable);
+      if (res.ok) moved.push(f.id);
+      else failed.push(`${f.name}: ${res.error}`);
+    }
     setFolderMoveBusy(false);
 
-    if (!res.ok) { setFolderMoveError(res.error); return; }
+    if (moved.length) {
+      const gone = new Set(moved);
+      setFiles(prev => prev.filter(f => !gone.has(f.id)));
+      setNav(prev => (prev.kind === 'detail' && gone.has(prev.file.id)
+        ? { kind: 'files', category: prev.category, folder: prev.folder, client: prev.client }
+        : prev));
+      dl.exitSelect();
+    }
 
-    // It has left this folder, so it should leave this list — staying would
-    // show a file that is no longer here until the next refresh.
-    const id = folderMove.file.id;
-    setFiles(prev => prev.filter(f => f.id !== id));
+    if (failed.length) {
+      setFolderMoveError(
+        failed.length === folderMove.files.length
+          ? failed[0]
+          : `${moved.length} moved. ${failed.length} could not: ${failed[0]}`);
+      return;
+    }
     setFolderMove(null);
-    setNav(prev => (prev.kind === 'detail' && prev.file.id === id
-      ? { kind: 'files', category: prev.category, folder: prev.folder, client: prev.client }
-      : prev));
+  };
+
+  // Deleting a marked set. Each is its own delete, for the same reason.
+  const handleDeleteSelected = async () => {
+    if (!bulkDelete || bulkBusy) return;
+    setBulkBusy(true);
+    setBulkError(null);
+
+    const gone: string[] = [];
+    const failed: string[] = [];
+    for (const f of bulkDelete.files) {
+      const res = await deleteDocumentWithReason(f.id, bulkDelete.from);
+      if (res.ok) gone.push(f.id); else failed.push(`${f.name}: ${res.error}`);
+    }
+    setBulkBusy(false);
+
+    if (gone.length) {
+      const set = new Set(gone);
+      setFiles(prev => prev.filter(f => !set.has(f.id)));
+      dl.exitSelect();
+    }
+    if (failed.length) {
+      setBulkError(
+        failed.length === bulkDelete.files.length
+          ? failed[0]
+          : `${gone.length} deleted. ${failed.length} could not: ${failed[0]}`);
+      return;
+    }
+    setBulkDelete(null);
   };
 
   const handleMoveToSubfolder = async (subfolderId: string | null) => {
@@ -887,6 +936,21 @@ export function AdminFileBrowser({ visible, onClose }: Props) {
                 items={filteredFiles}
                 zipName={`${client?.name ?? 'Client'} — ${folder.label}`}
                 label="files"
+                onMoveSelected={ids => {
+                  setFolderMoveError(null);
+                  setFolderMove({
+                    files: filteredFiles.filter(f => ids.includes(f.id)),
+                    from: folder.table,
+                    email: client.email,
+                  });
+                }}
+                onDeleteSelected={ids => {
+                  setBulkError(null);
+                  setBulkDelete({
+                    files: filteredFiles.filter(f => ids.includes(f.id)),
+                    from: folder.table,
+                  });
+                }}
               />
             }
             renderItem={({ item }) => {
@@ -1086,7 +1150,7 @@ export function AdminFileBrowser({ visible, onClose }: Props) {
           </TouchableOpacity>
           <TouchableOpacity
             style={[fb.replyBtn, { marginTop: 8 }]}
-            onPress={() => { setFolderMoveError(null); setFolderMove({ file, from: folder.table, email: client.email }); }}
+            onPress={() => { setFolderMoveError(null); setFolderMove({ files: [file], from: folder.table, email: client.email }); }}
             activeOpacity={0.82}
           >
             <Ionicons name="folder-outline" size={15} color="#1C1713" />
@@ -1146,7 +1210,7 @@ export function AdminFileBrowser({ visible, onClose }: Props) {
           activeOpacity={0.75}
           onPress={() => {
             setFolderMoveError(null);
-            setFolderMove({ file: nav.file, from: nav.folder.table, email: nav.client.email });
+            setFolderMove({ files: [nav.file], from: nav.folder.table, email: nav.client.email });
           }}
         >
           <Ionicons name="folder-outline" size={16} color="#E8B923" />
@@ -1359,6 +1423,56 @@ export function AdminFileBrowser({ visible, onClose }: Props) {
         </Pressable>
       </Modal>
 
+      {/* ── Delete a marked set ── */}
+      <Modal visible={!!bulkDelete} transparent animationType="fade" onRequestClose={() => setBulkDelete(null)}>
+        <Pressable style={fb.modalOverlay} onPress={() => !bulkBusy && setBulkDelete(null)}>
+          <Pressable style={fb.rejectModal} onPress={() => {}}>
+            <View style={[fb.rejectIconWrap, { backgroundColor: 'rgba(239,68,68,0.15)' }]}>
+              <Ionicons name="trash-outline" size={26} color="#EF4444" />
+            </View>
+            <Text style={fb.rejectModalTitle}>
+              Delete {bulkDelete?.files.length ?? 0} file{(bulkDelete?.files.length ?? 0) === 1 ? '' : 's'}?
+            </Text>
+            <Text style={[fb.rejectModalSub, { marginTop: 2, fontSize: 12 }]}>
+              This permanently removes them, along with any replies on them. This
+              cannot be undone.
+            </Text>
+
+            {bulkError && (
+              <View style={fb.moveError}>
+                <Ionicons name="alert-circle-outline" size={15} color="#B3261E" />
+                <Text style={fb.moveErrorText}>{bulkError}</Text>
+              </View>
+            )}
+
+            <ScrollView style={{ maxHeight: 150, alignSelf: 'stretch', marginTop: 10 }} showsVerticalScrollIndicator={false}>
+              {bulkDelete?.files.map(f => (
+                <Text key={f.id} style={fb.bulkName} numberOfLines={1}>{f.name}</Text>
+              ))}
+            </ScrollView>
+
+            <View style={{ flexDirection: 'row', gap: 8, alignSelf: 'stretch', marginTop: 12 }}>
+              <TouchableOpacity
+                style={[fb.replyBtn, { flex: 1, backgroundColor: '#F1F5F9' }]}
+                onPress={() => setBulkDelete(null)}
+                disabled={bulkBusy}
+              >
+                <Text style={[fb.replyBtnText, { color: '#475569' }]}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[fb.replyBtn, { flex: 1, backgroundColor: '#EF4444' }]}
+                onPress={handleDeleteSelected}
+                disabled={bulkBusy}
+              >
+                {bulkBusy
+                  ? <ActivityIndicator size="small" color="#FFFFFF" />
+                  : <Text style={[fb.replyBtnText, { color: '#FFFFFF' }]}>Delete</Text>}
+              </TouchableOpacity>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
       {/* ── Move a whole subfolder to another folder ── */}
       <Modal visible={!!subMove} transparent animationType="fade" onRequestClose={() => setSubMove(null)}>
         <Pressable style={fb.modalOverlay} onPress={() => !subMoveBusy && setSubMove(null)}>
@@ -1421,10 +1535,14 @@ export function AdminFileBrowser({ visible, onClose }: Props) {
               <Ionicons name="folder-outline" size={26} color="#E8B923" />
             </View>
             <Text style={fb.rejectModalTitle}>Move to Another Folder</Text>
-            <Text style={fb.rejectModalSub} numberOfLines={2}>{folderMove?.file.name}</Text>
+            <Text style={fb.rejectModalSub} numberOfLines={2}>
+              {folderMove && folderMove.files.length === 1
+                ? folderMove.files[0].name
+                : `${folderMove?.files.length ?? 0} files`}
+            </Text>
             <Text style={[fb.rejectModalSub, { marginTop: 2, fontSize: 12 }]}>
-              Currently in {folderLabel(folderMove?.from ?? '')}. The file keeps its
-              replies and its approval; it lands at the top of the folder you pick.
+              Currently in {folderLabel(folderMove?.from ?? '')}. They keep their
+              replies and their approval, and land at the top of the folder you pick.
             </Text>
 
             {folderMoveError && (
@@ -1573,6 +1691,7 @@ const fb = StyleSheet.create({
   moveRow:       { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 12, paddingVertical: 12, borderRadius: 12, backgroundColor: '#F8FAFC', marginBottom: 6 },
   moveRowActive: { backgroundColor: '#ECFDF5', borderWidth: 1, borderColor: '#A7F3D0' },
   moveRowText:   { flex: 1, color: '#374151', fontSize: 13, fontWeight: '600' },
+  bulkName: { color: '#475569', fontSize: 12, paddingVertical: 4 },
   subActions: {
     flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 8,
     paddingHorizontal: 14, paddingVertical: 10, marginHorizontal: 14, marginBottom: 8,
