@@ -1,12 +1,12 @@
 import type { ClientSheets } from './clientSheets';
 
-// 2G3B Eats LLC — every tab of their workbook, values as the workbook itself computed
-// them. Generated from the source xlsx by scripts/xlsx2ts.py; edit the workbook
-// and regenerate rather than editing figures here.
+// 2G3B Eats, LLC — every tab of their workbook, values as the workbook itself
+// computed them. Generated from the source xlsx; edit the workbook and
+// regenerate rather than editing figures here.
 //
-// FS-R and FS-A keep their ORIGINAL row numbers. The workbook's formulas address
-// rows, and each client numbers them differently, so the row map lives with the
-// client's entry in clientDashboards.ts rather than in the model.
+// FS-R and FS-A keep their ORIGINAL row numbers. The workbook's formulas
+// address rows, and each client numbers them differently, so the row map
+// lives with the client's entry in clientDashboards.ts.
 
 export const TWO_G_THREE_B_SHEETS: ClientSheets = {
   ASSUMPTIONS: [
@@ -90,6 +90,39 @@ export const TWO_G_THREE_B_SHEETS: ClientSheets = {
     ["FY2026 revenue (actual + forecast)", 3838579.566725, null, null, null, null],
     ["FY2026 net income (actual + forecast)", 295858.440529, null, null, null, null],
     ["Cash at Dec 2026", 335082.850529, null, null, null, null],
+  ],
+  'Financial Roadmap': [
+    ["2G3B EATS, LLC: FP&A AND CONTROLLER FINANCIAL ROADMAP", null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null],
+    [null, "PRIORITY KEYS", null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null],
+    [null, "CRITICAL: Must be completed asap", null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null],
+    [null, "HIGH: material to margin or control", null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null],
+    [null, "MEDIUM: important but not urgent", null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null],
+    [null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null],
+    ["1. ACTION ROADMAP: WHAT HAPPENS, WHEN, AND WHO OWNS IT", null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null],
+    [null, null, null, null, null, null, null, null, "Q3 26", "Q4 2026", null, null, "Q1 2027", null, null, "Q2 2027", null, null, "Q3 2027", null, null, "Q4 2027", null, null],
+    ["No.", "Action item", "Why it matters (CFO view)", "Accountable owner", "Start", "Finish", "Priority", "Deliverable / how we know it is done", "Sep 2026", "Oct 2026", "Nov 2026", "Dec 2026", "Jan 2027", "Feb 2027", "Mar 2027", "Apr 2027", "May 2027", "Jun 2027", "Jul 2027", "Aug 2027", "Sep 2027", "Oct 2027", "Nov 2027", "Dec 2027"],
+    [1, "Recode the unclassified spend and split direct event cost from overhead", "$653,093 of spend has no account behind it - 29.1% of revenue and the largest single cost line in the business.", "Bookkeeper + Fractional CFO", "Sep 2026", "Oct 2026", "CRITICAL", "$653,093 recoded to real accounts; Uncategorized at nil in the Oct 2026 close; deleted and duplicate accounts merged and archived.", 1, 1, null, null, null, null, null, null, null, null, null, null, null, null, null, null],
+    [2, "Reclassify sales tax out of cost of goods sold and restate gross margin", "$227,350 of sales tax collected sits inside COGS. It is a liability owed to the state, not a cost of trading.", "Bookkeeper + CPA", "Sep 2026", "Oct 2026", "CRITICAL", "Sales tax held as a balance sheet liability with a remittance schedule; restated gross margin published for Jan-Jul 2026.", 1, 1, null, null, null, null, null, null, null, null, null, null, null, null, null, null],
+    [3, "Book interest and principal from every loan amortisation schedule", "Interest expense is nil against $625,370 of vehicle, RV and SBA EIDL debt. Operating profit is overstated by the full financing cost.", "Bookkeeper + CPA", "Sep 2026", "Nov 2026", "CRITICAL", "All eight loan schedules loaded; interest and principal posted monthly; the static loan balances explained in writing.", 1, 1, 1, null, null, null, null, null, null, null, null, null, null, null, null, null],
+    [4, "Take personal accounts out of cash and split the Members Draw", "Members Draw is -$4,473,930 with explicitly personal categories, and book equity is negative at -$21,057.", "Owner + CPA", "Sep 2026", "Feb 2027", "CRITICAL", "Personal and safe accounts out of the business file; draws split between genuine distributions and personal spend; distribution policy and minimum equity floor signed.", 1, 1, 1, 1, 1, 1, null, null, null, null, null, null, null, null, null, null],
+    [5, "Build a per-event contribution P&L", "Mar 2026 alone delivered $1,139,129 of revenue. Profit is earned event by event, and no event-level margin exists today.", "Fractional CFO + Owner", "Oct 2026", "Dec 2026", "CRITICAL", "Per-event template capturing revenue, food cost, crew cost, venue fee and travel; every 2026 event backfilled.", null, 1, 1, 1, null, null, null, null, null, null, null, null, null, null, null, null],
+    [6, "Start a 13 week cash forecast and fund an off-season reserve", "Cash of $197,838 is overstated by $123,411 of personal and safe accounts, and Sep-Feb is off-season.", "Fractional CFO + Owner", "Oct 2026", "Dec 2027", "CRITICAL", "Rolling 13 week forecast refreshed at every close; reserve target set in months of fixed cost and funded out of peak season.", null, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+    [7, "Set the capitalisation and depreciation policy and run the monthly charge", "Accumulated depreciation is frozen at $1,054,703 against $1,513,968 of gross vehicles, RVs, trailers and equipment.", "CPA + Fractional CFO", "Oct 2026", "Dec 2026", "HIGH", "Fixed asset register by class; monthly depreciation posted; FY2026 catch-up charge quantified with the CPA.", null, 1, 1, 1, null, null, null, null, null, null, null, null, null, null, null, null],
+    [8, "Forecast FY2027 off the booked event calendar, not a monthly run rate", "Revenue swings from under $14k across Jan-Feb to $1,139,129 in Mar 2026, and 2025 carries no valid monthly baseline.", "Fractional CFO", "Nov 2026", "Jan 2027", "HIGH", "FY2027 revenue model built event by event; seasonality multipliers confirmed to bookings; 2025 rebuilt by month or formally flagged as no baseline.", null, null, 1, 1, 1, null, null, null, null, null, null, null, null, null, null, null],
+    [9, "Set the monthly fixed-cost floor and break-even events per month", "Four of seven months in 2026 are loss-making; the $158,613 YTD profit is earned almost entirely in one month.", "Fractional CFO + Owner", "Nov 2026", "Jan 2027", "HIGH", "Fixed-cost floor agreed with the events and revenue needed to break even; buy-versus-lease tested on the $352,774 equipment lease.", null, null, 1, 1, 1, null, null, null, null, null, null, null, null, null, null, null],
+    [10, "Match venue and food rent to the month of the event that earns it", "$80,060 of food rent lands in Apr-May with nothing in Jun-Jul, while revenue peaks in Mar. Cost and revenue sit in different months.", "Bookkeeper + Fractional CFO", "Dec 2026", "Dec 2027", "MEDIUM", "Venue and food rent accrued to the event month, so per-event contribution is free of timing distortion.", null, null, null, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+    [null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null],
+    ["2. RECURRING CADENCE: THE RHYTHM THAT KEEPS THE PLAN ALIVE", null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null],
+    [null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null],
+    [null, "Frequency", "What happens", "Accountable owner", "Starts", "Standard to hit", null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null],
+    [null, "Monthly", "Close checklist: bank, credit card and loan reconciliations, sales tax tie-out, and an Uncategorized sweep to nil", "Bookkeeper", "Sep 2026", "Signed off by the 15th of the following month, with Uncategorized expense at nil.", null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null],
+    [null, "Monthly", "P&L, balance sheet and cash pack with written variance commentary", "Fractional CFO", "Nov 2026", "Issued by the 15th of the following month. Every variance over 5% explained.", null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null],
+    [null, "Monthly", "Per-event contribution report, plus labor and equipment lease as a percentage of revenue", "Fractional CFO", "Dec 2026", "Reported with the close pack every month without exception, against target.", null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null],
+    [null, "Monthly", "Owner review: KPI dashboard and the 13 week cash forecast, 30 minutes", "Fractional CFO + Owner", "Nov 2026", "First week of the month. Decisions minuted.", null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null],
+    [null, "Quarterly", "Budget versus actuals review and reforecast off the booked event calendar", "Fractional CFO + Owner", "Jan 2027", "Within 20 days of quarter end. Actions assigned with dates.", null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null],
+    [null, "Quarterly", "Distribution and equity check against the policy floor", "Owner + CPA", "Jan 2027", "Held alongside the BvA review. No distribution taken below the equity floor.", null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null],
+    [null, "Annually", "Budget build, event calendar sign-off and policy refresh", "Fractional CFO + Owner", "Nov 2026", "2027 budget and event calendar signed before 31 December 2026.", null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null],
+    [null, "Annually", "Year end close, depreciation true-up and reporting pack", "Bookkeeper + CPA", "Jan 2027", "Books closed by the last business day of February.", null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null],
   ],
   'Balance Sheet': [
     ["2G3B EATS, LLC", null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null],

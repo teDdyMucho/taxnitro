@@ -41,3 +41,7 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# Python leftovers from the workbook scripts
+__pycache__/
+*.pyc

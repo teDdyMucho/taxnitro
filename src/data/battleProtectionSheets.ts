@@ -1,12 +1,12 @@
 import type { ClientSheets } from './clientSheets';
 
-// Battle Protection Agency — every tab of their workbook, values as the workbook itself computed
-// them. Generated from the source xlsx by scripts/xlsx2ts.py; edit the workbook
-// and regenerate rather than editing figures here.
+// Battle Protection Agency, LLC — every tab of their workbook, values as the workbook itself
+// computed them. Generated from the source xlsx; edit the workbook and
+// regenerate rather than editing figures here.
 //
-// FS-R and FS-A keep their ORIGINAL row numbers. The workbook's formulas address
-// rows, and each client numbers them differently, so the row map lives with the
-// client's entry in clientDashboards.ts rather than in the model.
+// FS-R and FS-A keep their ORIGINAL row numbers. The workbook's formulas
+// address rows, and each client numbers them differently, so the row map
+// lives with the client's entry in clientDashboards.ts.
 
 export const BATTLE_PROTECTION_SHEETS: ClientSheets = {
   ASSUMPTIONS: [
@@ -72,6 +72,39 @@ export const BATTLE_PROTECTION_SHEETS: ClientSheets = {
     ["Cash at Dec 2026 (balancing plug on FS-R)", 28349.871494, null, null, null, null],
     ["Lowest forecast cash balance in Aug–Dec", 10026.246697, null, null, null, null],
     ["Reality check: the Jan–Jul actual loss is already banked, so FY2026 can still close negative even when the forecast run-rate is profitable. Cash on FS-R is a balancing plug — a negative value is a funding gap, not a forecast error.", null, null, null, null, null],
+  ],
+  'Financial Roadmap': [
+    ["BATTLE PROTECTION AGENCY, LLC: FINANCIAL TURNAROUND ROADMAP", null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null],
+    [null, "PRIORITY KEYS", null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null],
+    [null, "CRITICAL: Must be completed asap", null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null],
+    [null, "HIGH: material to margin or control", null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null],
+    [null, "MEDIUM: important but not urgent", null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null],
+    [null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null],
+    ["1. ACTION ROADMAP: WHAT HAPPENS, WHEN, AND WHO OWNS IT", null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null],
+    [null, null, null, null, null, null, null, null, "Q3 26", "Q4 2026", null, null, "Q1 2027", null, null, "Q2 2027", null, null, "Q3 2027", null, null, "Q4 2027", null, null],
+    ["No.", "Action item", "Why it matters (CFO view)", "Accountable owner", "Start", "Finish", "Priority", "Deliverable / how we know it is done", "Sep 2026", "Oct 2026", "Nov 2026", "Dec 2026", "Jan 2027", "Feb 2027", "Mar 2027", "Apr 2027", "May 2027", "Jun 2027", "Jul 2027", "Aug 2027", "Sep 2027", "Oct 2027", "Nov 2027", "Dec 2027"],
+    [1, "Start a 13 week cash forecast", "Cash of $7,763 covers under one month of payroll.", "Controller + FP&A", "Sep 2026", "Dec 2027", "CRITICAL", "Rolling 13 week forecast updated weekly, payroll funded first.", 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+    [2, "Build the break-even model: revenue needed to cover the cost base", "Costs run 105% of revenue.", "FP&A", "Sep 2026", "Oct 2026", "HIGH", "Monthly break-even revenue agreed, with the gap to today quantified.", 1, 1, null, null, null, null, null, null, null, null, null, null, null, null, null, null],
+    [3, "Win back the contracts lost since Mar 2026", "Monthly income fell from $163,114 to $106,777. Retention, not seasonality.", "FP&A + Owner", "Sep 2026", "Dec 2026", "CRITICAL", "Every lost account called, reason logged, owner and date assigned.", 1, 1, 1, 1, null, null, null, null, null, null, null, null, null, null, null, null],
+    [4, "Put the owner on a salary and cap distributions", "Draws ran 3x the net loss and were funded by debt.", "Owner + Fractional CFO", "Sep 2026", "Oct 2026", "CRITICAL", "Policy signed: fixed salary, distributions capped at 6% of revenue.", 1, 1, null, null, null, null, null, null, null, null, null, null, null, null, null, null],
+    [5, "Reconcile 2025-2026 payroll taxes to the filed returns", "Tax holding sits $31,829 below the liability it funds.", "Controller", "Sep 2026", "Dec 2026", "CRITICAL", "Filings tied out quarter by quarter; liabilities rebuilt by tax type.", 1, 1, 1, 1, null, null, null, null, null, null, null, null, null, null, null, null],
+    [6, "Split wages into direct labour and overhead", "Gross profit equals revenue, so margin is invisible.", "FP&A + Controller", "Oct 2026", "Dec 2026", "CRITICAL", "2026 P&L restated with direct labour separated; gross margin reported.", null, 1, 1, 1, null, null, null, null, null, null, null, null, null, null, null, null],
+    [7, "Track labour as a percentage of revenue, monthly", "Labour is 82% of revenue. Biggest lever in the business.", "Operations + FP&A", "Oct 2026", "Dec 2027", "CRITICAL", "Labour-to-revenue in every close pack, against a 78% target.", null, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+    [8, "Build contract level margin reporting", "Contracts-On going are 94% of income. Margin is decided per site.", "FP&A", "Nov 2026", "Dec 2027", "CRITICAL", "Ranked margin report for the top 20 accounts at every close.", null, null, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+    [9, "Build and sign off the 2027 budget", "Build off contract revenue only, never off total income.", "FP&A + Owner", "Nov 2026", "Dec 2026", "HIGH", "2027 budget by month, labour capped as a % of revenue, signed before 31 Dec.", null, null, 1, 1, null, null, null, null, null, null, null, null, null, null, null, null],
+    [10, "Reprice on renewal by margin tier, not across the board", "An 8% blanket rise risks churn the fixed payroll cannot absorb.", "Owner + FP&A", "Jan 2027", "Dec 2027", "CRITICAL", "Below break-even repriced or exited; mid tier 3-5%; top accounts held.", null, null, null, null, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+    [null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null],
+    ["2. RECURRING CADENCE: THE RHYTHM THAT KEEPS THE PLAN ALIVE", null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null],
+    [null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null],
+    [null, "Frequency", "What happens", "Accountable owner", "Starts", "Standard to hit", null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null],
+    [null, "Weekly", "Cash forecast refresh and scheduled versus billed hours by site", "Controller + FP&A", "Sep 2026", "Every Monday. Payroll funded two pay runs ahead.", null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null],
+    [null, "Monthly", "Close checklist: bank, clearing, payroll liability tie out, suspense sweep", "Controller", "Sep 2026", "Signed off by the 15th, with clearing and suspense accounts at nil.", null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null],
+    [null, "Monthly", "Monthly P&L and cash pack, with written variance commentary", "FP&A", "Oct 2026", "Issued by the 15th of the following month. Every variance over 5% explained.", null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null],
+    [null, "Monthly", "Labour as a percentage of revenue and contract margin, against target", "FP&A", "Dec 2026", "Reported with the close pack every month without exception.", null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null],
+    [null, "Monthly", "Owner review: KPI dashboard and the 13 week cash forecast, 30 minutes", "FP&A + Owner", "Oct 2026", "First week of the month. Decisions minuted, draws approved against cash.", null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null],
+    [null, "Quarterly", "Budget versus actuals review and reforecast", "FP&A + Owner", "Jan 2027", "Within 20 days of quarter end. Actions assigned with dates.", null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null],
+    [null, "Quarterly", "Pricing tier and client concentration check", "FP&A + Owner", "Jan 2027", "Held alongside the BvA review.", null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null],
+    [null, "Annually", "Budget build and policy refresh", "FP&A + Fractional CFO", "Nov 2026", "Budget signed before 31 December each year.", null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null],
   ],
   'Balance Sheet': [
     ["Battle Protection Agency, LLC", null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null],

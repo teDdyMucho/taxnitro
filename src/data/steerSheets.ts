@@ -1,12 +1,12 @@
 import type { ClientSheets } from './clientSheets';
 
-// STEER LLC — every tab of their workbook, values as the workbook itself computed
-// them. Generated from the source xlsx by scripts/xlsx2ts.py; edit the workbook
-// and regenerate rather than editing figures here.
+// STEER LLC — every tab of their workbook, values as the workbook itself
+// computed them. Generated from the source xlsx; edit the workbook and
+// regenerate rather than editing figures here.
 //
-// FS-R and FS-A keep their ORIGINAL row numbers. The workbook's formulas address
-// rows, and each client numbers them differently, so the row map lives with the
-// client's entry in clientDashboards.ts rather than in the model.
+// FS-R and FS-A keep their ORIGINAL row numbers. The workbook's formulas
+// address rows, and each client numbers them differently, so the row map
+// lives with the client's entry in clientDashboards.ts.
 
 export const STEER_SHEETS: ClientSheets = {
   ASSUMPTIONS: [
@@ -81,6 +81,39 @@ export const STEER_SHEETS: ClientSheets = {
     ["FY2026 revenue (actual + forecast)", 1122276.458335, null, null, null],
     ["FY2026 net income (actual + forecast)", 317001.384747, null, null, null],
     ["Cash at Dec 2026", 138338.191889, null, null, null],
+  ],
+  'Financial Roadmap': [
+    ["STEER LLC: FP&A FINANCIAL ROADMAP (SEP 2026 - DEC 2027)", null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null],
+    [null, "PRIORITY KEYS", null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null],
+    [null, "CRITICAL: Must be completed asap", null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null],
+    [null, "HIGH: material to margin or control", null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null],
+    [null, "MEDIUM: important but not urgent", null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null],
+    [null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null],
+    ["1. ACTION ROADMAP: WHAT HAPPENS, WHEN, AND WHO OWNS IT", null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null],
+    [null, null, null, null, null, null, null, null, "Q3 26", "Q4 2026", null, null, "Q1 2027", null, null, "Q2 2027", null, null, "Q3 2027", null, null, "Q4 2027", null, null],
+    ["No.", "Action item", "Why it matters (CFO view)", "Accountable owner", "Start", "Finish", "Priority", "Deliverable / how we know it is done", "Sep 2026", "Oct 2026", "Nov 2026", "Dec 2026", "Jan 2027", "Feb 2027", "Mar 2027", "Apr 2027", "May 2027", "Jun 2027", "Jul 2027", "Aug 2027", "Sep 2027", "Oct 2027", "Nov 2027", "Dec 2027"],
+    [1, "Rebuild the reporting baseline: seven trading months only, on a trailing 3-month average", "Dec 2025 is a $739,758 catch-up entry - over half the file. Revenue swings 3.7x, $136,524 (Apr) to $37,363 (Jul).", "Fractional CFO", "Sep 2026", "Oct 2026", "CRITICAL", "Pack rebased to Jan-Jul 2026 actuals; T3M average and run-rate defined; Dec 2025 excluded from every trend.", 1, 1, null, null, null, null, null, null, null, null, null, null, null, null, null, null],
+    [2, "Stand up a 13 week rolling cash forecast and set a minimum cash floor", "Cash of $5,949 covers 2.7 days of the $65,593 monthly cost base. Current ratio 0.26x; working capital ($24,228).", "Fractional CFO", "Sep 2026", "Dec 2027", "CRITICAL", "Rolling 13 week forecast refreshed at each close; cash floor of one month of operating cost (~$65,600) reported vs actual.", 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+    [3, "Normalise the cost base: straight-line rent, accrued interest, depreciation policy", "Rent hit only 4 of 7 months ($87,500); interest of $5,858 on $233k of debt; no depreciation. The 24.9% margin is an upper bound.", "Fractional CFO + Bookkeeper", "Oct 2026", "Dec 2026", "HIGH", "Rent accrued monthly, interest accrued per the SBA amortisation schedule, capitalisation threshold set and depreciation running.", null, 1, 1, 1, null, null, null, null, null, null, null, null, null, null, null, null],
+    [4, "Build the break-even and contribution model, per class and per enrolment", "Cost base runs $65,593 a month. Break-even revenue, and the enrolment needed to reach it, has never been quantified.", "Fractional CFO", "Oct 2026", "Nov 2026", "CRITICAL", "Monthly break-even revenue agreed, contribution per class and per student modelled, gap to the $87,348 average quantified.", null, 1, 1, null, null, null, null, null, null, null, null, null, null, null, null, null],
+    [5, "Track payroll and instructor utilisation as a percentage of Sales, monthly", "Payroll block is 37.3% of YTD revenue but reached 64.9% in Jul 2026 against a 50% target. Instructor hours are the margin lever.", "Fractional CFO + Owner", "Oct 2026", "Dec 2027", "HIGH", "Payroll-to-Sales and students per instructor in every close pack against a 50% cap; headcount added only on evidenced enrolment.", null, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+    [6, "Diagnose the July revenue collapse and put revenue on an earned-period basis", "Jul closed at $37,363 vs $124,321 in Jun (-69.9%) and is the only loss month. Cost did not move with it.", "Fractional CFO + Owner", "Sep 2026", "Nov 2026", "HIGH", "Written conclusion on timing vs demand loss; billing cycle documented and revenue accrued into the period earned.", 1, 1, 1, null, null, null, null, null, null, null, null, null, null, null, null, null],
+    [7, "Substantiate and cap charitable contributions inside the budget", "$65,476 YTD - 10.7% of revenue and the largest discretionary line after payroll. Booked in every single month.", "Owner + Fractional CFO", "Sep 2026", "Nov 2026", "CRITICAL", "Acknowledgements held for every contribution, deductibility confirmed, and an approved annual cap set as a % of Sales.", 1, 1, 1, null, null, null, null, null, null, null, null, null, null, null, null, null],
+    [8, "Set an owner distribution policy and take personal spend out of the ledger", "$152,287 was earned YTD yet cash fell; $102,602 of owner pay and personal expense sits against equity of ($91,879).", "Owner", "Oct 2026", "Dec 2026", "CRITICAL", "Written policy tying draws to distributable profit and the cash floor; personal spend off the business ledger from the next close.", null, 1, 1, 1, null, null, null, null, null, null, null, null, null, null, null, null],
+    [9, "Build and sign off the FY2027 driver-based budget", "Build off Sales only - enrolment x price x instructor utilisation. Never off total income or the Dec 2025 entry.", "Fractional CFO + Owner", "Nov 2026", "Dec 2026", "HIGH", "FY2027 budget by month with payroll capped as a % of Sales, debt service funded and rent accrued; signed before 31 Dec 2026.", null, null, 1, 1, null, null, null, null, null, null, null, null, null, null, null, null],
+    [10, "Run quarterly budget versus actuals and a rolling reforecast", "A budget nobody revisits is a filed document. This is where pricing, class mix and cost decisions actually get made.", "Fractional CFO + Owner", "Apr 2027", "Dec 2027", "MEDIUM", "BvA pack within 20 days of quarter end, every variance over 5% explained, reforecast reissued and actions minuted.", null, null, null, null, null, null, null, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+    [null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null],
+    ["2. RECURRING CADENCE: THE RHYTHM THAT KEEPS THE PLAN ALIVE", null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null],
+    [null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null],
+    [null, "Frequency", "What happens", "Accountable owner", "Starts", "Standard to hit", null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null],
+    [null, "Monthly", "Close checklist: bank, card and loan reconciliations, payroll liability tie out, uncategorised sweep", "Bookkeeper", "Sep 2026", "Signed off by the 15th of the following month, with uncategorised accounts at nil.", null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null],
+    [null, "Monthly", "P&L, balance sheet and cash pack with written variance commentary", "Fractional CFO", "Oct 2026", "Issued by the 15th of the following month. Every variance over 5% explained.", null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null],
+    [null, "Monthly", "KPI dashboard: payroll % of Sales, break-even gap, current ratio and days of cash", "Fractional CFO", "Oct 2026", "Reported with the close pack every month without exception.", null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null],
+    [null, "Monthly", "Owner review of the 13 week cash forecast against the cash floor, 30 minutes", "Fractional CFO + Owner", "Oct 2026", "First week of the month. Draw and payment decisions minuted.", null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null],
+    [null, "Quarterly", "Budget versus actuals review and rolling reforecast", "Fractional CFO + Owner", "Apr 2027", "Within 20 days of quarter end. Actions assigned with dates.", null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null],
+    [null, "Quarterly", "Pricing, class size and programme mix check against contribution per class", "Fractional CFO + Owner", "Apr 2027", "Held alongside the BvA review.", null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null],
+    [null, "Annually", "Budget build, distribution policy and charitable giving cap refresh", "Fractional CFO + Owner", "Nov 2026", "Budget signed before 31 December each year.", null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null],
+    [null, "Annually", "Year end close, debt schedule roll-forward and reporting pack", "Bookkeeper", "Jan 2027", "Books closed by the last business day of February.", null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null],
   ],
   'Balance Sheet': [
     ["STEER LLC", null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null],

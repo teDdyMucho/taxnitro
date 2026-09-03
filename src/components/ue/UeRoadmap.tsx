@@ -201,7 +201,7 @@ export function UeRoadmap({ grid }: { grid: GridRow[] }) {
             return (
               <View key={a.no + a.title} style={s.timelineRow}>
                 <View style={s.rowLabel}>
-                  <Text style={s.rowLabelText} numberOfLines={2}>{a.no}. {a.title}</Text>
+                  <Text style={s.rowLabelText} numberOfLines={3}>{a.no}. {a.title}</Text>
                 </View>
                 <View style={{ flexDirection: 'row' }}>
                   {road.months.map((m, i) => {
@@ -293,8 +293,9 @@ const s = StyleSheet.create({
     width: MONTH_W, textAlign: 'center',
     color: Colors.textMuted, fontSize: 10.5, fontWeight: '700',
   },
-  // A floor on the height so a label that wraps to two lines does not make its
-  // row taller than the rest and pull the bars out of line with each other.
+    // A floor on the height, so the short labels line their bars up with each
+    // other. A long one is given a third line rather than cut: STEER's first
+    // action runs to 91 characters, and two lines lose the end of it.
   timelineRow: {
     flexDirection: 'row', alignItems: 'center', minHeight: 42,
     borderBottomWidth: 1, borderBottomColor: Colors.border, paddingVertical: 7,
