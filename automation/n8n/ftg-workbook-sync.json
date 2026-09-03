@@ -1,0 +1,222 @@
+{
+  "name": "FTG — client workbook sync",
+  "nodes": [
+    {
+      "parameters": {
+        "pollTimes": { "item": [{ "mode": "everyMinute" }] },
+        "simple": false,
+        "filters": {
+          "sender": "paulmlftg@gmail.com",
+          "q": "\"Spreadsheet shared with you\""
+        },
+        "options": {}
+      },
+      "id": "gmail-trigger",
+      "name": "Paul shared a workbook",
+      "type": "n8n-nodes-base.gmailTrigger",
+      "typeVersion": 1.2,
+      "position": [-720, 300],
+      "notes": "Only mail from Paul, only Drive's share notices. Everything after this assumes a workbook is on the way."
+    },
+    {
+      "parameters": {
+        "jsCode": "// The Drive file id out of the share notice.\n//\n// Google sends these as HTML with the link in a few places; the id is the one\n// stable thing in all of them. Anything without one is not a workbook share and\n// is dropped rather than guessed at.\nconst out = [];\n\nfor (const item of $input.all()) {\n  const mail = item.json;\n  const body = [mail.html, mail.textPlain, mail.snippet, mail.subject]\n    .filter(Boolean).join('\\n');\n\n  const m = body.match(/\\/spreadsheets\\/d\\/([A-Za-z0-9_-]{20,})/)\n         || body.match(/\\/file\\/d\\/([A-Za-z0-9_-]{20,})/)\n         || body.match(/[?&]id=([A-Za-z0-9_-]{20,})/);\n\n  if (!m) continue;\n\n  out.push({\n    json: {\n      fileId: m[1],\n      subject: mail.subject || '',\n      from: mail.from || '',\n      messageId: mail.id,\n      receivedAt: mail.date || new Date().toISOString(),\n    },\n  });\n}\n\nreturn out;"
+      },
+      "id": "extract-id",
+      "name": "Find the file id",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-500, 300]
+    },
+    {
+      "parameters": {
+        "operation": "download",
+        "fileId": { "__rl": true, "value": "={{ $json.fileId }}", "mode": "id" },
+        "options": {
+          "googleFileConversion": {
+            "conversion": {
+              "sheetsToFormat": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            }
+          },
+          "fileName": "={{ $json.fileId }}.xlsx"
+        }
+      },
+      "id": "drive-download",
+      "name": "Download it as xlsx",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [-280, 300],
+      "notes": "Uses the account Paul shares with. These files are not public — a plain download gets a 401 — so the credential here is what makes this work.",
+      "credentials": { "googleDriveOAuth2Api": { "id": "REPLACE", "name": "Google Drive (the account Paul shares with)" } }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.FTG_CONVERTER_URL }}/convert",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "=Bearer {{ $env.FTG_CONVERTER_TOKEN }}" }
+          ]
+        },
+        "contentType": "multipart-form-data",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "parameterType": "formBinaryData", "name": "file", "inputDataFieldName": "data" }
+          ]
+        },
+        "options": { "timeout": 300000, "response": { "response": { "neverError": false } } }
+      },
+      "id": "convert",
+      "name": "Read the workbook",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [-60, 300],
+      "notes": "Every figure is checked against the workbook in here. A mismatch comes back 422 and this run stops — nothing unchecked is committed."
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "version": 2 },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.status }}",
+                    "rightValue": "updated",
+                    "operator": { "type": "string", "operation": "equals" }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "known client"
+            },
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "version": 2 },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.status }}",
+                    "rightValue": "new",
+                    "operator": { "type": "string", "operation": "equals" }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "new client"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "route",
+      "name": "Known client, or new?",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [160, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// One item per file, so the commits below can run over them.\nconst d = $input.first().json;\nreturn Object.entries(d.contents).map(([path, content]) => ({\n  json: {\n    path,\n    content,\n    name: d.name,\n    slug: d.slug,\n    figuresChecked: d.figuresChecked,\n    tabs: d.tabs,\n  },\n}));"
+      },
+      "id": "fan-out",
+      "name": "One item per file",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [380, 200]
+    },
+    {
+      "parameters": {
+        "resource": "file",
+        "operation": "edit",
+        "owner": { "__rl": true, "value": "teDdyMucho", "mode": "name" },
+        "repository": { "__rl": true, "value": "taxnitro", "mode": "name" },
+        "filePath": "={{ $json.path }}",
+        "fileContent": "={{ $json.content }}",
+        "commitMessage": "=Update {{ $json.name }} from their latest workbook\n\n{{ $json.figuresChecked }} figures checked against the workbook, none disagreeing.\nGenerated by automation/sync_workbook.py from the file Paul shared.",
+        "additionalParameters": {}
+      },
+      "id": "commit",
+      "name": "Commit it",
+      "type": "n8n-nodes-base.github",
+      "typeVersion": 1,
+      "position": [600, 200],
+      "notes": "One commit per file, so two per workbook. Netlify rebuilds on the last one.",
+      "credentials": { "githubApi": { "id": "REPLACE", "name": "GitHub (write to taxnitro)" } },
+      "executeOnce": false,
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": { "__rl": true, "value": "REPLACE", "mode": "name" },
+        "text": "=✅ *{{ $('Read the workbook').first().json.name }}* updated from Paul's latest workbook.\n\n• {{ $('Read the workbook').first().json.figuresChecked }} figures checked against the workbook, none disagreeing\n• Financial Roadmap: {{ $('Read the workbook').first().json.tabs.roadmap ? 'yes' : 'no' }}  ·  Findings: {{ $('Read the workbook').first().json.tabs.findings ? 'shown' : 'hidden in the workbook' }}\n\nLive once Netlify finishes.",
+        "otherOptions": {}
+      },
+      "id": "notify-updated",
+      "name": "Say it went in",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [820, 200],
+      "credentials": { "slackApi": { "id": "REPLACE", "name": "Slack" } }
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": { "__rl": true, "value": "REPLACE", "mode": "name" },
+        "text": "=🆕 Paul shared a workbook for a client the app does not have yet: *{{ $json.name }}*\n\nNothing has been committed. A new client needs their portal sign-in email, and that is the one thing here that cannot be checked against the workbook — getting it wrong shows one client another's books.\n\nThe entry to add to `src/lib/clientDashboards.ts`:\n```\n{{ $json.registryEntry }}\n```\n\n{{ $json.figuresChecked }} figures were checked and agree.",
+        "otherOptions": {}
+      },
+      "id": "notify-new",
+      "name": "Ask for a decision",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [380, 420],
+      "notes": "A new client stops here on purpose. Everything else is checkable against the workbook; which login a business belongs to is not.",
+      "credentials": { "slackApi": { "id": "REPLACE", "name": "Slack" } }
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": { "__rl": true, "value": "REPLACE", "mode": "name" },
+        "text": "=⚠️ Could not take Paul's workbook.\n\n{{ $json.error?.message || $json.message || 'The converter refused it.' }}\n\nNothing was committed. The usual causes are the file not being shared with the sync account, or a figure not matching the workbook."
+      },
+      "id": "notify-failed",
+      "name": "Say it did not",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [160, 560],
+      "credentials": { "slackApi": { "id": "REPLACE", "name": "Slack" } }
+    }
+  ],
+  "connections": {
+    "Paul shared a workbook": { "main": [[{ "node": "Find the file id", "type": "main", "index": 0 }]] },
+    "Find the file id": { "main": [[{ "node": "Download it as xlsx", "type": "main", "index": 0 }]] },
+    "Download it as xlsx": { "main": [[{ "node": "Read the workbook", "type": "main", "index": 0 }]] },
+    "Read the workbook": { "main": [[{ "node": "Known client, or new?", "type": "main", "index": 0 }]] },
+    "Known client, or new?": {
+      "main": [
+        [{ "node": "One item per file", "type": "main", "index": 0 }],
+        [{ "node": "Ask for a decision", "type": "main", "index": 0 }]
+      ]
+    },
+    "One item per file": { "main": [[{ "node": "Commit it", "type": "main", "index": 0 }]] },
+    "Commit it": { "main": [[{ "node": "Say it went in", "type": "main", "index": 0 }]] }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "errorWorkflow": "",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all"
+  },
+  "pinData": {},
+  "meta": {
+    "instanceId": "ftg-workbook-sync",
+    "description": "When Paul shares a client workbook, update that client's dashboard from it.\n\nWhat it does NOT do, on purpose: wire up a client the app has never seen. Everything else here is checked against the workbook — every figure, and where each figure sits. Which portal login a business belongs to is not checkable, and getting it wrong shows one client another's books, so a new client stops at a message asking a person to finish it.\n\nBefore this runs:\n  • Google Drive credential — the account Paul shares with\n  • GitHub credential — write access to teDdyMucho/taxnitro\n  • Slack credential, and a channel id in the three notify nodes\n  • FTG_CONVERTER_URL and FTG_CONVERTER_TOKEN set on this n8n instance,\n    pointing at automation/service deployed on Railway"
+  },
+  "tags": [{ "name": "FTG" }]
+}
