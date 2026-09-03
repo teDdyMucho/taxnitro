@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import { Colors } from '../../constants/colors';
 import type { GridRow, StatementCell, StatementRow } from '../../data/clientSheets';
 import { MONTHS, money, pct } from '../../lib/ueModel';
+import { useWheelScroll } from '../../hooks/useWheelScroll';
 
 // The workbook's presentation tabs, rendered as tables.
 //
@@ -34,6 +35,7 @@ function Flag({ value }: { value: string }) {
 }
 
 export function UeGridTable({ rows, flagCol }: { rows: GridRow[]; flagCol?: number }) {
+  const scrollRef = useWheelScroll();
   const cols = useMemo(() => {
     const n = Math.max(...rows.map(r => r.length));
     return Array.from({ length: n }, (_, ci) => {
@@ -48,7 +50,7 @@ export function UeGridTable({ rows, flagCol }: { rows: GridRow[]; flagCol?: numb
 
   return (
     <View style={s.panel}>
-      <ScrollView horizontal showsHorizontalScrollIndicator style={s.scroll}>
+      <ScrollView ref={scrollRef} horizontal showsHorizontalScrollIndicator style={s.scroll}>
         <View style={{ width: total }}>
           {rows.map((row, ri) => {
             const filled = row.filter(c => c != null && c !== '').length;
@@ -121,12 +123,13 @@ const ACCOUNT_W = 240;
 const MONTH_W = 104;
 
 export function UeStatement({ rows, forecastFrom }: { rows: StatementRow[]; forecastFrom?: number | null }) {
+  const scrollRef = useWheelScroll();
   const isFc = (i: number) => forecastFrom != null && i > forecastFrom;
   const total = ACCOUNT_W + MONTH_W * 26;
 
   return (
     <View style={s.panel}>
-      <ScrollView horizontal showsHorizontalScrollIndicator style={s.scroll}>
+      <ScrollView ref={scrollRef} horizontal showsHorizontalScrollIndicator style={s.scroll}>
         <View style={{ width: total }}>
           <View style={[s.row, s.rowHeader]}>
             <Text style={[s.cell, s.strong, { width: ACCOUNT_W }]}>Account</Text>

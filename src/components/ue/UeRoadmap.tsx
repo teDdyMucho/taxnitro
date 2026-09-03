@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import { Colors } from '../../constants/colors';
 import type { GridCell, GridRow } from '../../data/clientSheets';
+import { useWheelScroll } from '../../hooks/useWheelScroll';
 
 // The Financial Roadmap, drawn as the workbook draws it.
 //
@@ -136,6 +137,7 @@ function parse(grid: GridRow[]): Roadmap | null {
 const MONTH_W = 62;
 
 export function UeRoadmap({ grid }: { grid: GridRow[] }) {
+  const scrollRef = useWheelScroll();
   const road = useMemo(() => parse(grid), [grid]);
 
   if (!road || !road.actions.length) {
@@ -187,7 +189,7 @@ export function UeRoadmap({ grid }: { grid: GridRow[] }) {
         Each bar is the months that action runs for — the same span the workbook marks.
       </Text>
 
-      <ScrollView horizontal showsHorizontalScrollIndicator style={s.timelineScroll}>
+      <ScrollView ref={scrollRef} horizontal showsHorizontalScrollIndicator style={s.timelineScroll}>
         <View>
           <View style={s.monthHeader}>
             <View style={s.rowLabel} />

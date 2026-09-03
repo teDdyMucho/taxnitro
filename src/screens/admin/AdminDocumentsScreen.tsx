@@ -56,6 +56,7 @@ import {
   formatMonthLabel,
   serviceLabel,
 } from '../../db/requirements';
+import { useWheelScroll } from '../../hooks/useWheelScroll';
 
 // ── Viewer Modal ───────────────────────────────────────────────────────────────
 
@@ -481,6 +482,7 @@ export function AdminDocumentsScreen() {
   const [query, setQuery]           = useState('');
   const [filter, setFilter]         = useState('pending'); // default: show pending first
   const [filterOpen, setFilterOpen] = useState(false);     // per-folder dropdown
+  const monthBarRef = useWheelScroll();     // a mouse wheel moves it too
   const filterSheet = useSheetStyles('sm');
   const [viewerDoc, setViewerDoc]   = useState<Document | null>(null);
   const [convDoc, setConvDoc]       = useState<Document | null>(null);
@@ -832,8 +834,9 @@ export function AdminDocumentsScreen() {
       {/* Month — the month a document covers, across every folder. */}
       {view === 'list' && monthsPresent.length > 1 && (
         <ScrollView
+          ref={monthBarRef}
           horizontal
-          showsHorizontalScrollIndicator={false}
+          showsHorizontalScrollIndicator
           style={s.monthBar}
           contentContainerStyle={s.monthBarContent}
         >
