@@ -142,7 +142,11 @@ function EditProfileModal({
                 : <Text style={modalStyles.save}>Save</Text>}
             </TouchableOpacity>
           </View>
-          <View style={modalStyles.body}>
+          {/* A scroller, so the last field is still reachable with the keyboard up */}
+          <ScrollView
+            contentContainerStyle={modalStyles.body}
+            keyboardShouldPersistTaps="handled"
+          >
             <Text style={modalStyles.label}>Full Name</Text>
             <TextInput
               style={modalStyles.input}
@@ -159,7 +163,7 @@ function EditProfileModal({
               editable={false}
             />
             <Text style={modalStyles.hint}>Email cannot be changed here. Contact support to update it.</Text>
-          </View>
+          </ScrollView>
         </View>
       </KeyboardAvoidingView>
     </Modal>
@@ -206,7 +210,11 @@ function ChangePasswordModal({ visible, onClose }: { visible: boolean; onClose: 
                 : <Text style={modalStyles.save}>Save</Text>}
             </TouchableOpacity>
           </View>
-          <View style={modalStyles.body}>
+          {/* A scroller, so the last field is still reachable with the keyboard up */}
+          <ScrollView
+            contentContainerStyle={modalStyles.body}
+            keyboardShouldPersistTaps="handled"
+          >
             <Text style={modalStyles.label}>Current Password</Text>
             <TextInput
               style={modalStyles.input}
@@ -234,7 +242,7 @@ function ChangePasswordModal({ visible, onClose }: { visible: boolean; onClose: 
               placeholderTextColor={Colors.textMuted}
               placeholder="Repeat new password"
             />
-          </View>
+          </ScrollView>
         </View>
       </KeyboardAvoidingView>
     </Modal>

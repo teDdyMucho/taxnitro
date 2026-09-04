@@ -4,6 +4,7 @@ import {
   Text,
   StyleSheet,
   FlatList,
+  ScrollView,
   TouchableOpacity,
   ActivityIndicator,
   RefreshControl,
@@ -175,192 +176,198 @@ function AddStaffModal({
     <Modal visible={visible} transparent animationType="fade" onRequestClose={handleClose}>
       <Pressable style={[im.overlay, sheet.overlay]} onPress={handleClose}>
         <Pressable style={[im.sheet, sheet.sheet]} onPress={() => {}}>
-
-          {/* Handle bar */}
+          {/* Handle bar — outside the scroller, so it stays put */}
           <View style={im.handle} />
+          <ScrollView
+            contentContainerStyle={im.sheetScroll}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
 
-          {result === 'success' || result === 'invited' ? (
-            /* ── Success state ── */
-            <View style={im.successContainer}>
-              <LinearGradient
-                colors={ROLE_CONFIG[role].gradient}
-                style={im.successIcon}
-                start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-              >
-                <Ionicons
-                  name={result === 'invited' ? 'mail-outline' : 'shield-checkmark'}
-                  size={30} color="#FFFFFF"
-                />
-              </LinearGradient>
-              <Text style={im.successTitle}>
-                {result === 'invited' ? 'Invite Sent!' : 'Role Assigned!'}
-              </Text>
-              <Text style={im.successSub}>
-                <Text style={{ fontWeight: '800', color: '#111827' }}>{assignedEmail}</Text>
-                {result === 'invited' ? ' becomes a ' : ' is now a '}
-                <Text style={{ fontWeight: '800', color: ROLE_CONFIG[role].pillText }}>
-                  {ROLE_CONFIG[role].label}
+
+            {result === 'success' || result === 'invited' ? (
+              /* ── Success state ── */
+              <View style={im.successContainer}>
+                <LinearGradient
+                  colors={ROLE_CONFIG[role].gradient}
+                  style={im.successIcon}
+                  start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+                >
+                  <Ionicons
+                    name={result === 'invited' ? 'mail-outline' : 'shield-checkmark'}
+                    size={30} color="#FFFFFF"
+                  />
+                </LinearGradient>
+                <Text style={im.successTitle}>
+                  {result === 'invited' ? 'Invite Sent!' : 'Role Assigned!'}
                 </Text>
-                {result === 'invited' ? ' as soon as they sign up.' : '.'}
-              </Text>
-              <TouchableOpacity style={im.primaryBtn} onPress={handleDone} activeOpacity={0.85}>
-                <Ionicons name="checkmark-circle" size={17} color="#FFFFFF" />
-                <Text style={im.primaryBtnText}>Done</Text>
-              </TouchableOpacity>
-            </View>
-          ) : (
-            /* ── Form state ── */
-            <>
-              {/* Modal header */}
-              <View style={im.modalHeader}>
-                <View style={im.modalIconBg}>
-                  <Ionicons name="person-add-outline" size={20} color="#B5905B" />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={im.modalTitle}>Add Staff Member</Text>
-                  <Text style={im.modalSub}>Grant staff access to an existing user</Text>
-                </View>
-                <TouchableOpacity style={im.closeBtn} onPress={handleClose} activeOpacity={0.7}>
-                  <Ionicons name="close" size={18} color="#64748B" />
+                <Text style={im.successSub}>
+                  <Text style={{ fontWeight: '800', color: '#111827' }}>{assignedEmail}</Text>
+                  {result === 'invited' ? ' becomes a ' : ' is now a '}
+                  <Text style={{ fontWeight: '800', color: ROLE_CONFIG[role].pillText }}>
+                    {ROLE_CONFIG[role].label}
+                  </Text>
+                  {result === 'invited' ? ' as soon as they sign up.' : '.'}
+                </Text>
+                <TouchableOpacity style={im.primaryBtn} onPress={handleDone} activeOpacity={0.85}>
+                  <Ionicons name="checkmark-circle" size={17} color="#FFFFFF" />
+                  <Text style={im.primaryBtnText}>Done</Text>
                 </TouchableOpacity>
               </View>
+            ) : (
+              /* ── Form state ── */
+              <>
+                {/* Modal header */}
+                <View style={im.modalHeader}>
+                  <View style={im.modalIconBg}>
+                    <Ionicons name="person-add-outline" size={20} color="#B5905B" />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={im.modalTitle}>Add Staff Member</Text>
+                    <Text style={im.modalSub}>Grant staff access to an existing user</Text>
+                  </View>
+                  <TouchableOpacity style={im.closeBtn} onPress={handleClose} activeOpacity={0.7}>
+                    <Ionicons name="close" size={18} color="#64748B" />
+                  </TouchableOpacity>
+                </View>
 
-              <View style={im.divider} />
+                <View style={im.divider} />
 
-              {/* Email field */}
-              <View style={im.fieldGroup}>
-                <Text style={im.fieldLabel}>EMAIL ADDRESS</Text>
-                <View style={[
-                  im.inputRow,
-                  result === 'notfound' && im.inputRowError,
-                ]}>
-                  <Ionicons name="mail-outline" size={16} color="#94A3B8" />
-                  <TextInput
-                    style={[im.input, { outlineWidth: 0 } as any]}
-                    placeholder="Type to search users..."
-                    placeholderTextColor="#94A3B8"
-                    value={email}
-                    onChangeText={handleEmailChange}
-                    keyboardType="email-address"
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                  />
-                  {email.length > 0 && (
-                    <TouchableOpacity onPress={() => { setEmail(''); setResult(null); }}>
-                      <Ionicons name="close-circle" size={16} color="#94A3B8" />
-                    </TouchableOpacity>
+                {/* Email field */}
+                <View style={im.fieldGroup}>
+                  <Text style={im.fieldLabel}>EMAIL ADDRESS</Text>
+                  <View style={[
+                    im.inputRow,
+                    result === 'notfound' && im.inputRowError,
+                  ]}>
+                    <Ionicons name="mail-outline" size={16} color="#94A3B8" />
+                    <TextInput
+                      style={[im.input, { outlineWidth: 0 } as any]}
+                      placeholder="Type to search users..."
+                      placeholderTextColor="#94A3B8"
+                      value={email}
+                      onChangeText={handleEmailChange}
+                      keyboardType="email-address"
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                    />
+                    {email.length > 0 && (
+                      <TouchableOpacity onPress={() => { setEmail(''); setResult(null); }}>
+                        <Ionicons name="close-circle" size={16} color="#94A3B8" />
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                  {/* Autocomplete suggestions */}
+                  {showSuggestions && suggestions.length > 0 && (
+                    <View style={im.suggestionBox}>
+                      {suggestions.map((item, i) => (
+                        <TouchableOpacity
+                          key={item.email}
+                          style={[im.suggestionItem, i < suggestions.length - 1 && im.suggestionDivider]}
+                          onPress={() => selectSuggestion(item)}
+                          activeOpacity={0.7}
+                        >
+                          <View style={im.suggestionAvatar}>
+                            <Text style={im.suggestionAvatarText}>
+                              {(item.full_name ?? item.email)[0].toUpperCase()}
+                            </Text>
+                          </View>
+                          <View style={{ flex: 1 }}>
+                            <Text style={im.suggestionName}>{item.full_name || 'Unknown'}</Text>
+                            <Text style={im.suggestionEmail}>{item.email}</Text>
+                          </View>
+                          <Ionicons name="chevron-forward" size={14} color="#A8998A" />
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  )}
+
+                  {result === 'notfound' && (
+                    <View style={im.inviteBox}>
+                      <Ionicons name="mail-outline" size={14} color="#B5905B" />
+                      <Text style={im.inviteText}>
+                        No account with that email yet. Invite them as {role} and the
+                        role is applied the moment they sign up.
+                      </Text>
+                    </View>
                   )}
                 </View>
-                {/* Autocomplete suggestions */}
-                {showSuggestions && suggestions.length > 0 && (
-                  <View style={im.suggestionBox}>
-                    {suggestions.map((item, i) => (
-                      <TouchableOpacity
-                        key={item.email}
-                        style={[im.suggestionItem, i < suggestions.length - 1 && im.suggestionDivider]}
-                        onPress={() => selectSuggestion(item)}
-                        activeOpacity={0.7}
-                      >
-                        <View style={im.suggestionAvatar}>
-                          <Text style={im.suggestionAvatarText}>
-                            {(item.full_name ?? item.email)[0].toUpperCase()}
-                          </Text>
-                        </View>
-                        <View style={{ flex: 1 }}>
-                          <Text style={im.suggestionName}>{item.full_name || 'Unknown'}</Text>
-                          <Text style={im.suggestionEmail}>{item.email}</Text>
-                        </View>
-                        <Ionicons name="chevron-forward" size={14} color="#A8998A" />
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                )}
 
-                {result === 'notfound' && (
-                  <View style={im.inviteBox}>
-                    <Ionicons name="mail-outline" size={14} color="#B5905B" />
-                    <Text style={im.inviteText}>
-                      No account with that email yet. Invite them as {role} and the
-                      role is applied the moment they sign up.
-                    </Text>
+                {/* Role selector */}
+                <View style={im.fieldGroup}>
+                  <Text style={im.fieldLabel}>ASSIGN ROLE</Text>
+                  <View style={im.roleRow}>
+                    {(['staff', 'admin'] as ('admin' | 'staff')[]).map(r => {
+                      const rrc = ROLE_CONFIG[r];
+                      const isActive = role === r;
+                      return (
+                        <TouchableOpacity
+                          key={r}
+                          style={[
+                            im.roleCard,
+                            isActive && { backgroundColor: rrc.pillBg, borderColor: rrc.pillBorder },
+                          ]}
+                          onPress={() => setRole(r)}
+                          activeOpacity={0.75}
+                        >
+                          <View style={im.roleCardInner}>
+                            {isActive && (
+                              <View style={[im.roleCheck, { backgroundColor: rrc.pillBorder }]}>
+                                <Ionicons name="checkmark" size={11} color={rrc.pillText} />
+                              </View>
+                            )}
+                            <LinearGradient
+                              colors={isActive ? rrc.gradient : ['#E8E0D0', '#D5CCC0']}
+                              style={im.roleIconBg}
+                              start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+                            >
+                              <Ionicons
+                                name={r === 'admin' ? 'shield-checkmark' : 'person'}
+                                size={20}
+                                color="#FFFFFF"
+                              />
+                            </LinearGradient>
+                            <Text style={[im.roleCardTitle, isActive && { color: rrc.pillText }]}>
+                              {rrc.label}
+                            </Text>
+                            <Text style={im.roleCardDesc}>
+                              {r === 'admin' ? 'Full access' : 'Standard access'}
+                            </Text>
+                          </View>
+                        </TouchableOpacity>
+                      );
+                    })}
                   </View>
-                )}
-              </View>
-
-              {/* Role selector */}
-              <View style={im.fieldGroup}>
-                <Text style={im.fieldLabel}>ASSIGN ROLE</Text>
-                <View style={im.roleRow}>
-                  {(['staff', 'admin'] as ('admin' | 'staff')[]).map(r => {
-                    const rrc = ROLE_CONFIG[r];
-                    const isActive = role === r;
-                    return (
-                      <TouchableOpacity
-                        key={r}
-                        style={[
-                          im.roleCard,
-                          isActive && { backgroundColor: rrc.pillBg, borderColor: rrc.pillBorder },
-                        ]}
-                        onPress={() => setRole(r)}
-                        activeOpacity={0.75}
-                      >
-                        <View style={im.roleCardInner}>
-                          {isActive && (
-                            <View style={[im.roleCheck, { backgroundColor: rrc.pillBorder }]}>
-                              <Ionicons name="checkmark" size={11} color={rrc.pillText} />
-                            </View>
-                          )}
-                          <LinearGradient
-                            colors={isActive ? rrc.gradient : ['#E8E0D0', '#D5CCC0']}
-                            style={im.roleIconBg}
-                            start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-                          >
-                            <Ionicons
-                              name={r === 'admin' ? 'shield-checkmark' : 'person'}
-                              size={20}
-                              color="#FFFFFF"
-                            />
-                          </LinearGradient>
-                          <Text style={[im.roleCardTitle, isActive && { color: rrc.pillText }]}>
-                            {rrc.label}
-                          </Text>
-                          <Text style={im.roleCardDesc}>
-                            {r === 'admin' ? 'Full access' : 'Standard access'}
-                          </Text>
-                        </View>
-                      </TouchableOpacity>
-                    );
-                  })}
                 </View>
-              </View>
 
-              {/* Action buttons */}
-              <View style={im.actionRow}>
-                <TouchableOpacity style={im.cancelBtn} onPress={handleClose} activeOpacity={0.75}>
-                  <Text style={im.cancelText}>Cancel</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[im.primaryBtn, { flex: 2 }, !email.trim() && im.primaryBtnDisabled]}
-                  onPress={result === 'notfound' ? handleInvite : handleAssign}
-                  disabled={loading || !email.trim()}
-                  activeOpacity={0.85}
-                >
-                  {loading
-                    ? <ActivityIndicator color="#FFFFFF" size="small" />
-                    : <>
-                        <Ionicons
-                          name={result === 'notfound' ? 'mail-outline' : 'person-add-outline'}
-                          size={16} color="#FFFFFF"
-                        />
-                        <Text style={im.primaryBtnText}>
-                          {result === 'notfound' ? 'Send Invite' : 'Assign Role'}
-                        </Text>
-                      </>
-                  }
-                </TouchableOpacity>
-              </View>
-            </>
-          )}
+                {/* Action buttons */}
+                <View style={im.actionRow}>
+                  <TouchableOpacity style={im.cancelBtn} onPress={handleClose} activeOpacity={0.75}>
+                    <Text style={im.cancelText}>Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[im.primaryBtn, { flex: 2 }, !email.trim() && im.primaryBtnDisabled]}
+                    onPress={result === 'notfound' ? handleInvite : handleAssign}
+                    disabled={loading || !email.trim()}
+                    activeOpacity={0.85}
+                  >
+                    {loading
+                      ? <ActivityIndicator color="#FFFFFF" size="small" />
+                      : <>
+                          <Ionicons
+                            name={result === 'notfound' ? 'mail-outline' : 'person-add-outline'}
+                            size={16} color="#FFFFFF"
+                          />
+                          <Text style={im.primaryBtnText}>
+                            {result === 'notfound' ? 'Send Invite' : 'Assign Role'}
+                          </Text>
+                        </>
+                    }
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
+          </ScrollView>
         </Pressable>
       </Pressable>
     </Modal>
@@ -375,11 +382,13 @@ const im = StyleSheet.create({
   sheet: {
     backgroundColor: '#FFFFFF',
     borderTopLeftRadius: 28, borderTopRightRadius: 28,
-    padding: 24, paddingTop: 12,
+    paddingTop: 12,
     shadowColor: '#3A3131', shadowOffset: { width: 0, height: -6 },
     shadowOpacity: 0.1, shadowRadius: 20, elevation: 16,
-    gap: 18,
   },
+  // The padding and the spacing move in here with the children: on the box they
+  // would sit outside the scroller and the last field could not reach the top.
+  sheetScroll: { padding: 24, paddingTop: 12, gap: 18 },
   handle: {
     width: 40, height: 4, borderRadius: 2,
     backgroundColor: '#E8E0D0',

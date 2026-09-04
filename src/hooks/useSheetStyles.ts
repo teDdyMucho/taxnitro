@@ -1,4 +1,4 @@
-import { ViewStyle } from 'react-native';
+import { Platform, ViewStyle } from 'react-native';
 import { useResponsive } from './useResponsive';
 import { DialogWidth } from '../constants/layout';
 
@@ -33,13 +33,25 @@ export function useSheetStyles(size: SheetSize = 'md'): { overlay: ViewStyle; sh
         borderTopLeftRadius: 24,
         borderTopRightRadius: 24,
         maxHeight: '90%',
+        // The cap and the means to see past it belong together. Without this a
+        // dialog taller than the screen loses its bottom — buttons and all —
+        // and there is nothing to scroll, which reads as scrolling being broken.
+        ...(Platform.OS === 'web'
+          ? ({ overflowY: 'auto' } as unknown as ViewStyle)
+          : null),
       },
     };
   }
 
   // Phone / tablet: keep the bottom-sheet look.
+  //
+  // Capped for the same reason as the dialog. Uncapped, a sheet taller than the
+  // phone simply runs off the bottom, taking its buttons with it, and a sheet
+  // cannot be scrolled or dragged back up. A View does not scroll on iOS or
+  // Android whatever overflow it is given, so anything tall enough to reach this
+  // cap needs a ScrollView of its own inside.
   return {
     overlay: { justifyContent: 'flex-end' },
-    sheet: { width: '100%' },
+    sheet: { width: '100%', maxHeight: '90%' },
   };
 }
