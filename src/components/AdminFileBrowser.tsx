@@ -33,6 +33,7 @@ import {
   moveSubfolderToFolder, Subfolder,
   subfolderPath, descendantIds,
 } from '../db/subfolders';
+import { useWheelScroll } from '../hooks/useWheelScroll';
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
@@ -149,6 +150,10 @@ export function AdminFileBrowser({ visible, onClose }: Props) {
 
   const [nav, setNav]     = useState<NavLevel>({ kind: 'categories' });
   const [loading, setLoading] = useState(false);
+  // Sideways strips a mouse wheel should move. Only one subfolder bar is on
+  // screen at a time, so the two places it is drawn can share a ref.
+  const subBarRef    = useWheelScroll();
+  const filterBarRef = useWheelScroll();
 
   // Data per level
   const [catStats, setCatStats]     = useState<Record<string, { total: number; newCount: number }>>({});
@@ -607,7 +612,7 @@ export function AdminFileBrowser({ visible, onClose }: Props) {
       : null;
     return (
     <>
-    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={fb.subBar} contentContainerStyle={fb.subBarContent}>
+    <ScrollView ref={subBarRef} horizontal showsHorizontalScrollIndicator={false} style={fb.subBar} contentContainerStyle={fb.subBarContent}>
       {withFileFilters && ([
         { id: 'all',  label: 'All Files', icon: 'albums-outline' as const },
         { id: 'none', label: 'Unfiled',   icon: 'file-tray-outline' as const },
@@ -892,7 +897,7 @@ export function AdminFileBrowser({ visible, onClose }: Props) {
         {renderSubfolderBar(true)}
 
         {/* Filter tabs */}
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={fb.filterBar} contentContainerStyle={fb.filterBarContent}>
+        <ScrollView ref={filterBarRef} horizontal showsHorizontalScrollIndicator={false} style={fb.filterBar} contentContainerStyle={fb.filterBarContent}>
           {([
             { key: 'all',      label: 'All',      color: '#E8B923' },
             { key: 'rejected', label: 'Rejected', color: '#EF4444' },

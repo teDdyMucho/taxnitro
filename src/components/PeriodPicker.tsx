@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-nati
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../constants/colors';
 import { formatMonthLabel } from '../db/requirements';
+import { useWheelScroll } from '../hooks/useWheelScroll';
 
 // Which month a document is about.
 //
@@ -37,13 +38,14 @@ export function PeriodPicker({ value, onChange, months = 15, hint }: {
   hint?: string;
 }) {
   const options = useMemo(() => recentMonths(months), [months]);
+  const rowRef = useWheelScroll();   // a mouse wheel moves the row too
 
   return (
     <View>
       <Text style={s.hint}>
         {hint ?? 'Which month is this for? Not when you are sending it — the month it covers.'}
       </Text>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.row}>
+      <ScrollView ref={rowRef} horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.row}>
         {options.map((m, i) => {
           const on = m === value;
           return (

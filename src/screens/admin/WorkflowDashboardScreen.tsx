@@ -19,6 +19,7 @@ import { ProcessorScreen } from './workflow/ProcessorScreen';
 import { ReviewerScreen } from './workflow/ReviewerScreen';
 import { ReprocessorScreen } from './workflow/ReprocessorScreen';
 import { ReportSenderScreen } from './workflow/ReportSenderScreen';
+import { useWheelScroll } from '../../hooks/useWheelScroll';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -61,6 +62,14 @@ export function WorkflowDashboardScreen() {
   const [deleting, setDeleting] = useState(false);
   const [clients, setClients] = useState<Profile[]>([]);
   const [staff, setStaff] = useState<Profile[]>([]);
+  // Every sideways strip here, so a mouse wheel moves each one — the client
+  // picker most of all, which runs past the edge once there are a few clients.
+  const monthBarRef     = useWheelScroll();
+  const pipelineBarRef  = useWheelScroll();
+  const clientPickRef   = useWheelScroll();
+  const monthPickRef    = useWheelScroll();
+  const processorPickRef = useWheelScroll();
+  const reviewerPickRef = useWheelScroll();
   const [newClient, setNewClient] = useState<Profile | null>(null);
   const [newMonth, setNewMonth] = useState(currentMonth());
   const [newSoftware, setNewSoftware] = useState<AccountingSoftware>('QBO');
@@ -195,7 +204,7 @@ export function WorkflowDashboardScreen() {
       </LinearGradient>
 
       {/* ── Month picker ── */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.monthBar} contentContainerStyle={s.monthBarContent}>
+      <ScrollView ref={monthBarRef} horizontal showsHorizontalScrollIndicator={false} style={s.monthBar} contentContainerStyle={s.monthBarContent}>
         {MONTHS.map(m => (
           <TouchableOpacity key={m} style={[s.monthChip, m === month && s.monthChipActive]} onPress={() => setMonth(m)} activeOpacity={0.75}>
             <Text style={[s.monthChipText, m === month && s.monthChipTextActive]}>{formatMonth(m)}</Text>
@@ -204,7 +213,7 @@ export function WorkflowDashboardScreen() {
       </ScrollView>
 
       {/* ── Pipeline summary ── */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.pipelineBar} contentContainerStyle={s.pipelineBarContent}>
+      <ScrollView ref={pipelineBarRef} horizontal showsHorizontalScrollIndicator={false} style={s.pipelineBar} contentContainerStyle={s.pipelineBarContent}>
         {PIPELINE_STEPS.map(st => (
           <TouchableOpacity key={st} style={[s.pipelineCard, filterStatus === st && { borderColor: STATUS_COLOR[st], borderWidth: 2 }]} onPress={() => setFilterStatus(filterStatus === st ? 'all' : st)} activeOpacity={0.82}>
             <View style={[s.pipelineDot, { backgroundColor: STATUS_COLOR[st] }]} />
@@ -264,7 +273,7 @@ export function WorkflowDashboardScreen() {
                   <Ionicons name="lock-closed" size={13} color="#94A3B8" />
                 </View>
               ) : (
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12 }}>
+                <ScrollView ref={clientPickRef} horizontal showsHorizontalScrollIndicator style={{ marginBottom: 12 }}>
                   {clients.map(c => (
                     <TouchableOpacity key={c.id} style={[s.selectChip, newClient?.id === c.id && s.selectChipActive]} onPress={() => setNewClient(c)} activeOpacity={0.8}>
                       <Text style={[s.selectChipText, newClient?.id === c.id && { color: '#FFFFFF' }]} numberOfLines={1}>{c.full_name}</Text>
@@ -274,7 +283,7 @@ export function WorkflowDashboardScreen() {
               )}
               {/* Month */}
               <Text style={s.fieldLabel}>Month *</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12 }}>
+              <ScrollView ref={monthPickRef} horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12 }}>
                 {MONTHS.map(m => (
                   <TouchableOpacity key={m} style={[s.selectChip, newMonth === m && s.selectChipActive]} onPress={() => setNewMonth(m)} activeOpacity={0.8}>
                     <Text style={[s.selectChipText, newMonth === m && { color: '#FFFFFF' }]}>{formatMonth(m)}</Text>
@@ -292,7 +301,7 @@ export function WorkflowDashboardScreen() {
               </View>
               {/* Processor */}
               <Text style={s.fieldLabel}>Assign Processor</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12 }}>
+              <ScrollView ref={processorPickRef} horizontal showsHorizontalScrollIndicator style={{ marginBottom: 12 }}>
                 {staff.map(p => (
                   <TouchableOpacity key={p.id} style={[s.selectChip, newProcessor?.id === p.id && s.selectChipActive]} onPress={() => setNewProcessor(newProcessor?.id === p.id ? null : p)} activeOpacity={0.8}>
                     <Text style={[s.selectChipText, newProcessor?.id === p.id && { color: '#FFFFFF' }]} numberOfLines={1}>{p.full_name}</Text>
@@ -301,7 +310,7 @@ export function WorkflowDashboardScreen() {
               </ScrollView>
               {/* Reviewer */}
               <Text style={s.fieldLabel}>Assign Reviewer</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12 }}>
+              <ScrollView ref={reviewerPickRef} horizontal showsHorizontalScrollIndicator style={{ marginBottom: 12 }}>
                 {staff.map(p => (
                   <TouchableOpacity key={p.id} style={[s.selectChip, newReviewer?.id === p.id && s.selectChipActive]} onPress={() => setNewReviewer(newReviewer?.id === p.id ? null : p)} activeOpacity={0.8}>
                     <Text style={[s.selectChipText, newReviewer?.id === p.id && { color: '#FFFFFF' }]} numberOfLines={1}>{p.full_name}</Text>

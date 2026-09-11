@@ -11,6 +11,7 @@ import type { ClientDashboard } from '../../lib/clientDashboards';
 import { UeBarChart } from '../../components/ue/UeBarChart';
 import { UeGridTable, UeStatement } from '../../components/ue/UeTables';
 import { UeRoadmap } from '../../components/ue/UeRoadmap';
+import { useWheelScroll } from '../../hooks/useWheelScroll';
 import {
   MONTHS, LAST_ACTUAL, SCENARIOS, DEFAULT_ASSUMPTIONS, LEVERS, SHARED_INPUTS,
   RECOMMENDATIONS, buildForecast, buildModel, buildDashboard, historicalBasis,
@@ -69,6 +70,8 @@ export function ClientDashboardScreen({
   const [tab, setTab] = useState<TabKey>('dash');
   const [month, setMonth] = useState(7);
   const [assumptions, setAssumptions] = useState<Assumptions>(DEFAULT_ASSUMPTIONS);
+  const tabBarRef   = useWheelScroll();   // a mouse wheel moves these sideways strips
+  const monthRowRef = useWheelScroll();
 
   // One client's financials are a large module, and nobody needs them until
   // this screen opens — so the dashboard fetches its own on mount rather than
@@ -186,7 +189,7 @@ export function ClientDashboardScreen({
           </Pressable>
         )}
       </View>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.topBarTabs}>
+      <ScrollView ref={tabBarRef} horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.topBarTabs}>
         {tabs.map(navButton)}
       </ScrollView>
     </View>
@@ -278,7 +281,7 @@ export function ClientDashboardScreen({
             <Text style={s.preparedByNote}>Restated from client books</Text>
           </View>
         </View>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.monthRow}>
+        <ScrollView ref={monthRowRef} horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.monthRow}>
           {MONTHS.map((mo, i) => (
             <Pressable key={mo} onPress={() => setMonth(i)} style={[s.monthChip, month === i && s.monthChipOn]}>
               <Text style={[s.monthChipText, month === i && s.monthChipTextOn]}>{mo} 26</Text>
