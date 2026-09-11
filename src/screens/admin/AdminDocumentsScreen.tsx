@@ -388,6 +388,8 @@ const FOLDERS = [
   { key: 'tax_contracts',          label: 'Tax Contracts',  color: '#B5905B' },
   { key: 'tax_invoices',           label: 'Tax Invoices',   color: '#E8B923' },
   { key: 'tax_return_information', label: 'Tax Returns',    color: '#B5905B' },
+  { key: 'tax_prior_returns',      label: 'Previous Tax Returns',      color: '#E8B923' },
+  { key: 'tax_prior_transcripts',  label: 'Previous Year Transcripts', color: '#B5905B' },
   { key: 'bk_contracts',           label: 'BK Contracts',   color: '#2C2320' },
   { key: 'bk_invoices',            label: 'BK Invoices',    color: '#E8B923' },
   { key: 'bk_bank_accounts',       label: 'Bank Accounts',      color: '#2C2320' },
@@ -406,7 +408,7 @@ const FOLDERS = [
 // Filter dropdown grouped by category for a clean per-folder picker.
 const FILTER_GROUPS: { title: string; keys: string[] }[] = [
   { title: 'Quick',                     keys: ['all', 'pending'] },
-  { title: 'Tax Documents & Returns',   keys: ['tax_contracts', 'tax_invoices', 'tax_client_uploads', 'tax_additional_docs', 'tax_return_information'] },
+  { title: 'Tax Documents & Returns',   keys: ['tax_contracts', 'tax_invoices', 'tax_client_uploads', 'tax_additional_docs', 'tax_return_information', 'tax_prior_returns', 'tax_prior_transcripts'] },
   { title: 'Bookkeeping & Financials',  keys: ['bk_contracts', 'bk_invoices', 'bk_bank_accounts', 'bk_final_pnl', 'bk_mr_required_info', 'bk_mr_client_review', 'bk_mr_final_statements'] },
   { title: 'CFO Advisory',              keys: ['cfo_contracts', 'cfo_invoices', 'cfo_additional_docs', 'cfo_mr_required_info', 'cfo_mr_client_review', 'cfo_mr_final_statements'] },
 ];

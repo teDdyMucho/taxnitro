@@ -83,6 +83,8 @@ const TAX_FOLDERS: { key: string; label: string; icon: keyof typeof Ionicons.gly
   { key: 'tax_client_uploads',     label: 'Client Uploads',      icon: 'cloud-upload-outline' },
   { key: 'tax_additional_docs',    label: 'Additional Tax Docs', icon: 'folder-outline' },
   { key: 'tax_return_information', label: 'Tax Returns',         icon: 'information-circle-outline' },
+  { key: 'tax_prior_returns',      label: 'Previous Tax Returns',      icon: 'document-attach-outline' },
+  { key: 'tax_prior_transcripts',  label: 'Previous Year Transcripts', icon: 'reader-outline' },
 ];
 
 type UploadOption = {

@@ -100,6 +100,13 @@ const FOLDERS: RootFolder[] = [
       { key: 'tax_client_uploads',     label: 'Client Uploads',     icon: 'cloud-upload-outline',       color: '#E8B923', bg: 'rgba(232,185,35,0.15)'  },
       { key: 'tax_additional_docs',    label: 'Additional Tax Docs', icon: 'folder-outline',            color: '#E8B923', bg: 'rgba(232,185,35,0.15)' },
       { key: 'tax_return_information', label: 'Tax Returns',        icon: 'information-circle-outline', color: '#B5905B', bg: 'rgba(181,144,91,0.15)' },
+      {
+        key: 'tax_prior_years', label: 'Prior Years', icon: 'time-outline', color: '#E8B923', bg: 'rgba(232,185,35,0.15)',
+        children: [
+          { key: 'tax_prior_returns',     label: 'Previous Tax Returns',      icon: 'document-attach-outline', color: '#E8B923', bg: 'rgba(232,185,35,0.15)' },
+          { key: 'tax_prior_transcripts', label: 'Previous Year Transcripts', icon: 'reader-outline',          color: '#B5905B', bg: 'rgba(181,144,91,0.15)' },
+        ],
+      },
     ],
   },
   {

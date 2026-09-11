@@ -52,6 +52,7 @@ declare
   t text;
   folder_tables text[] := array[
     'tax_contracts','tax_invoices','tax_client_uploads','tax_additional_docs','tax_return_information',
+    'tax_prior_returns','tax_prior_transcripts',
     'bk_contracts','bk_invoices','bk_final_pnl','bk_mr_required_info','bk_mr_client_review','bk_mr_final_statements',
     'cfo_contracts','cfo_invoices','cfo_additional_docs','cfo_mr_required_info','cfo_mr_client_review','cfo_mr_final_statements'
   ];

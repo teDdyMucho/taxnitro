@@ -38,6 +38,8 @@ export const FOLDER_TABLES = [
   'tax_client_uploads',
   'tax_additional_docs',
   'tax_return_information',
+  'tax_prior_returns',
+  'tax_prior_transcripts',
   'bk_contracts',
   'bk_invoices',
   'bk_bank_accounts',

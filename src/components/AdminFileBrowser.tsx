@@ -48,6 +48,8 @@ const CATEGORIES = [
       { table: 'tax_client_uploads',     label: 'Client Uploads',    icon: 'cloud-upload-outline'       as const },
       { table: 'tax_additional_docs',   label: 'Additional Tax Docs', icon: 'folder-outline'          as const },
       { table: 'tax_return_information', label: 'Tax Returns',       icon: 'information-circle-outline' as const },
+      { table: 'tax_prior_returns',      label: 'Previous Tax Returns',      icon: 'document-attach-outline' as const },
+      { table: 'tax_prior_transcripts',  label: 'Previous Year Transcripts', icon: 'reader-outline'          as const },
     ],
   },
   {

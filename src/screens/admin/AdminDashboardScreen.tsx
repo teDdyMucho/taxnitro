@@ -21,6 +21,8 @@ const FOLDER_META: Record<string, { label: string; color: string; icon: string }
   tax_contracts:          { label: 'Tax Contracts',   color: '#B5905B', icon: 'document-text-outline'     },
   tax_invoices:           { label: 'Tax Invoices',    color: '#E8B923', icon: 'receipt-outline'            },
   tax_return_information: { label: 'Tax Returns',     color: '#B5905B', icon: 'information-circle-outline' },
+  tax_prior_returns:      { label: 'Previous Tax Returns',      color: '#E8B923', icon: 'document-attach-outline' },
+  tax_prior_transcripts:  { label: 'Previous Year Transcripts', color: '#B5905B', icon: 'reader-outline'          },
   bk_contracts:           { label: 'BK Contracts',    color: '#2C2320', icon: 'document-text-outline'     },
   bk_invoices:            { label: 'BK Invoices',     color: '#E8B923', icon: 'receipt-outline'            },
   bk_bank_accounts:       { label: 'Bank Accounts',      color: '#2C2320', icon: 'card-outline'           },

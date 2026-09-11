@@ -27,6 +27,8 @@ export const FOLDER_GROUPS: FolderGroup[] = [
     { key: 'tax_client_uploads',      label: 'Client Uploads' },
     { key: 'tax_additional_docs',     label: 'Additional Tax Docs' },
     { key: 'tax_return_information',  label: 'Tax Returns' },
+    { key: 'tax_prior_returns',       label: 'Previous Tax Returns' },
+    { key: 'tax_prior_transcripts',   label: 'Previous Year Transcripts' },
   ]},
   { title: 'Bookkeeping & Financials', folders: [
     { key: 'bk_contracts',            label: 'BK Contracts' },

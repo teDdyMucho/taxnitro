@@ -230,6 +230,8 @@ export const FOLDER_TABLE_LABELS: Record<string, string> = {
   tax_contracts:           'Tax Contracts',
   tax_invoices:            'Tax Invoices',
   tax_return_information:  'Tax Returns',
+  tax_prior_returns:       'Previous Tax Returns',
+  tax_prior_transcripts:   'Previous Year Transcripts',
   bk_contracts:            'BK Contracts',
   bk_invoices:             'BK Invoices',
   bk_bank_accounts:        'Bank Accounts',
