@@ -34,7 +34,7 @@ import { createCustomRequest } from '../../db/customRequests';
 import {
   useDownloadSelection, DownloadSelectionBar, DownloadNotice, SelectCheckbox,
 } from '../../components/DownloadSelectionBar';
-import { listSubfoldersForClient, renameSubfolder, subfolderPath, Subfolder } from '../../db/subfolders';
+import { listSubfoldersForClient, renameSubfolder, deleteSubfolder, descendantIds, subfolderPath, Subfolder } from '../../db/subfolders';
 import { dashboardForClient } from '../../lib/clientDashboards';
 import { ClientDetailsPanel } from '../../components/ClientDetailsPanel';
 import { AdminUploadModal } from '../../components/AdminUploadModal';
@@ -160,8 +160,10 @@ const rm = StyleSheet.create({
 
 // ── Delete Confirm Modal ──────────────────────────────────────────────────────
 
-function DeleteConfirmModal({ visible, name, onConfirm, onCancel }: {
+function DeleteConfirmModal({ visible, name, onConfirm, onCancel, title, note }: {
   visible: boolean; name: string; onConfirm: () => void; onCancel: () => void;
+  /** Defaults to a document; a folder says so, and says what happens to what is inside. */
+  title?: string; note?: string;
 }) {
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
@@ -170,8 +172,9 @@ function DeleteConfirmModal({ visible, name, onConfirm, onCancel }: {
           <View style={dm.iconWrap}>
             <Ionicons name="trash-outline" size={28} color={Colors.error} />
           </View>
-          <Text style={dm.title}>Delete Document?</Text>
+          <Text style={dm.title}>{title ?? 'Delete Document?'}</Text>
           <Text style={dm.sub} numberOfLines={2}>{name}</Text>
+          {!!note && <Text style={dm.sub}>{note}</Text>}
           <View style={dm.row}>
             <TouchableOpacity style={dm.cancelBtn} onPress={onCancel}>
               <Text style={dm.cancelText}>Cancel</Text>
@@ -301,6 +304,9 @@ export function ClientDocumentsScreen({
   // Renaming a subfolder from where it is actually browsed. Only the staff-made
   // ones can be renamed — the folder categories are the system's, not a client's.
   const [renameSub, setRenameSub] = useState<Subfolder | null>(null);
+  // Duplicate folders were arriving from the standard set, and there was no way
+  // to clear one from here — rename was the only thing a folder card offered.
+  const [deleteSub, setDeleteSub] = useState<Subfolder | null>(null);
   const insets = useSafeAreaInsets();
   const [documents, setDocuments] = useState<Document[]>([]);
   const [loading, setLoading] = useState(true);
@@ -495,6 +501,21 @@ export function ClientDocumentsScreen({
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
             <Ionicons name="pencil-outline" size={15} color={Colors.textMuted} />
+          </TouchableOpacity>
+        )}
+
+        {/* And deleted. The files inside are not: they return to the folder root. */}
+        {item.key.startsWith('sub:') && (
+          <TouchableOpacity
+            style={s.folderDlBtn}
+            onPress={() => {
+              const sf = subfolders.find(x => `sub:${x.id}` === item.key);
+              if (sf) setDeleteSub(sf);
+            }}
+            activeOpacity={0.75}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Ionicons name="trash-outline" size={15} color={Colors.error} />
           </TouchableOpacity>
         )}
 
@@ -714,6 +735,31 @@ export function ClientDocumentsScreen({
           if (row) setSubfolders(prev => prev.map(sf => (sf.id === row.id ? row : sf)));
         }}
         onCancel={() => setRenameSub(null)}
+      />
+
+      <DeleteConfirmModal
+        visible={!!deleteSub}
+        title="Delete folder?"
+        name={deleteSub?.name ?? ''}
+        note={
+          deleteSub && deleteSub.owner_email === null
+            ? 'This is an older shared folder, so it goes for every client. Any files inside come back to the folder they are in — nothing is deleted.'
+            : 'Any files inside come back to the folder they are in — nothing is deleted.'
+        }
+        onConfirm={async () => {
+          const target = deleteSub;
+          setDeleteSub(null);
+          if (!target) return;
+          // The database cascades to the folders inside it, so they go from the
+          // list too. The documents are reloaded because the ones that were filed
+          // in it now sit in the folder root.
+          const gone = new Set([target.id, ...descendantIds(subfolders, target.id)]);
+          if (await deleteSubfolder(target.id)) {
+            setSubfolders(prev => prev.filter(sf => !gone.has(sf.id)));
+            load(true);
+          }
+        }}
+        onCancel={() => setDeleteSub(null)}
       />
 
       <RenameModal

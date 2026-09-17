@@ -43,10 +43,14 @@ begin
   end if;
 
   foreach folder_name in array public.standard_subfolder_names() loop
+    -- Matched against the client's own folders AND the older shared ones
+    -- (owner_email null), because a client sees both. Checking only their own
+    -- put a second "Balance Sheet" beside a shared one that was already on
+    -- screen -- the duplicate folders Belly Jane reported on Adan Sanchez.
     if not exists (
       select 1 from public.custom_subfolders
       where parent_table = 'bk_mr_client_review'
-        and owner_email = client_email
+        and (owner_email = client_email or owner_email is null)
         and parent_subfolder_id is null
         and lower(name) = lower(folder_name)
     ) then
