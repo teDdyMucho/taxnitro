@@ -20,6 +20,7 @@ import { dashboardForClient } from '../lib/clientDashboards';
 import { AdminNavigator } from './AdminNavigator';
 import { getUnreadCount } from '../db/notifications';
 import { ClientUploadModal } from '../components/ClientUploadModal';
+import { ChatWidget } from '../components/ChatWidget';
 import { MonthlyQuestionnaireModal } from '../components/MonthlyQuestionnaireModal';
 import { isQuestionnaireDone } from '../db/questionnaire';
 import { monthOf } from '../db/requirements';
@@ -177,6 +178,8 @@ function WebLayout({ onLogout }: { onLogout: () => void }) {
           </View>
         </View>
 
+        <ChatWidget />
+
         <ClientUploadModal visible={uploadOpen} onClose={() => setUploadOpen(false)} />
       <MonthlyQuestionnaireModal
         visible={questionnaireOpen}
@@ -299,6 +302,8 @@ function WebLayout({ onLogout }: { onLogout: () => void }) {
           </View>
         </View>
       )}
+
+      <ChatWidget />
 
       <ClientUploadModal visible={uploadOpen} onClose={() => setUploadOpen(false)} />
       <MonthlyQuestionnaireModal
