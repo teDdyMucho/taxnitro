@@ -66,6 +66,7 @@ security definer
 set search_path = public
 as $$
 declare
+  v_exists   boolean;
   v_owner    uuid;
   v_email    text;
   v_me       uuid := auth.uid();
@@ -85,10 +86,15 @@ begin
   -- Who the file belongs to, and whether it is there at all. SECURITY DEFINER
   -- runs this as the owner, so the permission check below is the only thing
   -- standing between a caller and someone else's document — it is not optional.
-  execute format('select user_id, email from public.%I where id = $1', p_from)
-    into v_owner, v_email using p_id;
+  -- The `true` is a sentinel, and it is the whole point of this shape. EXECUTE
+  -- does not set FOUND -- the docs are explicit: "EXECUTE changes the output of
+  -- GET DIAGNOSTICS, but does not change FOUND" -- and FOUND starts out false in
+  -- every call. So `if not found` here was true no matter what, and refused
+  -- every single one. When no row matches, INTO leaves all targets null.
+  execute format('select true, user_id, email from public.%I where id = $1', p_from)
+    into v_exists, v_owner, v_email using p_id;
 
-  if not found then
+  if v_exists is not true then
     raise exception 'No such document in %', p_from;
   end if;
 

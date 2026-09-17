@@ -46,6 +46,7 @@ security definer
 set search_path = public
 as $$
 declare
+  v_exists   boolean;
   v_owner    uuid;
   v_email    text;
   v_me       uuid := auth.uid();
@@ -56,10 +57,15 @@ begin
     raise exception 'Not a folder: %', p_table;
   end if;
 
-  execute format('select user_id, email from public.%I where id = $1', p_table)
-    into v_owner, v_email using p_id;
+  -- The `true` is a sentinel, and it is the whole point of this shape. EXECUTE
+  -- does not set FOUND -- the docs are explicit: "EXECUTE changes the output of
+  -- GET DIAGNOSTICS, but does not change FOUND" -- and FOUND starts out false in
+  -- every call. So `if not found` here was true no matter what, and refused
+  -- every single one. When no row matches, INTO leaves all targets null.
+  execute format('select true, user_id, email from public.%I where id = $1', p_table)
+    into v_exists, v_owner, v_email using p_id;
 
-  if not found then
+  if v_exists is not true then
     raise exception 'That file is no longer there';
   end if;
 
