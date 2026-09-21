@@ -1,0 +1,54 @@
+import type { ClientNotes } from './clientSheets';
+
+// Strong Little Hands Daycare — FTG's working notes.
+//
+// Kept apart from the statements deliberately. These are drafts about the
+// client's own bookkeeping, and this module is imported only when a staff
+// member is viewing, so none of it reaches the client at all.
+
+export const STRONG_LITTLE_HANDS_DAYCARE_NOTES: ClientNotes = {
+  'TL;DR': [
+    [null, "Strong Little Hands Daycare", null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null],
+    [null, "Monthly / YTD Financial TL;DR  ·  prepared by Finance Therapy Group (FTG)", null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, "Industry", "Sustain focus (growing)", "Rebuild focus (declining)", "Staffing driver"],
+    [null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, "Jan 2026", null, "Behavioral / Mental Health", "keeping the clinician schedule full, driving client rebooking and retention, and optimizing the payer mix", "client rebooking and retention, filling open session slots, and clinician utilization", "clinician schedules to session volume"],
+    [null, "Period From:", "Jan 2026", "Period To:", "Aug 2026", null, null, null, null, null, null, null, null, null, null, "Feb 2026", null, "Childcare / Early Education", "enrollment and attendance, filling open classroom slots, and add-on program revenue", "enrollment, waitlist conversion, and classroom utilization / staff-to-child ratios", "staffing to enrollment and required staff-to-child ratios"],
+    [null, "Industry:", "Childcare / Early Education", null, null, null, null, null, null, null, null, null, null, null, null, "Mar 2026", null, "Healthcare / Medical Clinic", "patient visit volume, payer mix, and procedures per visit", "appointment fill rate, no-shows, and reimbursement/coding capture", "clinical staffing to patient visit volume"],
+    [null, "TL;DR - KEY HIGHLIGHTS  (Jan-Aug 2026)", null, null, null, null, null, null, null, null, null, null, null, null, null, "Apr 2026", null, "Wellness / Therapy / Spa", "keeping the calendar full, rebooking and memberships, and higher-value add-ons", "client rebooking, filling open slots, and the treatment/service mix", "practitioner hours to booking volume"],
+    [null, "Metric", "This Period", null, "% of Revenue / Note", null, null, null, null, null, null, null, null, null, null, "May 2026", null, "Education / Tutoring", "student enrollment, session attendance, and program mix", "enrollment, attendance, and instructor utilization", "instructor hours to enrolled sessions"],
+    [null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, "Jun 2026", null, "Professional Services", "billable utilization, new engagements, and rate realization", "the sales pipeline, billing cadence, and utilization", "team capacity to billable demand"],
+    [null, "Revenue", 76197.68, null, "-", null, null, null, null, null, null, null, null, null, null, "Jul 2026", null, "Other", "protecting revenue, controlling costs, and improving margin", "the top revenue drivers and largest cost lines", "staffing to activity volume"],
+    [null, "Gross Profit", 76197.68, null, 1, null, null, null, null, null, null, null, null, null, null, "Aug 2026", null, null, null, null, null],
+    [null, "Operating Expense", 29975.96, null, 0.393397, null, null, null, null, null, null, null, null, null, null, "Sep 2026", null, null, null, null, null],
+    [null, "Net Income (Loss)", 46221.72, null, 0.606603, null, null, null, null, null, null, null, null, null, null, "Oct 2026", null, null, null, null, null],
+    [null, "Ending Cash", 1124.78, null, "-", null, null, null, null, null, null, null, null, null, null, "Nov 2026", null, null, null, null, null],
+    [null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, "Dec 2026", null, null, null, null, null],
+    [null, "KEY RATIOS", null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null],
+    [null, "Ratio", "This Period", null, "Rationale", null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null],
+    [null, "Net Margin (%)", 0.606603, null, "Profit kept per $1 of revenue; strong.", null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null],
+    [null, "Cash to Expense Ratio", 0.300182, null, "Months of operating expense covered by cash on hand; under one month.", null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null],
+    [null, "Employee Expense Ratio", 0.221316, null, "Payroll-related cost as a share of sales; lean.", null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null],
+    [null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, "HELPER BLOCK - do not edit", null, null, null, null, null],
+    [null, "KEY DRIVERS", null, null, null, null, null, null, null, null, null, null, null, null, null, "Start col index", 13, null, null, null, null],
+    [null, "Revenue", "Revenue totaled $76,198 for the period.", null, null, null, null, null, null, null, null, null, null, null, null, "End col index", 20, null, null, null, null],
+    [null, "Labor", "Payroll and contract labour were 22.1% of revenue; contract labour $6,391, with no wages or payroll taxes recorded before Mar 2026.", null, null, null, null, null, null, null, null, null, null, null, null, "Months in period", 8, null, null, null, null],
+    [null, "Cost base", "Total operating expense $29,976 (39.3% of revenue).", null, null, null, null, null, null, null, null, null, null, null, null, "Prior start index", 5, null, null, null, null],
+    [null, "Fixed / occupancy", "Utilities and software ≈ $1,961 over the period. There is no rent, mortgage interest or other occupancy cost recorded anywhere in the ledger.", null, null, null, null, null, null, null, null, null, null, null, null, "Prior end index", 12, null, null, null, null],
+    [null, "Discretionary", "Vehicle, fuel, travel and meals ≈ $5,042 (6.6% of revenue) - expensed with no fixed asset and no business-use log behind them. Owner draws of $46,310 are the largest single use of cash.", null, null, null, null, null, null, null, null, null, null, null, null, "Prior period exists (2026 only - 2025 has no comparable data)", 0, null, null, null, null],
+    [null, "SUMMARY", null, null, null, null, null, null, null, null, null, null, null, null, null, "Balance sheet cap index (actuals end Aug 2026)", 20, null, null, null, null],
+    [null, "For Jan-Aug 2026, revenue was $76,198 and net income was $46,222 (60.7% margin). The period was profitable. Cash covers 0.3x of monthly OpEx and payroll is 22.1% of sales. Sustain momentum by enrollment and attendance, filling open classroom slots, and add-on program revenue. Payroll is the dominant cost lever; align staffing to enrollment and required staff-to-child ratios to protect margin.", null, null, null, null, null, null, null, null, null, null, null, null, null, "Line item", "Current", "Prior", null, null, null],
+    [null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, "Fee income (SLHD PL r8 + r31)", 76197.68, 0, null, null, null],
+    [null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, "Gross Profit (r9 + r31)", 76197.68, 0, null, null, null],
+    [null, "Basis note: Dec 2025 is the first part-month of trading, so 2025 carries no comparable monthly data and prior-period comparisons are suppressed. Fee income grew 3.9x between the lowest and highest month of Jan-Aug 2026 - use the trailing 3-month average on the Dashboard rather than any single month. Reported margin is an upper bound: no occupancy cost, fixed assets or depreciation are recorded.", null, null, null, null, null, null, null, null, null, null, null, null, null, "Total Expenses (r27 + r36)", 29975.96, 0, null, null, null],
+    [null, "RECOMMENDATIONS & ACTION PLAN", null, null, null, null, null, null, null, null, null, null, null, null, null, "Net Income (r38)", 46221.72, 0, null, null, null],
+    [null, "Area", "Finding", "Recommended Action", "Next-Period Target", "Forecast Impact", null, null, null, null, null, null, null, null, null, "Ending Cash (SLHD BS r11)", 1124.78, 0, null, null, null],
+    [null, "Revenue", "Revenue totaled $76,198 for the period.", "Sustain: enrollment and attendance, filling open classroom slots, and add-on program revenue.", "Sep 2026 onward: sustain the monthly run-rate", "Each 5% revenue lift ≈ $3,810 of additional gross profit.", null, null, null, null, null, null, null, null, null, "Payroll block + contract labour", 16863.78, 0, null, null, null],
+    [null, "Profitability / Net Margin", "Net margin 60.7%; profitable.", "Protect margin; reinvest selectively.", "Sep 2026 onward: net margin > 0%", "Sustaining margin builds cash reserve.", null, null, null, null, null, null, null, null, null, "Contract labour (r15)", 6391.02, null, null, null, null],
+    [null, "Operating Costs", "OpEx $29,976 (39.3% of revenue); payroll is the largest line.", "Hold OpEx growth below revenue growth.", "Sep 2026 onward: OpEx < revenue", "Payroll is the biggest line; align staffing to enrollment and required staff-to-child ratios.", null, null, null, null, null, null, null, null, null, "Utilities + apps & software (r25+r11)", 1961.24, null, null, null, null],
+    [null, "Liquidity (Cash / Expense)", "Cash covers 0.3x of monthly operating expense.", "Build cash reserve: time large outflows and tighten collections.", "Sep 2026 onward: keep > 1.5x monthly OpEx", "At the current run-rate, cash covers about 0.3 months of OpEx.", null, null, null, null, null, null, null, null, null, "Vehicle, fuel, travel & meals", 5041.96, null, null, null, null],
+    [null, "Employee Cost Ratio", "Payroll-related cost is 22.1% of sales.", "Labor cost is within a healthy range; hold staffing to demand.", "Sep 2026 onward: hold payroll near 22.1% of sales", "Each 1 pp reduction ≈ $762 saved per period.", null, null, null, null, null, null, null, null, null, null, null, null, null, null, null],
+    [null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null],
+    [null, "Live-linked to the SLHD PL and SLHD BS tabs. Set Period From / Period To above to change the reporting window. Sep-Dec 2026 on SLHD PL are provisions driven from the ASSUMPTIONS tab, not actuals. Dec 2025 is the first part-month of trading, so prior-period comparisons are suppressed.", null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null],
+  ],
+};
+
+export default STRONG_LITTLE_HANDS_DAYCARE_NOTES;

@@ -74,6 +74,12 @@ export interface ClientDashboard {
    * and leaves the scenario picker inert, which the Assumptions tab says plainly.
    */
   forecast: ForecastMode;
+  /**
+   * The last month their workbook has closed, 0-based — 6 is July, which is
+   * where every other client stands and what this falls back to. D&J Tropical
+   * Sno closes August and forecasts from September.
+   */
+  lastActual?: number;
 }
 
 /**
@@ -196,6 +202,105 @@ const FIRST_STEP_ROWS: RowMap = {
   draws: 108, equity: 111,
 };
 
+/**
+ * D & J Tropical Sno LLC.
+ *
+ * A cost-of-goods block ahead of the expenses, like 1st Step to Greatness, but
+ * the plainest one yet: a single revenue line, thirteen expense lines, and one
+ * labour row — Contract Labor — which is the whole of their payroll.
+ *
+ * Their balance sheet carries no credit cards, so that card is absent rather
+ * than reading nil against a row that does not exist. Their TOTAL INCOME card
+ * is revenue alone and TOTAL COST is cost of goods plus operating expenses,
+ * which is what headlineIncome and headlineExpense say below: Aug 2026 reads
+ * $11,682 and $9,692 here and on their own Dashboard.
+ *
+ * Their forecast is seasonal — an index on a peak-season run-rate, with food
+ * and contract labour priced as a share of the revenue that produces — so
+ * their figures come from their workbook.
+ */
+const DJ_TROPICAL_SNO_ROWS: RowMap = {
+  income: [33], totalIncome: 37,
+  headlineIncome: [37], headlineExpense: [43, 74],
+  payroll: [49],
+  opexFirst: 48, opexLast: 60, totalOpex: 74, grossProfit: 76,
+  netIncome: 77,
+  cash: 81, currentAssets: 84, currentLiabilities: 93,
+  draws: 98, equity: 103,
+};
+
+/**
+ * Strong Little Hands Daycare.
+ *
+ * STEER's shape on almost the same rows: two revenue lines, no cost-of-services
+ * block and no other income, with a payroll subtotal sitting among the expenses
+ * — row 45, "Total Payroll & Contract Labour", which their own TOTAL EXPENSES
+ * steps over. It is skipped here too, and the four rows it sums are the payroll
+ * block: wages, taxes, processing fees and the contractor line.
+ *
+ * No credit cards on their balance sheet, so that card is absent. Aug 2026
+ * reads $13,932 income against $3,564 of expense, a 74.4% margin — the three
+ * figures on their own Dashboard.
+ */
+const STRONG_LITTLE_HANDS_ROWS: RowMap = {
+  income: [33, 34], totalIncome: 35,
+  headlineIncome: [35], headlineExpense: [65],
+  payroll: [40, 41, 42, 43],
+  opexFirst: 40, opexLast: 60, opexSkip: [45], totalOpex: 65, grossProfit: 67,
+  netIncome: 68,
+  cash: 72, currentAssets: 74, currentLiabilities: 80,
+  draws: 88, equity: 92,
+};
+
+/**
+ * Tribal Indemnity, LLC.
+ *
+ * Four revenue lines into one total, a cost-of-services block that is nil every
+ * month so far, and a long operating-expense list — the shape 1st Step to
+ * Greatness has, without the other-income block.
+ *
+ * They employ nobody. There is no wages line, no payroll tax line: the work is
+ * bought in, so the payroll block here is their contracted labour — outside
+ * services, contract professional fees, and subcontractors within cost of
+ * services. That is the same reading D&J Tropical Sno gets, whose payroll is a
+ * single Contract Labor row, and it is what makes the payroll card and the days
+ * of cover mean anything for them.
+ *
+ * No credit cards on the balance sheet. Aug 2026 reads $15,798 income against
+ * $12,601 of cost at 20.2% — their own Dashboard's three figures.
+ */
+const TRIBAL_INDEMNITY_ROWS: RowMap = {
+  income: [33, 34, 35, 36], totalIncome: 37,
+  headlineIncome: [37], headlineExpense: [43, 74],
+  payroll: [41, 54, 63],
+  opexFirst: 48, opexLast: 73, totalOpex: 74, grossProfit: 76,
+  netIncome: 78,
+  cash: 82, currentAssets: 85, currentLiabilities: 94,
+  draws: 99, equity: 104,
+};
+
+/**
+ * Finance Therapy Group — FTG's own books.
+ *
+ * Read the same way a client's are, and worth saying why the numbers look as
+ * they do: the work is bought in, so their cost of service delivery is a single
+ * contract-labour row, and that row is the payroll block here. Their TOTAL
+ * EXPENSE card is that block plus operating expenses — $9,181 and $6,689 in
+ * Aug 2026, the $15,869 on their own Dashboard against $15,356 of revenue.
+ *
+ * Their balance sheet runs negative: cash is overdrawn and the cards carry
+ * $62,052, which is their position and not a reading error.
+ */
+const FTG_ROWS: RowMap = {
+  income: [33, 34, 35, 36], totalIncome: 37,
+  headlineIncome: [37], headlineExpense: [43, 74],
+  payroll: [40],
+  opexFirst: 48, opexLast: 67, totalOpex: 74, grossProfit: 76,
+  netIncome: 77,
+  cash: 81, currentAssets: 84, cards: 89, currentLiabilities: 93,
+  draws: 98, equity: 103,
+};
+
 interface Entry {
   /** The client's exact sign-in email(s), lower case. */
   emails: string[];
@@ -214,7 +319,15 @@ const ENTRIES: Entry[] = [
       load: () => import('../data/ueSheets').then(m => m.UE_SHEETS),
       loadNotes: () => import('../data/ueSheetsNotes').then(m => m.UE_NOTES),
       rows: UE_ROWS,
-      forecast: 'rebuild',
+      // Their own workbook's figures, as everyone else's are. They were rebuilt
+      // here while v2 forecast the way this model does. v4 does not: the
+      // rebuild's basis is a hard-coded Feb–Jul average, so it never sees
+      // August — their worst month by a distance — and ran 7% above their own
+      // revenue and 34% above their own net income. Staff would have been
+      // reading figures the workbook Paul sends them does not contain.
+      forecast: 'workbook',
+      // v4 closes August; the forecast runs Sep–Dec.
+      lastActual: 7,
     },
   },
   {
@@ -270,6 +383,71 @@ const ENTRIES: Entry[] = [
       loadNotes: () => import('../data/battleProtectionSheetsNotes').then(m => m.BATTLE_PROTECTION_NOTES),
       rows: BATTLE_PROTECTION_ROWS,
       forecast: 'workbook',
+    },
+  },
+  {
+    emails: ['financetherapygroup@gmail.com'],
+    dashboard: {
+      key: 'finance-therapy-group',
+      label: 'Financial Dashboard',
+      name: 'FINANCE THERAPY GROUP',
+      subtitle: 'Practice accounts',
+      logo: require('../../assets/main-logo.png'),
+      load: () => import('../data/financeTherapyGroupSheets').then(m => m.FINANCE_THERAPY_GROUP_SHEETS),
+      loadNotes: () => import('../data/financeTherapyGroupSheetsNotes').then(m => m.FINANCE_THERAPY_GROUP_NOTES),
+      rows: FTG_ROWS,
+      forecast: 'workbook',
+      // Their actuals run to August; the workbook forecasts Sep–Dec 2026.
+      lastActual: 7,
+    },
+  },
+  {
+    // TODO: Tribal Indemnity's sign-in email — no client account exists for
+    // them yet. Until one does and it is listed here, they have no dashboard.
+    emails: [],
+    dashboard: {
+      key: 'tribal-indemnity',
+      label: 'Financial Dashboard',
+      name: 'TRIBAL INDEMNITY',
+      subtitle: 'LLC',
+      logo: require('../../assets/clients/tribal-indemnity.png'),
+      load: () => import('../data/tribalIndemnitySheets').then(m => m.TRIBAL_INDEMNITY_SHEETS),
+      loadNotes: () => import('../data/tribalIndemnitySheetsNotes').then(m => m.TRIBAL_INDEMNITY_NOTES),
+      rows: TRIBAL_INDEMNITY_ROWS,
+      forecast: 'workbook',
+      // Their actuals run to August; the workbook forecasts Sep–Dec 2026.
+      lastActual: 7,
+    },
+  },
+  {
+    // TODO: Strong Little Hands Daycare's sign-in email, as above.
+    emails: [],
+    dashboard: {
+      key: 'strong-little-hands-daycare',
+      label: 'Financial Dashboard',
+      name: 'STRONG LITTLE HANDS',
+      subtitle: 'Daycare',
+      load: () => import('../data/strongLittleHandsDaycareSheets').then(m => m.STRONG_LITTLE_HANDS_DAYCARE_SHEETS),
+      loadNotes: () => import('../data/strongLittleHandsDaycareSheetsNotes').then(m => m.STRONG_LITTLE_HANDS_DAYCARE_NOTES),
+      rows: STRONG_LITTLE_HANDS_ROWS,
+      forecast: 'workbook',
+      // Their actuals run to August; the workbook forecasts Sep–Dec 2026.
+      lastActual: 7,
+    },
+  },
+  {
+    emails: ['support@tropicalsnonorthaz.com'],
+    dashboard: {
+      key: 'd-j-tropical-sno',
+      label: 'Financial Dashboard',
+      name: 'D & J TROPICAL SNO',
+      subtitle: 'LLC',
+      load: () => import('../data/dJTropicalSnoSheets').then(m => m.D_J_TROPICAL_SNO_SHEETS),
+      loadNotes: () => import('../data/dJTropicalSnoSheetsNotes').then(m => m.D_J_TROPICAL_SNO_NOTES),
+      rows: DJ_TROPICAL_SNO_ROWS,
+      forecast: 'workbook',
+      // Their actuals run to August; the workbook forecasts Sep–Dec 2026.
+      lastActual: 7,
     },
   },
   {

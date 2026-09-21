@@ -126,13 +126,16 @@ export function ClientDashboardScreen({
   // their Aug–Dec figures are taken as the workbook computed them and the
   // scenario controls are shown as inert rather than quietly doing nothing.
   const liveScenario = dashboard.forecast === 'rebuild';
+  // Where this client's actuals stop. Most stand at July; D&J Tropical Sno has
+  // closed August, and its figures must not be labelled a forecast.
+  const lastActual = dashboard.lastActual ?? LAST_ACTUAL;
   const fsr = useMemo(
-    () => (sheets ? buildForecast(sheets, assumptions, rows, dashboard.forecast) : null),
-    [sheets, assumptions, rows, dashboard.forecast]);
+    () => (sheets ? buildForecast(sheets, assumptions, rows, dashboard.forecast, lastActual) : null),
+    [sheets, assumptions, rows, dashboard.forecast, lastActual]);
   const model = useMemo(
     () => (sheets ? buildModel(sheets, assumptions, rows) : null), [sheets, assumptions, rows]);
   const dash = useMemo(
-    () => (fsr ? buildDashboard(fsr, month, rows) : null), [fsr, month, rows]);
+    () => (fsr ? buildDashboard(fsr, month, rows, lastActual) : null), [fsr, month, rows, lastActual]);
 
   if (!sheets || !fsr || !dash || !model) {
     return (
@@ -285,7 +288,7 @@ export function ClientDashboardScreen({
           {MONTHS.map((mo, i) => (
             <Pressable key={mo} onPress={() => setMonth(i)} style={[s.monthChip, month === i && s.monthChipOn]}>
               <Text style={[s.monthChipText, month === i && s.monthChipTextOn]}>{mo} 26</Text>
-              {i > LAST_ACTUAL && (
+              {i > lastActual && (
                 <Text style={[s.monthChipFc, month === i && s.monthChipFcOn]}>
                   {stated(fsr, rows.netIncome, i) ? 'forecast' : 'unavailable'}
                 </Text>
@@ -555,7 +558,7 @@ export function ClientDashboardScreen({
 
         <View style={s.panel}>
           <Text style={s.panelHead}>8 · Forecast outcome — live from FS-R</Text>
-          {forecastOutcome(fsr, rows).map(r => (
+          {forecastOutcome(fsr, rows, lastActual).map(r => (
             <View key={r.label} style={s.tRow}>
               <Text style={[s.tCell, r.strong && s.tStrong, { flex: 3 }]}>{r.label}</Text>
               <Text style={[s.tCell, s.tNum, r.strong && s.tStrong, { flex: 1.2 }]}>{money(r.amount)}</Text>
@@ -628,7 +631,7 @@ export function ClientDashboardScreen({
                     : 'Jan–Jul 2026 are booked actuals. Aug–Dec 2026 are forecast, shaded below, and are shown exactly as this client’s workbook computed them — the scenario picker does not move them.'}
                 </Text>
               </View>
-              <UeStatement rows={Object.values(fsr)} forecastFrom={LAST_ACTUAL} />
+              <UeStatement rows={Object.values(fsr)} forecastFrom={lastActual} />
             </View>
           </>
         );

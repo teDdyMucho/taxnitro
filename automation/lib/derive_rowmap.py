@@ -83,9 +83,21 @@ def derive(path, fs_r='FS-R'):
     revenue_head = find(rows, r'REVENUE', r'INCOME', before=total_income)
     income = named_between(rows, revenue_head, total_income)
 
-    total_cos = find(rows, r'TOTAL COST OF (SERVICES|GOODS SOLD)', before=total_opex)
+    # "TOTAL COST OF SERVICES" / "...GOODS SOLD" in most; FTG's own books say
+    # "TOTAL COST OF SERVICE DELIVERY". Missing it drops the whole block from
+    # the expense side — FTG's August would read $6,688 against the $15,869 on
+    # their own Dashboard — so anything that totals a cost-of block counts.
+    total_cos = (find(rows, r'TOTAL COST OF (SERVICES|GOODS SOLD)', before=total_opex)
+                 or find(rows, r'TOTAL COST OF .*', before=total_opex))
 
-    expenses_head = find(rows, r'EXPENSES?', after=(total_cos or total_income), before=total_opex)
+    # "EXPENSES" in six workbooks, "OPERATING EXPENSES" in D&J Tropical Sno's.
+    # The plain heading is looked for first and the longer one only if it is not
+    # there, so a workbook that carries both is read exactly as it was before.
+    expenses_head = (find(rows, r'EXPENSES?', after=(total_cos or total_income), before=total_opex)
+                     or find(rows, r'OPERATING EXPENSES?', after=(total_cos or total_income),
+                             before=total_opex))
+    if expenses_head is None:
+        raise ValueError(f'{os.path.basename(path)}: no EXPENSES heading before row {total_opex}')
     opex_rows = named_between(rows, expenses_head, total_opex)
     opex_first, opex_last = opex_rows[0], opex_rows[-1]
 
@@ -128,9 +140,14 @@ def derive(path, fs_r='FS-R'):
 
     # The balance sheet, below the income statement.
     bs = find(rows, r'BALANCE SHEET', after=net_income) or net_income
-    cash = find(rows, r'BANK ACCOUNTS', after=bs)
     current_assets = find(rows, r'TOTAL CURRENT ASSETS', after=bs)
-    cards = find(rows, r'CREDIT CARDS', after=bs)
+    # Most say "Bank Accounts"; D&J Tropical Sno names the accounts instead —
+    # "Cash & Bank (checking 0889 + savings 9310)". Again the plain one first.
+    cash = find(rows, r'BANK ACCOUNTS', after=bs) or find(
+        rows, r'.*CASH.*', after=bs, before=(current_assets or 10 ** 6))
+    # Plain "Credit Cards" in most; FTG names the cards — "Credit Cards (Amex,
+    # Midfirst, other cards)".
+    cards = find(rows, r'CREDIT CARDS', after=bs) or find(rows, r'.*CREDIT CARDS?.*', after=bs)
     current_liabs = find(rows, r'TOTAL CURRENT LIABILITIES', after=bs)
     equity = find(rows, r'TOTAL EQUITY', after=bs)
     draws = find(rows, r'.*(DRAW|PERSONAL EXPENSE|DISTRIBUTION).*', after=bs, before=equity or 10 ** 6)

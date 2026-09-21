@@ -24,6 +24,16 @@ export const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', '
 export const LAST_ACTUAL = 6;
 
 /**
+ * Which month a client's actuals run to, when they do not say.
+ *
+ * Six — July — is where the workbooks stood when this was written, and it was
+ * read as a fact about the app rather than about a workbook. D&J Tropical Sno
+ * closes August and forecasts from September, and calling their August a
+ * forecast would put a "not a closed month" notice over figures their own
+ * books have already settled. Clients that say nothing keep July.
+ */
+
+/**
  * Where each figure lives in one client's FS-R / FS-A.
  *
  * Read it off the workbook's own column B/C labels. Getting one of these wrong
@@ -86,23 +96,39 @@ export interface RowMap {
   netIncome: number;
   cash: number;
   currentAssets: number;
-  cards: number;
+  /**
+   * Credit cards. Absent where the balance sheet has no such line — D&J
+   * Tropical Sno carries none — and the card is left out rather than reading
+   * a nil balance against a row that is not there.
+   */
+  cards?: number;
   currentLiabilities: number;
   draws: number;
   equity: number;
 }
 
-/** Uniquely Enough Behavioral Health LLC. Verified against their v2 workbook. */
+/**
+ * Uniquely Enough Behavioral Health LLC. Verified against their v4 workbook.
+ *
+ * Re-read for v4, which is not numbered as v2 was: a third other-income line
+ * (Reward Income) and an extra expense row push everything below the expense
+ * block down by one or two. Every row from the expense total downwards moved,
+ * and a map left on v2's numbers would have read each figure off its
+ * neighbour — quietly, because both are numbers.
+ *
+ * Aug 2026 reads $49,909 income against $64,839 of expense, a $14,930 loss at
+ * -30% — the four figures on their own Dashboard.
+ */
 export const UE_ROWS: RowMap = {
   income: [33], growRow: 33, totalIncome: 34,
-  headlineIncome: [34, 66], headlineExpense: [60, 70],
+  headlineIncome: [34, 68], headlineExpense: [61, 72],
   payroll: [37, 38, 39, 40],
-  opexFirst: 37, opexLast: 59, totalOpex: 60, grossProfit: 62,
-  otherIncome: [64, 65], totalOtherIncome: 66,
-  otherExpense: [68, 69], totalOtherExpense: 70, netOther: 71,
-  netIncome: 72,
-  cash: 77, currentAssets: 78, cards: 85, currentLiabilities: 86,
-  draws: 91, equity: 94,
+  opexFirst: 37, opexLast: 60, totalOpex: 61, grossProfit: 63,
+  otherIncome: [65, 66, 67], totalOtherIncome: 68,
+  otherExpense: [70, 71], totalOtherExpense: 72, netOther: 73,
+  netIncome: 74,
+  cash: 79, currentAssets: 80, cards: 87, currentLiabilities: 88,
+  draws: 93, equity: 96,
 };
 
 /**
@@ -254,6 +280,7 @@ export function buildModel(sheets: ClientSheets, a: Assumptions, map: RowMap): M
  */
 export function buildForecast(
   sheets: ClientSheets, a: Assumptions, map: RowMap, mode: ForecastMode = 'rebuild',
+  lastActual: number = LAST_ACTUAL,
 ): Fsr {
   const R = derive(map);
 
@@ -283,8 +310,8 @@ export function buildForecast(
   const set = (row: number, mo: number, v: number) => { if (fsr[row]) fsr[row].y2026[mo] = v; };
   const get = (row: number, mo: number) => (fsr[row]?.y2026?.[mo] ?? 0) as number;
 
-  for (let mo = LAST_ACTUAL + 1; mo < 12; mo++) {
-    const n = mo - LAST_ACTUAL;                      // 1..5, the workbook's row-6 offset
+  for (let mo = lastActual + 1; mo < 12; mo++) {
+    const n = mo - lastActual;                       // 1..5, the workbook's row-6 offset
     set(growRow, mo, m.baseRev * Math.pow(1 + m.revGrowth, n) + m.revUplift);
     set(R.totalIncome, mo, get(growRow, mo));
     R.payroll.forEach(r => set(r, mo, avg(r) + m.addedPayroll * m.shares[r]));
@@ -395,7 +422,8 @@ export interface Dashboard {
   balanceCards: InsightCard[]; ratioCards: InsightCard[];
 }
 
-export function buildDashboard(f: Fsr, m: number, map: RowMap): Dashboard {
+export function buildDashboard(f: Fsr, m: number, map: RowMap,
+                               lastActual: number = LAST_ACTUAL): Dashboard {
   const R = derive(map);
   const inc = income26(R, f, m), exp = expense26(R, f, m);
   const pI = m === 0 ? income25(R, f, 11) : income26(R, f, m - 1);
@@ -484,7 +512,8 @@ export function buildDashboard(f: Fsr, m: number, map: RowMap): Dashboard {
     expenseComment = s;
   }
 
-  const cash = r26(f, R.cash, m), cards = r26(f, R.cards, m), equity = r26(f, R.equity, m);
+  const cash = r26(f, R.cash, m), equity = r26(f, R.equity, m);
+  const cards = R.cards ? r26(f, R.cards, m) : null;
   const pay = payrollOf(R, f, m);
   const ca = r26(f, R.currentAssets, m), cl = r26(f, R.currentLiabilities, m);
   const draws = -r26(f, R.draws, m);
@@ -493,7 +522,7 @@ export function buildDashboard(f: Fsr, m: number, map: RowMap): Dashboard {
 
   return {
     label,
-    isForecast: m > LAST_ACTUAL,
+    isForecast: m > lastActual,
     priorYearMonths: MONTHS.reduce(
       (n, _, i) => n + (Math.abs(income25(R, f, i)) > 0.5 ? 1 : 0), 0),
     available: stated(f, R.netIncome, m),
@@ -526,12 +555,12 @@ export function buildDashboard(f: Fsr, m: number, map: RowMap): Dashboard {
           ? 'That is under half a month — fund payroll and payroll taxes before any other spend.'
           : 'Hold at least 15 days of payroll as a floor.'),
       },
-      {
+      ...(R.cards && cards !== null ? [{
         title: 'Credit Cards', value: money(cards), sub: `Prior month ${money(prev(R.cards))}`,
         note: `Card balances are ${pct(div(cards, cash))} of cash on hand. ` + (div(cards, cash) > 0.25
           ? 'Pay down monthly to avoid interest.'
           : 'Comfortably covered — keep clearing the balance in full each month.'),
-      },
+      }] : []),
       {
         title: 'Total Equity', value: money(equity), sub: `Prior month ${money(prev(R.equity))}`,
         note: `Book equity after owner draws of ${money(draws)} YTD. ` + (equity > 0
@@ -661,11 +690,14 @@ export function appliedToForecast(m: Model) {
 }
 
 /** 8 · Forecast outcome — live from the rebuilt FS-R. */
-export function forecastOutcome(f: Fsr, map: RowMap) {
+export function forecastOutcome(f: Fsr, map: RowMap, lastActual: number = LAST_ACTUAL) {
+  // Named from where the actuals stop rather than written out, so a client who
+  // closes August is not told their August is still to come.
+  const booked = `Jan–${MONTHS[lastActual]}`, ahead = `${MONTHS[lastActual + 1]}–Dec`;
   return [
-    { label: 'Jan–Jul 2026 net income (actual, already booked)', amount: sumRange(f, map.netIncome, 0, LAST_ACTUAL), strong: false },
-    { label: 'Aug–Dec 2026 revenue (forecast)', amount: sumRange(f, map.totalIncome, LAST_ACTUAL + 1, 11), strong: false },
-    { label: 'Aug–Dec 2026 net income (forecast)', amount: sumRange(f, map.netIncome, LAST_ACTUAL + 1, 11), strong: false },
+    { label: `${booked} 2026 net income (actual, already booked)`, amount: sumRange(f, map.netIncome, 0, lastActual), strong: false },
+    { label: `${ahead} 2026 revenue (forecast)`, amount: sumRange(f, map.totalIncome, lastActual + 1, 11), strong: false },
+    { label: `${ahead} 2026 net income (forecast)`, amount: sumRange(f, map.netIncome, lastActual + 1, 11), strong: false },
     { label: 'FY2026 revenue (actual + forecast)', amount: sumRange(f, map.totalIncome, 0, 11), strong: true },
     { label: 'FY2026 net income (actual + forecast)', amount: sumRange(f, map.netIncome, 0, 11), strong: true },
   ];

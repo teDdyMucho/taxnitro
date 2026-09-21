@@ -7,7 +7,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Colors } from '../../constants/colors';
 import { getAllClients, type Profile } from '../../db/profiles';
-import { dashboardForClient, type ClientDashboard } from '../../lib/clientDashboards';
+import { allDashboards, dashboardForClient, type ClientDashboard } from '../../lib/clientDashboards';
 import { ClientDashboardScreen } from './ClientDashboardScreen';
 
 // Financial Reports — the clients whose dashboard has been built.
@@ -21,7 +21,15 @@ import { ClientDashboardScreen } from './ClientDashboardScreen';
 // dashboard, and you pick.
 
 interface WithDashboard {
-  client: Profile;
+  /**
+   * The client this dashboard belongs to, once they have a portal account.
+   *
+   * Null until then. A workbook usually arrives before the client is set up,
+   * and the report is finished and checked either way — so it is listed, opened
+   * and read here, and only the client's own view of it waits on the account.
+   * The row says so rather than leaving staff wondering where it went.
+   */
+  client: Profile | null;
   dashboard: ClientDashboard;
 }
 
@@ -40,9 +48,13 @@ export function FinancialReportsScreen({ onBack }: { onBack?: () => void }) {
     let live = true;
     getAllClients().then(clients => {
       if (!live) return;
-      const withDash = clients
-        .map(client => ({ client, dashboard: dashboardForClient(client) }))
-        .filter((r): r is WithDashboard => r.dashboard != null);
+      // Every dashboard that has been built, each matched to its client where
+      // one exists. Built from the dashboards rather than from the client list,
+      // which is what leaves room for a report whose client has no account yet.
+      const withDash: WithDashboard[] = allDashboards().map(dashboard => ({
+        dashboard,
+        client: clients.find(c => dashboardForClient(c)?.key === dashboard.key) ?? null,
+      }));
       setRows(withDash);
     });
     return () => { live = false; };
@@ -56,7 +68,7 @@ export function FinancialReportsScreen({ onBack }: { onBack?: () => void }) {
     );
   }
 
-  const open = rows.find(r => r.client.id === openId);
+  const open = rows.find(r => r.dashboard.key === openId);
   if (open) {
     // Staff and admin see the whole report, internal tabs included. Back always
     // returns to the list, because that is where it was opened from.
@@ -97,10 +109,10 @@ export function FinancialReportsScreen({ onBack }: { onBack?: () => void }) {
         ) : (
           rows.map(({ client, dashboard }) => (
             <TouchableOpacity
-              key={client.id}
+              key={dashboard.key}
               style={[s.card, wide && s.cardWide]}
               activeOpacity={0.85}
-              onPress={() => setOpenId(client.id)}
+              onPress={() => setOpenId(dashboard.key)}
             >
               {/*
                 The same motif behind every row: what the list is for, drawn at
@@ -137,12 +149,16 @@ export function FinancialReportsScreen({ onBack }: { onBack?: () => void }) {
                   start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
                   style={s.avatar}
                 >
-                  <Text style={s.avatarText}>{mkInitials(client.full_name)}</Text>
+                  <Text style={s.avatarText}>{mkInitials(client?.full_name || dashboard.name)}</Text>
                 </LinearGradient>
               )}
               <View style={{ flex: 1, minWidth: 0 }}>
-                <Text style={s.cardName} numberOfLines={1}>{client.full_name || 'Client'}</Text>
-                <Text style={s.cardMeta} numberOfLines={1}>{client.email}</Text>
+                <Text style={s.cardName} numberOfLines={1}>
+                  {client?.full_name || dashboard.name}
+                </Text>
+                <Text style={s.cardMeta} numberOfLines={1}>
+                  {client?.email ?? 'No portal account yet — staff view only'}
+                </Text>
               </View>
               <View style={s.pill}>
                 <Ionicons name="stats-chart-outline" size={13} color={Colors.primaryDeep} />
