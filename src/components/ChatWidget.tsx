@@ -49,10 +49,14 @@ function renderText(text: string, baseStyle: any, boldStyle: any) {
 }
 
 // What an empty conversation opens with — on first load and after a reset.
-const welcomeMessage = (): Message => ({
+// Staff get a different opening because they reach a different desk: they
+// report faults in the system, clients ask about their own documents.
+const welcomeMessage = (isStaff: boolean): Message => ({
   id: newId(),
   role: 'bot',
-  text: 'Hi! Ask me anything about your documents or your account.',
+  text: isStaff
+    ? 'Hi! Ask me how something works, or report a bug and I\'ll raise a ticket.'
+    : 'Hi! Ask me anything about your documents or your account.',
 });
 
 // What n8n answers with when the Webhook node is set to "Respond immediately"
@@ -101,10 +105,12 @@ export function ChatWidget() {
   const { width, height } = useWindowDimensions();
   const isNarrow = width < 480;
 
+  const isStaff = user?.role === 'staff' || user?.role === 'admin';
+
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
-  const [messages, setMessages] = useState<Message[]>(() => [welcomeMessage()]);
+  const [messages, setMessages] = useState<Message[]>(() => [welcomeMessage(isStaff)]);
 
   const scrollRef = useRef<ScrollView>(null);
   // One id per browser session, so the flow can keep conversation context.
@@ -121,8 +127,8 @@ export function ChatWidget() {
     if (sending) return;
     sessionRef.current = newId();
     setInput('');
-    setMessages([welcomeMessage()]);
-  }, [sending]);
+    setMessages([welcomeMessage(isStaff)]);
+  }, [sending, isStaff]);
 
   const send = useCallback(async () => {
     const text = input.trim();
@@ -146,6 +152,11 @@ export function ChatWidget() {
           userId: user?.id ?? null,
           email: user?.email ?? null,
           name: user?.name ?? null,
+          // Which support desk this belongs to. Staff and admin report faults
+          // in the system; clients ask about their own documents. The flow
+          // routes the ticket on this, so it decides which Slack channel and
+          // which set of procedures the assistant may read from.
+          role: user?.role ?? 'client',
           sentAt: new Date().toISOString(),
         }),
       });
@@ -212,7 +223,7 @@ export function ChatWidget() {
               <Ionicons name="chatbubble-ellipses" size={16} color="#3A3131" />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={s.headerTitle}>Assistant</Text>
+              <Text style={s.headerTitle}>{isStaff ? 'Support' : 'Assistant'}</Text>
               <Text style={s.headerSub}>Typically replies in a moment</Text>
             </View>
             <TouchableOpacity

@@ -8,6 +8,7 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { ChatWidget } from '../components/ChatWidget';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors } from '../constants/colors';
@@ -279,6 +280,8 @@ export function AdminNavigator({ onLogout }: { onLogout: () => void }) {
             </View>
           </View>
         )}
+
+        <ChatWidget />
       </View>
     );
   }
@@ -337,6 +340,8 @@ export function AdminNavigator({ onLogout }: { onLogout: () => void }) {
           })}
         </View>
       </View>
+
+      <ChatWidget />
     </View>
   );
 }

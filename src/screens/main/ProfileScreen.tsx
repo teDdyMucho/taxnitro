@@ -107,7 +107,7 @@ function EditProfileModal({
 }) {
   const [name, setName] = useState(currentName);
   const [loading, setLoading] = useState(false);
-  const { user } = useAuth();
+  const { user, refreshProfile } = useAuth();
 
   useEffect(() => { setName(currentName); }, [currentName]);
 
@@ -117,13 +117,34 @@ function EditProfileModal({
       return;
     }
     setLoading(true);
-    const { error } = await supabase
+    // .select() so the updated row comes back. Without it a write that matched
+    // no rows — the usual sign of a policy quietly filtering it out — returns
+    // success with nothing changed, which looks exactly like a save that worked.
+    const { data, error } = await supabase
       .from('profiles')
       .update({ full_name: name.trim() })
-      .eq('id', user!.id);
+      .eq('id', user!.id)
+      .select('id, full_name');
     setLoading(false);
-    if (error) { Alert.alert('Error', error.message); return; }
+
+    if (error) {
+      console.error('Edit profile failed:', error);
+      Alert.alert('Error', error.message);
+      return;
+    }
+    if (!data || data.length === 0) {
+      console.error('Edit profile matched no rows. id:', user!.id);
+      Alert.alert(
+        'Not saved',
+        'The change did not reach your profile. Please contact support.',
+      );
+      return;
+    }
     onSaved(name.trim());
+    // The name is shown from the auth profile all over the app — the sidebar,
+    // the greeting, the avatar initials. Without this the save looks to have
+    // done nothing everywhere except this screen.
+    await refreshProfile();
     onClose();
   };
 
