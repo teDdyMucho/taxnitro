@@ -20,7 +20,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import WebView from 'react-native-webview';
 import { Colors } from '../../constants/colors';
 import { StatusBadge } from '../../components/StatusBadge';
-import { Profile } from '../../db/profiles';
+import { Profile, ClientService } from '../../db/profiles';
 import { useAuth } from '../../context/AuthContext';
 import { useSheetStyles } from '../../hooks/useSheetStyles';
 import {
@@ -296,6 +296,22 @@ const rq = StyleSheet.create({
 
 // ── Main Screen ───────────────────────────────────────────────────────────────
 
+/**
+ * Which service a folder belongs to, read off its key. Staff-made subfolders
+ * and anything unrecognised return null, and show under every tab — there is
+ * nothing on them that says where they belong.
+ */
+function serviceOfFolderKey(key: string): ClientService | null {
+  if (key.startsWith('req:')) return key.split(':')[1] as ClientService;
+  if (key.startsWith('tbl:')) {
+    const t = key.slice(4);
+    if (t.startsWith('tax_')) return 'TAX';
+    if (t.startsWith('cfo_')) return 'CFO';
+    if (t.startsWith('bk_'))  return 'BK';
+  }
+  return null;
+}
+
 export function ClientDocumentsScreen({
   client, onBack, onOpenDashboard, openFolderKey = null, onFolderChange,
 }: Props) {
@@ -318,11 +334,20 @@ export function ClientDocumentsScreen({
   const [requestOpen, setRequestOpen] = useState(false);
   // null → the folder list; otherwise the folder being looked inside.
   const [activeFolderKey, setActiveFolder] = useState<string | null>(openFolderKey);
+  // Which service tab is showing, when the client is on more than one.
+  const [activeService, setActiveService] = useState<ClientService | null>(null);
   // One setter, so the parent is told every time — there is no way to change
   // the folder here and forget to report it.
   const setActiveFolderKey = useCallback((key: string | null) => {
     setActiveFolder(key);
     onFolderChange?.(key);
+    // Move the service tab to match the folder being opened, so closing it
+    // lands back on the tab that folder is listed under rather than on
+    // whichever service happened to be showing.
+    if (key) {
+      const svc = serviceOfFolderKey(key);
+      if (svc) setActiveService(svc);
+    }
   }, [onFolderChange]);
   // Staff can file a document into a subfolder from the upload or the file
   // browser. Those are real folders to the client, so they have to appear here
@@ -446,6 +471,30 @@ export function ClientDocumentsScreen({
     return [...buckets.values()].sort((a, b) => a.order - b.order || a.title.localeCompare(b.title));
   }, [documents, clientItems, subfolders]);
 
+  // All three tabs, always — a client can be given a service later, and the
+  // empty tab is where its folders will appear.
+  const serviceTabs = ['TAX', 'BK', 'CFO'] as ClientService[];
+
+  // Open on a service this client actually has, rather than always on TAX.
+  const defaultService = useMemo<ClientService>(() => {
+    const has = client.services?.length ? client.services : (['BK'] as ClientService[]);
+    return serviceTabs.find(s => has.includes(s)) ?? 'BK';
+  }, [client.services]);
+
+  // While a folder is open, the tab follows that folder's service — otherwise
+  // closing it would land on a tab the folder is not even listed under.
+  const shownService = activeService
+    ?? (activeFolderKey ? serviceOfFolderKey(activeFolderKey) : null)
+    ?? defaultService;
+
+  const visibleFolders = useMemo(() => {
+    return folders.filter(f => {
+      const svc = serviceOfFolderKey(f.key);
+      // Staff-made folders carry no service, so they show under every tab.
+      return svc === null || svc === shownService;
+    });
+  }, [folders, shownService]);
+
   const totalDocs   = documents.length;
   const openFolder  = folders.find(f => f.key === activeFolderKey) ?? null;
   const unreadIn    = (rows: DocRow[]) => rows.filter(d => d.status !== 'viewed').length;
@@ -466,71 +515,53 @@ export function ClientDocumentsScreen({
   }, [loading, folders, activeFolderKey]);
 
   const renderFolderCard = ({ item }: { item: FolderBucket }) => {
-    const unread = unreadIn(item.data);
-    const pct    = totalDocs > 0 ? (item.data.length / totalDocs) * 100 : 0;
+    const unread  = unreadIn(item.data);
+    const isOwn   = item.key.startsWith('sub:');
+    const subOf   = () => subfolders.find(x => `sub:${x.id}` === item.key);
     return (
-      <TouchableOpacity style={s.fCard} onPress={() => setActiveFolderKey(item.key)} activeOpacity={0.8}>
-        <View style={s.fIconBox}>
-          <Ionicons name={item.icon} size={24} color="#E8B923" />
-        </View>
-        <View style={{ flex: 1 }}>
-          <View style={s.fTitleRow}>
-            <Text style={s.fName} numberOfLines={1}>{item.title}</Text>
-            {unread > 0 && (
-              <View style={s.fBadge}><Text style={s.fBadgeText}>{unread}</Text></View>
-            )}
-          </View>
-          <Text style={s.fMeta}>
-            {item.data.length} document{item.data.length !== 1 ? 's' : ''}
-            {unread > 0 ? ` · ${unread} unread` : ' · All viewed'}
-          </Text>
-          <View style={s.miniBar}>
-            <View style={[s.miniBarFill, { width: `${pct}%` as any }]} />
-          </View>
+      <TouchableOpacity style={s.fTile} onPress={() => setActiveFolderKey(item.key)} activeOpacity={0.75}>
+        {/* A drawn folder rather than an icon in a box, as the design has it:
+            a tab across the top left, and the body below it. */}
+        <View style={s.folderArt}>
+          <View style={s.folderTab} />
+          <View style={s.folderBody} />
+          {unread > 0 && (
+            <View style={s.fTileBadge}><Text style={s.fTileBadgeText}>{unread}</Text></View>
+          )}
         </View>
 
-        {/* Staff-made folders can be renamed; the built-in categories cannot. */}
-        {item.key.startsWith('sub:') && (
+        <Text style={s.fTileName} numberOfLines={2}>{item.title}</Text>
+        <Text style={s.fTileMeta}>
+          {item.data.length} doc{item.data.length !== 1 ? 's' : ''}
+        </Text>
+
+        {/* Folder actions, shown under the name so the tile stays a tile. */}
+        <View style={s.fTileActions}>
+          {isOwn && (
+            <>
+              <TouchableOpacity
+                onPress={() => { const sf = subOf(); if (sf) setRenameSub(sf); }}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Ionicons name="pencil-outline" size={13} color={Colors.textMuted} />
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => { const sf = subOf(); if (sf) setDeleteSub(sf); }}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Ionicons name="trash-outline" size={13} color={Colors.error} />
+              </TouchableOpacity>
+            </>
+          )}
           <TouchableOpacity
-            style={s.folderDlBtn}
-            onPress={() => {
-              const sf = subfolders.find(x => `sub:${x.id}` === item.key);
-              if (sf) setRenameSub(sf);
-            }}
-            activeOpacity={0.75}
+            onPress={() => dl.download(item.data, `${clientSlug} — ${item.title}`)}
+            disabled={dl.busy}
+            style={dl.busy ? { opacity: 0.5 } : undefined}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
-            <Ionicons name="pencil-outline" size={15} color={Colors.textMuted} />
+            <Ionicons name="download-outline" size={14} color="#B5905B" />
           </TouchableOpacity>
-        )}
-
-        {/* And deleted. The files inside are not: they return to the folder root. */}
-        {item.key.startsWith('sub:') && (
-          <TouchableOpacity
-            style={s.folderDlBtn}
-            onPress={() => {
-              const sf = subfolders.find(x => `sub:${x.id}` === item.key);
-              if (sf) setDeleteSub(sf);
-            }}
-            activeOpacity={0.75}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          >
-            <Ionicons name="trash-outline" size={15} color={Colors.error} />
-          </TouchableOpacity>
-        )}
-
-        {/* Grab the whole folder without opening it. */}
-        <TouchableOpacity
-          style={[s.folderDlBtn, dl.busy && { opacity: 0.5 }]}
-          onPress={() => dl.download(item.data, `${clientSlug} — ${item.title}`)}
-          disabled={dl.busy}
-          activeOpacity={0.75}
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-        >
-          <Ionicons name="download-outline" size={16} color="#B5905B" />
-        </TouchableOpacity>
-
-        <Ionicons name="chevron-forward" size={17} color={Colors.textMuted} />
+        </View>
       </TouchableOpacity>
     );
   };
@@ -650,6 +681,26 @@ export function ClientDocumentsScreen({
         </View>
       </LinearGradient>
 
+      {/* Service tabs, sitting on the header like file dividers. Shown even
+          for a single service, because the tab also labels what is below it. */}
+      {!openFolder && (
+        <View style={s.tabBar}>
+          {serviceTabs.map(svc => {
+            const on = shownService === svc;
+            return (
+              <TouchableOpacity
+                key={svc}
+                onPress={() => setActiveService(svc)}
+                style={[s.tab, on ? s.tabOn : s.tabOff]}
+                activeOpacity={0.85}
+              >
+                <Text style={[s.tabText, on ? s.tabTextOn : s.tabTextOff]}>{svc}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      )}
+
       {loading ? (
         <View style={s.center}>
           <ActivityIndicator color={Colors.primary} size="large" />
@@ -680,9 +731,11 @@ export function ClientDocumentsScreen({
         ) : (
           /* Level 1 — a folder per document type the client uploaded under */
           <FlatList
-            data={folders}
+            data={visibleFolders}
             keyExtractor={f => f.key}
             renderItem={renderFolderCard}
+            numColumns={6}
+            columnWrapperStyle={s.fGridRow}
             contentContainerStyle={{ padding: 16, paddingBottom: 32 }}
             ListHeaderComponent={
               <>
@@ -708,9 +761,8 @@ export function ClientDocumentsScreen({
                 )}
               </>
             }
-            ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => load(true)} tintColor={Colors.primary} />}
-            ListEmptyComponent={<Text style={s.empty}>No documents for this client.</Text>}
+            ListEmptyComponent={<Text style={s.empty}>Nothing filed under {shownService} for this client.</Text>}
           />
         )
       )}
@@ -887,6 +939,102 @@ const s = StyleSheet.create({
 
   /* Folder cards — one per document type the client uploaded under.
      Mirrors the client's own Documents tab so both sides read the same. */
+  // ── Service tabs ──────────────────────────────────────
+  // They overlap the dark header above and meet the page below, so the chosen
+  // one reads as the front of a set of file dividers.
+  tabBar: {
+    flexDirection: 'row',
+    // Right-aligned, as the design places them.
+    justifyContent: 'flex-end',
+    gap: 4,
+    backgroundColor: '#3A3131',
+    paddingHorizontal: 40,
+  },
+  tab: {
+    minWidth: 110,
+    paddingVertical: 9,
+    paddingHorizontal: 22,
+    alignItems: 'center',
+    borderTopLeftRadius: 12,
+    borderTopRightRadius: 12,
+  },
+  tabOn:  { backgroundColor: Colors.bgDeep },
+  tabOff: { backgroundColor: '#C9A75C' },
+  tabText: { fontSize: 13, fontWeight: '800', letterSpacing: 0.6 },
+  tabTextOn:  { color: Colors.textPrimary },
+  tabTextOff: { color: '#3A3131' },
+
+  // ── Folder tiles ──────────────────────────────────────
+  // A multi-column FlatList cannot take an ItemSeparatorComponent, so the row
+  // spacing lives here.
+  fGridRow: { gap: 12, marginBottom: 14, justifyContent: 'flex-start' },
+  fTile: {
+    flex: 1,
+    maxWidth: 150,
+    minWidth: 0,
+    alignItems: 'center',
+    paddingVertical: 10,
+    gap: 4,
+  },
+  // The folder shape: a small tab sitting on a larger body.
+  folderArt: {
+    width: 96,
+    height: 74,
+    justifyContent: 'flex-end',
+  },
+  folderTab: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: 40,
+    height: 14,
+    backgroundColor: '#F6E4BE',
+    borderTopLeftRadius: 5,
+    borderTopRightRadius: 5,
+    borderWidth: 1,
+    borderBottomWidth: 0,
+    borderColor: '#D9B87A',
+  },
+  folderBody: {
+    width: '100%',
+    height: 62,
+    backgroundColor: '#FDF1D9',
+    borderRadius: 7,
+    borderTopLeftRadius: 2,
+    borderWidth: 1,
+    borderColor: '#D9B87A',
+  },
+  fTileBadge: {
+    position: 'absolute',
+    top: 8,
+    right: -4,
+    minWidth: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#E8B923',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 5,
+  },
+  fTileBadgeText: { color: '#3A3131', fontSize: 11, fontWeight: '800' },
+  fTileName: {
+    color: Colors.textPrimary,
+    fontSize: 13,
+    fontWeight: '600',
+    textAlign: 'center',
+    marginTop: 4,
+  },
+  fTileMeta: {
+    color: Colors.textMuted,
+    fontSize: 11,
+  },
+  fTileActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 2,
+  },
+
   fCard: {
     flexDirection: 'row',
     alignItems: 'center',

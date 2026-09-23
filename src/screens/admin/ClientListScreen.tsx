@@ -11,7 +11,7 @@ import { Colors } from '../../constants/colors';
 import { useAuth } from '../../context/AuthContext';
 import { useSheetStyles } from '../../hooks/useSheetStyles';
 import {
-  getAllClients, updateClientProfile, sendPasswordReset, Profile, ClientService,
+  getAllClients, updateClientProfile, sendPasswordReset, Profile, ClientService, AccountStatus,
 } from '../../db/profiles';
 import {
   getRequirementCountsForMonth, getFulfilledRequirements,
@@ -32,6 +32,20 @@ const SERVICE_LABEL: Record<ClientService, string> = {
   BK:  'Bookkeeping',
   TAX: 'TAX',
   CFO: 'CFO',
+};
+
+// How each account status looks on a card.
+const STATUS_LOOK: Record<AccountStatus, { label: string; bg: string; text: string }> = {
+  active: { label: 'ACTIVE', bg: '#DCFCE7', text: '#15803D' },
+  paused: { label: 'PAUSED', bg: '#FEF3C7', text: '#92400E' },
+  closed: { label: 'CLOSED', bg: '#FEE2E2', text: '#B91C1C' },
+};
+
+// Filter-button colours, matching the blocks down the side of the design.
+const SERVICE_FILTER_COLORS: Record<ClientService, { bg: string; text: string }> = {
+  TAX: { bg: '#D8CCB4', text: '#1C1713' },
+  BK:  { bg: '#A8A29A', text: '#1C1713' },
+  CFO: { bg: '#C9A75C', text: '#1C1713' },
 };
 
 const PLAN_COLORS: Record<string, { bg: string; text: string; border: string }> = {
@@ -588,7 +602,11 @@ function ManageModal({
   const sheet = useSheetStyles('md');
   const [name, setName]           = useState(client.full_name ?? '');
   const [plan, setPlan]           = useState(client.plan ?? 'Free');
-  const [active, setActive]       = useState(client.is_active ?? true);
+  // Rows written before account_status existed have none; an off client was
+  // paused, which is the reversible reading of it.
+  const [status, setStatus] = useState<AccountStatus>(
+    client.account_status ?? (client.is_active === false ? 'paused' : 'active'),
+  );
   const [services, setServices]   = useState<ClientService[]>(
     Array.isArray(client.services) && client.services.length > 0 ? client.services : ['BK']
   );
@@ -622,14 +640,18 @@ function ManageModal({
     }
     const banks = cleanBankAccounts(bankAccounts);
     setSaving(true);
+    // is_active is sent alongside the status so the two agree even where the
+    // database trigger that syncs them has not been applied yet.
+    const isActive = status === 'active';
     const ok = await updateClientProfile(client.id, {
-      full_name: name, plan, is_active: active, services, has_qbo_access: hasQbo,
+      full_name: name, plan, is_active: isActive, account_status: status,
+      services, has_qbo_access: hasQbo,
       bank_accounts: banks,
     });
     setSaving(false);
     if (ok) {
       showToast('Client updated successfully');
-      onSave({ ...client, full_name: name, plan, is_active: active, services, has_qbo_access: hasQbo, bank_accounts: banks });
+      onSave({ ...client, full_name: name, plan, is_active: isActive, account_status: status, services, has_qbo_access: hasQbo, bank_accounts: banks });
     } else {
       showToast('Failed to update client');
     }
@@ -676,12 +698,17 @@ function ManageModal({
             <View style={{ flex: 1, gap: 3 }}>
               <Text style={mm.clientName}>{client.full_name || 'Unnamed'}</Text>
               <Text style={mm.clientEmail}>{client.email}</Text>
-              <View style={[mm.statusBadge, active ? mm.statusBadgeActive : mm.statusBadgeInactive]}>
-                <View style={[mm.statusDot, { backgroundColor: active ? '#22C55E' : Colors.error }]} />
-                <Text style={[mm.statusText, { color: active ? '#22C55E' : Colors.error }]}>
-                  {active ? 'Active' : 'Deactivated'}
-                </Text>
-              </View>
+              {(() => {
+                const look = STATUS_LOOK[status];
+                return (
+                  <View style={[mm.statusBadge, { backgroundColor: look.bg }]}>
+                    <View style={[mm.statusDot, { backgroundColor: look.text }]} />
+                    <Text style={[mm.statusText, { color: look.text }]}>
+                      {look.label.charAt(0) + look.label.slice(1).toLowerCase()}
+                    </Text>
+                  </View>
+                );
+              })()}
             </View>
           </View>
 
@@ -769,23 +796,27 @@ function ManageModal({
             {/* Status */}
             <View style={mm.field}>
               <Text style={mm.label}>Account Status</Text>
+              {/* Three states, because a pause and a cancellation are not the
+                  same thing: paused clients come back, closed ones do not. */}
               <View style={mm.toggleRow}>
-                <TouchableOpacity
-                  style={[mm.toggleBtn, active && mm.toggleBtnActive]}
-                  onPress={() => setActive(true)}
-                  activeOpacity={0.75}
-                >
-                  <Ionicons name="checkmark-circle-outline" size={16} color={active ? '#22C55E' : Colors.textMuted} />
-                  <Text style={[mm.toggleText, active && { color: '#22C55E' }]}>Active</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[mm.toggleBtn, !active && mm.toggleBtnDanger]}
-                  onPress={() => setActive(false)}
-                  activeOpacity={0.75}
-                >
-                  <Ionicons name="ban-outline" size={16} color={!active ? Colors.error : Colors.textMuted} />
-                  <Text style={[mm.toggleText, !active && { color: Colors.error }]}>Deactivated</Text>
-                </TouchableOpacity>
+                {([
+                  { key: 'active' as const, label: 'Active', icon: 'checkmark-circle-outline' as const, tint: '#22C55E' },
+                  { key: 'paused' as const, label: 'Paused', icon: 'pause-circle-outline'    as const, tint: Colors.primary },
+                  { key: 'closed' as const, label: 'Closed', icon: 'ban-outline'             as const, tint: Colors.error },
+                ]).map(opt => {
+                  const on = status === opt.key;
+                  return (
+                    <TouchableOpacity
+                      key={opt.key}
+                      style={[mm.toggleBtn, on && { borderColor: opt.tint, backgroundColor: opt.tint + '18' }]}
+                      onPress={() => setStatus(opt.key)}
+                      activeOpacity={0.75}
+                    >
+                      <Ionicons name={opt.icon} size={16} color={on ? opt.tint : Colors.textMuted} />
+                      <Text style={[mm.toggleText, on && { color: opt.tint }]}>{opt.label}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
               </View>
             </View>
 
@@ -1229,6 +1260,12 @@ export function ClientListScreen({ onSelectClient }: Props) {
   const [clients, setClients]       = useState<Profile[]>([]);
   const [reqCounts, setReqCounts]   = useState<Record<string, number>>({});
   const [query, setQuery]           = useState('');
+  // Which service the list is narrowed to, or null for all of them.
+  const [svcFilter, setSvcFilter]   = useState<ClientService | null>(null);
+  // The counts above the list double as a filter on where the subscription
+  // stands.
+  type StatKey = 'all' | AccountStatus;
+  const [statFilter, setStatFilter] = useState<StatKey>('all');
   const [loading, setLoading]       = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [managing, setManaging]     = useState<Profile | null>(null);
@@ -1264,91 +1301,88 @@ export function ClientListScreen({ onSelectClient }: Props) {
 
   useEffect(() => { if (!authLoading) load(); }, [authLoading]);
 
-  const filtered = query.trim()
-    ? clients.filter(c =>
-        c.full_name?.toLowerCase().includes(query.toLowerCase()) ||
-        c.email?.toLowerCase().includes(query.toLowerCase())
-      )
-    : clients;
+  // Rows written before account_status existed have none; they were all
+  // current at the time, so they read as active.
+  const statusOf = (c: Profile): AccountStatus =>
+    c.account_status ?? (c.is_active ? 'active' : 'paused');
 
-  const activeCount   = clients.filter(c => c.is_active).length;
-  const inactiveCount = clients.length - activeCount;
+  const matchesStat = (c: Profile, key: StatKey) =>
+    key === 'all' || statusOf(c) === key;
+
+  // Search and the service filter narrow the same list, in that order.
+  // A client with no services recorded is treated as BK, which is what the
+  // rest of the app assumes too.
+  const filtered = clients
+    .filter(c =>
+      !query.trim() ||
+      c.full_name?.toLowerCase().includes(query.toLowerCase()) ||
+      c.email?.toLowerCase().includes(query.toLowerCase())
+    )
+    .filter(c => !svcFilter || (c.services?.length ? c.services : ['BK']).includes(svcFilter))
+    .filter(c => matchesStat(c, statFilter));
+
+  const activeCount = clients.filter(c => statusOf(c) === 'active').length;
+  const pausedCount = clients.filter(c => statusOf(c) === 'paused').length;
+  const closedCount = clients.filter(c => statusOf(c) === 'closed').length;
 
   const renderItem = ({ item }: { item: Profile }) => {
     const grad = avatarGradient(item.full_name);
-    const pc   = PLAN_COLORS[item.plan] ?? PLAN_COLORS.Free;
-
-    const reqDone  = reqCounts[item.email] ?? 0;
-    const reqTotal = itemsForClient(item.services, item.has_qbo_access, normalizeBankAccounts(item.bank_accounts)).length;
-    const reqPct   = reqTotal > 0 ? (reqDone / reqTotal) * 100 : 0;
-    const reqColor = reqPct >= 100 ? '#16A34A' : reqPct >= 50 ? '#E8B923' : '#B5905B';
 
     return (
-      <View style={s.card}>
-        {/* Left: circular gradient avatar */}
+      // The whole card opens the client, as the design implies — the gear and
+      // documents buttons that used to sit on the right are gone with the
+      // detail they belonged to.
+      <TouchableOpacity style={s.card} onPress={() => setProgressClient(item)} activeOpacity={0.85}>
         {item.avatar_url ? (
-          <Image source={{ uri: item.avatar_url }} style={[s.avatar, { borderRadius: 14 }]} />
+          <Image source={{ uri: item.avatar_url }} style={s.avatar} />
         ) : (
           <LinearGradient colors={grad} style={s.avatar} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
             <Text style={s.avatarText}>{mkInitials(item.full_name)}</Text>
           </LinearGradient>
         )}
 
-        {/* Center: info */}
         <View style={s.cardBody}>
-          {/* The name opens the same tray as the gear — Camaree asked for the
-              name itself to be the way in, and it is the obvious thing to press. */}
-          <TouchableOpacity onPress={() => setManaging(item)} activeOpacity={0.6}>
-            <Text style={s.name} numberOfLines={1}>{item.full_name || 'Unnamed Client'}</Text>
-            <Text style={s.email} numberOfLines={1}>{item.email}</Text>
-          </TouchableOpacity>
+          <Text style={s.name} numberOfLines={2}>{item.full_name || 'Unnamed Client'}</Text>
+
           <View style={s.metaRow}>
-            {/* Plan chip */}
-            <View style={[s.planChip, { backgroundColor: pc.bg, borderColor: pc.border }]}>
-              <Text style={[s.planChipText, { color: pc.text }]}>{item.plan ?? 'Free'}</Text>
-            </View>
-            {!item.is_active && (
-              <View style={s.inactiveChip}>
-                <View style={s.inactiveDot} />
-                <Text style={s.inactiveText}>Inactive</Text>
+            {(item.services?.length ? item.services : ['BK'] as ClientService[]).map(svc => (
+              <View key={svc} style={[s.svcTag, { backgroundColor: SERVICE_FILTER_COLORS[svc].bg }]}>
+                <Text style={s.svcTagText}>{svc}</Text>
               </View>
-            )}
+            ))}
+            {(() => {
+              const st = statusOf(item);
+              const look = STATUS_LOOK[st];
+              return (
+                <View style={[s.statusChip, { backgroundColor: look.bg }]}>
+                  <Text style={[s.statusChipText, { color: look.text }]}>{look.label}</Text>
+                </View>
+              );
+            })()}
           </View>
-
-          {/* Required-docs progress (this month) */}
-          <View style={s.reqRow}>
-            <View style={s.reqTrack}>
-              <View style={[s.reqFill, { width: `${reqPct}%` as any, backgroundColor: reqColor }]} />
-            </View>
-            <Text style={[s.reqLabel, { color: reqColor }]}>{reqDone}/{reqTotal}</Text>
-          </View>
-
-          {/* Progress details + documents */}
-          <TouchableOpacity style={s.viewDocsBtn} onPress={() => setProgressClient(item)} activeOpacity={0.8}>
-            <Ionicons name="stats-chart-outline" size={14} color="#E8B923" />
-            <Text style={s.viewDocsText}>View progress & documents</Text>
-            <Ionicons name="chevron-forward" size={14} color="#B5905B" />
-          </TouchableOpacity>
         </View>
 
-        {/* Right: icon action buttons */}
+        {/* Both ways in: the folders for this client, and the manage tray.
+            Pressing the card itself opens their progress. */}
         <View style={s.rowActions}>
           <TouchableOpacity
             style={s.docBtn}
             onPress={() => onSelectClient(item)}
+            hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
             activeOpacity={0.75}
           >
-            <Ionicons name="documents-outline" size={16} color="#E8B923" />
+            <Ionicons name="documents-outline" size={15} color="#E8B923" />
           </TouchableOpacity>
           <TouchableOpacity
             style={s.settingsBtn}
             onPress={() => setManaging(item)}
+            hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
             activeOpacity={0.75}
           >
-            <Ionicons name="settings-outline" size={16} color={Colors.textMuted} />
+            <Ionicons name="settings-outline" size={15} color={Colors.textMuted} />
           </TouchableOpacity>
         </View>
-      </View>
+      </TouchableOpacity>
     );
   };
 
@@ -1374,21 +1408,31 @@ export function ClientListScreen({ onSelectClient }: Props) {
         </TouchableOpacity>
       </LinearGradient>
 
-      {/* ── Stats row ── */}
+      {/* ── Stats row, which is also the status filter ── */}
       <View style={s.statsRow}>
-        <View style={s.statCard}>
-          <Text style={s.statNum}>{clients.length}</Text>
-          <Text style={s.statLabel}>Total</Text>
-        </View>
-        <View style={s.statCard}>
-          <Text style={[s.statNum, { color: Colors.primary }]}>{activeCount}</Text>
-          <Text style={s.statLabel}>Active</Text>
-        </View>
-        <View style={s.statCard}>
-          <Text style={[s.statNum, { color: Colors.error }]}>{inactiveCount}</Text>
-          <Text style={s.statLabel}>Inactive</Text>
-        </View>
+        {([
+          { key: 'all'    as const, label: 'Total',  value: clients.length, color: Colors.textPrimary },
+          { key: 'active' as const, label: 'Active', value: activeCount,    color: Colors.viewed },
+          { key: 'paused' as const, label: 'Paused', value: pausedCount,    color: Colors.primary },
+          { key: 'closed' as const, label: 'Closed', value: closedCount,    color: Colors.error },
+        ]).map(stat => {
+          const on = statFilter === stat.key;
+          return (
+            <TouchableOpacity
+              key={stat.key}
+              // Pressing the one already showing goes back to all of them,
+              // so there is always a way out of a filter.
+              onPress={() => setStatFilter(on && stat.key !== 'all' ? 'all' : stat.key)}
+              style={[s.statCard, on && s.statCardOn]}
+              activeOpacity={0.85}
+            >
+              <Text style={[s.statNum, { color: stat.color }]}>{stat.value}</Text>
+              <Text style={[s.statLabel, on && s.statLabelOn]}>{stat.label}</Text>
+            </TouchableOpacity>
+          );
+        })}
       </View>
+
 
       {/* ── Search ── */}
       <View style={s.searchCard}>
@@ -1413,11 +1457,32 @@ export function ClientListScreen({ onSelectClient }: Props) {
       {/* ── Section label ── */}
       {!loading && filtered.length > 0 && (
         <Text style={s.sectionLabel}>
-          {query
+          {query || svcFilter || statFilter !== 'all'
             ? `${filtered.length} result${filtered.length !== 1 ? 's' : ''}`
             : `All Clients · required docs accepted (${formatMonthLabel(monthOf())})`}
         </Text>
       )}
+
+      {/* ── Service filter down the side, clients beside it ── */}
+      <View style={s.body}>
+        <View style={s.svcRail}>
+          {ALL_SERVICES.map(svc => {
+            const on = svcFilter === svc;
+            const c  = SERVICE_FILTER_COLORS[svc];
+            return (
+              <TouchableOpacity
+                key={svc}
+                // Tapping the service already showing clears it, so there is
+                // always a way back to the full list.
+                onPress={() => setSvcFilter(on ? null : svc)}
+                style={[s.svcBtn, { backgroundColor: c.bg }, on && s.svcBtnOn]}
+                activeOpacity={0.85}
+              >
+                <Text style={[s.svcBtnText, { color: c.text }]}>{svc}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
 
       {/* ── List ── */}
       {loading ? (
@@ -1429,6 +1494,9 @@ export function ClientListScreen({ onSelectClient }: Props) {
           data={filtered}
           keyExtractor={i => i.id}
           renderItem={renderItem}
+          numColumns={4}
+          columnWrapperStyle={s.gridRow}
+          style={{ flex: 1 }}
           contentContainerStyle={s.listContent}
           refreshControl={
             <RefreshControl
@@ -1453,6 +1521,7 @@ export function ClientListScreen({ onSelectClient }: Props) {
           showsVerticalScrollIndicator={false}
         />
       )}
+      </View>
 
       {/* ── Manage modal ── */}
       {managing && (
@@ -1544,12 +1613,26 @@ const s = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.border,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 6,
-    elevation: 2,
+    shadowOffset: { width: 0, height: 7 },
+    shadowOpacity: 0.26,
+    shadowRadius: 18,
+    elevation: 9,
   },
   statNum:   { color: Colors.textPrimary, fontSize: 22, fontWeight: '800' },
+  // Account status on a card.
+  statusChip: {
+    borderRadius: 5,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  statusChipText: { fontSize: 9, fontWeight: '800', letterSpacing: 0.4 },
+
+  // The chosen count is outlined, so it is clear it is filtering the list.
+  statCardOn: {
+    borderColor: Colors.primary,
+    borderWidth: 2,
+  },
+  statLabelOn: { color: Colors.textPrimary },
   statLabel: {
     color: Colors.textMuted,
     fontSize: 11,
@@ -1565,6 +1648,10 @@ const s = StyleSheet.create({
     alignItems: 'center',
     gap: 10,
     backgroundColor: Colors.white,
+    // Centred and capped, rather than stretched the full width.
+    alignSelf: 'center',
+    width: '100%',
+    maxWidth: 560,
     marginHorizontal: 16,
     marginTop: 14,
     borderRadius: 14,
@@ -1593,35 +1680,105 @@ const s = StyleSheet.create({
   },
 
   /* ── List ── */
-  listContent: { padding: 16, gap: 10, paddingTop: 8 },
+  listContent: { padding: 16, gap: 12, paddingTop: 8 },
+  // Service rail on the left, client grid filling the rest.
+  body: {
+    flex: 1,
+    flexDirection: 'row',
+  },
+  svcRail: {
+    width: 170,
+    gap: 10,
+    paddingLeft: 16,
+    paddingTop: 8,
+  },
+  svcBtn: {
+    height: 68,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: 'transparent',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 7 },
+    shadowOpacity: 0.26,
+    shadowRadius: 18,
+    elevation: 9,
+  },
+  // The chosen one is outlined, so the block still reads as its own service
+  // rather than being recoloured.
+  svcBtnOn: {
+    borderColor: '#1C1713',
+  },
+  svcBtnText: {
+    fontSize: 16,
+    fontWeight: '800',
+    letterSpacing: 1,
+  },
+  // Spread the row so the last card reaches the right edge, with the leftover
+  // width falling between the cards rather than piling up on one side.
+  gridRow: { gap: 12, justifyContent: 'space-between' },
+
+  /* Service tag on a client card */
+  svcTag: {
+    borderRadius: 5,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  svcTagText: {
+    color: '#1C1713',
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 0.4,
+  },
+  activeChip: {
+    backgroundColor: '#DCFCE7',
+    borderRadius: 5,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  activeText: {
+    color: '#15803D',
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 0.4,
+  },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
 
   /* ── Client card ── */
   card: {
+    flex: 1,
+    minWidth: 0,
+    // Keeps a card from stretching wide on a large screen; the row spreads
+    // the leftover space between them instead.
+    maxWidth: 330,
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: Colors.white,
-    borderRadius: 20,
-    padding: 16,
-    gap: 13,
+    borderRadius: 14,
+    // Taller than a row — a card, as the design draws it.
+    minHeight: 92,
+    padding: 12,
+    gap: 10,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.07,
-    shadowRadius: 10,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 7 },
+    shadowOpacity: 0.26,
+    shadowRadius: 18,
+    elevation: 9,
   },
   avatar: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,   // fully circular
+    width: 42,
+    height: 42,
+    borderRadius: 21,   // fully circular
     alignItems: 'center',
     justifyContent: 'center',
+    flexShrink: 0,
   },
-  avatarText: { color: Colors.white, fontSize: 18, fontWeight: '800' },
-  cardBody:   { flex: 1, gap: 2 },
-  name:  { color: Colors.textPrimary, fontSize: 15, fontWeight: '700' },
+  avatarText: { color: Colors.white, fontSize: 14, fontWeight: '800' },
+  cardBody:   { flex: 1, minWidth: 0, gap: 2 },
+  name:  { color: Colors.textPrimary, fontSize: 12, fontWeight: '700', lineHeight: 15 },
   email: { color: Colors.textMuted,  fontSize: 12 },
-  metaRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 5 },
+  metaRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 4, marginTop: 4 },
 
   /* Required-docs mini progress */
   reqRow:   { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8 },
@@ -1661,11 +1818,13 @@ const s = StyleSheet.create({
   inactiveText: { color: Colors.error, fontSize: 10, fontWeight: '700' },
 
   /* Row action buttons */
-  rowActions: { flexDirection: 'row', gap: 8 },
+  // Stacked, not side by side — two buttons in a row would crowd the card at
+  // four columns wide.
+  rowActions: { gap: 6, flexShrink: 0 },
   docBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
+    width: 30,
+    height: 30,
+    borderRadius: 9,
     backgroundColor: 'rgba(232,185,35,0.12)',
     borderWidth: 1,
     borderColor: 'rgba(232,185,35,0.3)',
@@ -1673,9 +1832,9 @@ const s = StyleSheet.create({
     justifyContent: 'center',
   },
   settingsBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
+    width: 30,
+    height: 30,
+    borderRadius: 9,
     backgroundColor: Colors.bgMid,
     alignItems: 'center',
     justifyContent: 'center',

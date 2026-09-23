@@ -46,6 +46,15 @@ const CATEGORIES: { key: CategoryKey; title: string; color: string; icon: string
   { key: 'CFO', title: 'CFO Advisory',             color: '#B5905B', icon: 'trending-up-outline', match: t => t.startsWith('cfo_') },
 ];
 
+// Bar colours for the chart. Kept apart from CATEGORIES because those colours
+// also tint icons and pills elsewhere on the screen, where a pale beige would
+// read as disabled.
+const CHART_COLORS: Record<CategoryKey, string> = {
+  TAX: '#D8CCB4',
+  BK:  '#A8A29A',
+  CFO: '#C9A75C',
+};
+
 function categoryOf(table: string): CategoryKey {
   return (CATEGORIES.find(c => c.match(table))?.key ?? 'TAX');
 }
@@ -59,15 +68,24 @@ const EXT_COLORS: Record<string, string> = {
   PPT: '#E8B923', PPTX: '#E8B923',
 };
 
+// Rows shown per page in each upload column. Both columns use it, so the two
+// stay the same height however lopsided the split is.
+const UPLOADS_PER_PAGE = 5;
+
 // ─── Types ───────────────────────────────────────────────────────────────────
 interface Stats {
   totalClients:  number;
   totalStaff:    number;
+  // How many clients hold each service. One client can hold several, so these
+  // do not add up to totalClients.
+  clientsByService: Record<CategoryKey, number>;
   totalDocs:     number;
   newDocs:       number;
   docsThisWeek:  number;
   folderCounts:  { table: string; count: number }[];
-  recentUploads: { id: string; name: string; email: string; created_at: string; document_type: string; document_url: string }[];
+  // uploaded_by_role is null on rows that predate the column; those were all
+  // client uploads, which is what the read paths elsewhere assume too.
+  recentUploads: { id: string; name: string; email: string; created_at: string; document_type: string; document_url: string; uploaded_by_role?: string | null }[];
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -138,24 +156,22 @@ export function AdminDashboardScreen({ onViewAllDocuments }: { onViewAllDocument
   const { user, isLoading: authLoading } = useAuth();
   const isAdmin    = user?.role === 'admin';
   const sheet      = useSheetStyles('sm');
-  const { isDesktop } = useResponsive();   // 3-column category grid on desktop
   const insets     = useSafeAreaInsets();
-  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set()); // expanded Monthly Reporting rows
-  const toggleGroup = (id: string) => setExpandedGroups(prev => {
-    const next = new Set(prev);
-    next.has(id) ? next.delete(id) : next.add(id);
-    return next;
-  });
   const mountedRef = useRef(true);
   useEffect(() => () => { mountedRef.current = false; }, []);
 
-  const [stats, setStats]           = useState<Stats>({ totalClients: 0, totalStaff: 0, totalDocs: 0, newDocs: 0, docsThisWeek: 0, folderCounts: [], recentUploads: [] });
+  const [stats, setStats]           = useState<Stats>({ totalClients: 0, totalStaff: 0, clientsByService: { TAX: 0, BK: 0, CFO: 0 }, totalDocs: 0, newDocs: 0, docsThisWeek: 0, folderCounts: [], recentUploads: [] });
   const [reqCounts, setReqCounts]   = useState<Record<string, number>>({}); // docs tagged per requirement item
   const [loading, setLoading]       = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [menuDoc, setMenuDoc]       = useState<RecentDoc | null>(null);
   const [period, setPeriod]         = useState<TimePeriod>('month');
   const [periodOpen, setPeriodOpen] = useState(false);
+  // Which page each upload column is showing. Both sides page independently,
+  // so a long client list does not drag the internal one along with it.
+  const [uploadPage, setUploadPage] = useState<Record<string, number>>({});
+  // Which chart bar the pointer is over, for the tooltip.
+  const [hoverBar, setHoverBar]     = useState<CategoryKey | null>(null);
 
   // ── Data fetching ─────────────────────────────────────────────────────────
   const load = useCallback(async (isRefresh = false) => {
@@ -167,21 +183,36 @@ export function AdminDashboardScreen({ onViewAllDocuments }: { onViewAllDocument
     try {
       const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
       const [clientRes, staffRes, ...tableResults] = await Promise.all([
-        supabase.from('profiles').select('id', { count: 'exact', head: true }).eq('role', 'client'),
+        // Rows rather than a head-count, so the same request also answers how
+        // many clients each service has — that is the chart below.
+        supabase.from('profiles').select('id, services').eq('role', 'client'),
         supabase.from('profiles').select('id', { count: 'exact', head: true }).in('role', ['staff', 'admin']),
-        ...FOLDER_TABLES.map(t => supabase.from(t).select('id, name, email, created_at, status, document_url').order('created_at', { ascending: false })),
+        ...FOLDER_TABLES.map(t => supabase.from(t).select('id, name, email, created_at, status, document_url, uploaded_by_role').order('created_at', { ascending: false })),
       ]);
       const allDocs = tableResults.flatMap((r, i) => (r.data ?? []).map(d => ({ ...d, document_type: FOLDER_TABLES[i] })));
       const reqDocCounts = await getRequirementDocCounts();
       if (mountedRef.current) setReqCounts(reqDocCounts);
+      // Clients per service. A client on both BK and CFO counts in both, so
+      // these bars deliberately sum to more than the client total.
+      const clientRows = (clientRes.data ?? []) as { services?: string[] | null }[];
+      const clientsPerService = (svc: string) =>
+        clientRows.filter(c => (c.services ?? ['BK']).includes(svc)).length;
+
       if (mountedRef.current) setStats({
-        totalClients:  clientRes.count ?? 0,
+        totalClients:  clientRows.length,
         totalStaff:    staffRes.count ?? 0,
+        clientsByService: {
+          TAX: clientsPerService('TAX'),
+          BK:  clientsPerService('BK'),
+          CFO: clientsPerService('CFO'),
+        },
         totalDocs:     allDocs.length,
         newDocs:       allDocs.filter(d => d.status === 'new').length,
         docsThisWeek:  allDocs.filter(d => d.created_at >= weekAgo).length,
         folderCounts:  FOLDER_TABLES.map((table, i) => ({ table, count: tableResults[i].data?.length ?? 0 })),
-        recentUploads: [...allDocs].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).slice(0, 8) as any,
+        // Enough to page through on both sides of the split, not so many that
+        // the whole list is held in memory for a dashboard panel.
+        recentUploads: [...allDocs].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).slice(0, 60) as any,
       });
     } catch (e) { console.error(e); }
     finally { clearTimeout(safetyTimer); if (mountedRef.current) { setLoading(false); setRefreshing(false); } }
@@ -248,30 +279,23 @@ export function AdminDashboardScreen({ onViewAllDocuments }: { onViewAllDocument
     }).filter(g => g.rows.length > 0),
   [filteredFolderCounts]);
 
-  // ── Overview cards (3 cards per spec) ───────────────────────────────────
-  const overviewCards = [
-    {
-      label: 'Total Clients',
-      value: stats.totalClients,
-      sub:   '↑ 20% this month',
-      icon:  'people-outline'          as const,
-      color: '#E8B923',
-    },
-    {
-      label: 'Staff Members',
-      value: stats.totalStaff,
-      sub:   '↑ 10% this month',
-      icon:  'shield-checkmark-outline' as const,
-      color: '#B5905B',
-    },
-    {
-      label: 'Total Docs',
-      value: stats.totalDocs,
-      sub:   '↑ 15% this month',
-      icon:  'documents-outline'        as const,
-      color: '#2C2320',
-    },
+  // Narrow tiles down the right of the card row, as the mock has them.
+  // Every figure here is one the screen already gathers.
+  //
+  // The old overview cards carried "↑ 20% this month" and the like. Those were
+  // fixed strings, not measurements — nothing computed them — so they are gone
+  // rather than restyled.
+  const sideCards = [
+    { value: stats.newDocs,      label: 'DOCUMENTS NOT\nYET OPENED' },
+    { value: stats.totalClients, label: 'TOTAL\nCLIENTS' },
+    { value: stats.totalDocs,    label: 'TOTAL\nDOCUMENTS' },
   ];
+
+  // The mock shows recent uploads in two columns. Split on who put the file
+  // there, which the rows already carry — nothing extra is fetched for this.
+  // Legacy rows have no uploaded_by_role and were all client uploads.
+  const clientUploads   = stats.recentUploads.filter(d => d.uploaded_by_role !== 'staff' && d.uploaded_by_role !== 'admin');
+  const internalUploads = stats.recentUploads.filter(d => d.uploaded_by_role === 'staff' || d.uploaded_by_role === 'admin');
 
   // ─────────────────────────────────────────────────────────────────────────
   return (
@@ -338,38 +362,11 @@ export function AdminDashboardScreen({ onViewAllDocuments }: { onViewAllDocument
           }
         >
 
-          {/* ── Section label: OVERVIEW ── */}
+          {/* ── OVERVIEW, with the period the figures cover ──
+              The picker sits here rather than below, because the cards that
+              follow are what it changes. */}
           <View style={s.sectionHeaderRow}>
             <Text style={s.sectionLabel}>OVERVIEW</Text>
-            <TouchableOpacity style={s.sectionAction}>
-              <Ionicons name="trending-up-outline" size={13} color="#E8B923" />
-              <Text style={s.sectionActionText}>Analytics</Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* ── 3 stat cards — fixed row, no scroll ── */}
-          <View style={{ flexDirection: 'row', gap: 8 }}>
-            {overviewCards.map((card) => (
-              <View key={card.label} style={[s.statCard, { borderTopColor: card.color }]}>
-                <LinearGradient
-                  colors={[card.color + '22', card.color + '08']}
-                  start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-                  style={s.statIconWrap}
-                >
-                  <Ionicons name={card.icon} size={20} color={card.color} />
-                </LinearGradient>
-                <View style={s.statCardInner}>
-                  <Text style={[s.statValue, { color: card.color }]}>{card.value}</Text>
-                  <Text style={s.statLabel} numberOfLines={2}>{card.label}</Text>
-                  <Text style={s.statSub}>{card.sub}</Text>
-                </View>
-              </View>
-            ))}
-          </View>
-
-          {/* ── Section label: DOCUMENTS BY FOLDER ── */}
-          <View style={s.sectionHeaderRow}>
-            <Text style={s.sectionLabel}>DOCUMENTS BY FOLDER</Text>
             <TouchableOpacity style={s.sectionAction} onPress={() => setPeriodOpen(true)}>
               <Ionicons name="calendar-outline" size={13} color="#E8B923" />
               <Text style={[s.sectionActionText, { color: '#E8B923' }]}>
@@ -378,6 +375,48 @@ export function AdminDashboardScreen({ onViewAllDocuments }: { onViewAllDocument
               <Ionicons name="chevron-down" size={12} color="#E8B923" />
             </TouchableOpacity>
           </View>
+
+          {/* ── One row: a card per category, then two narrow tiles ──
+              The big figure is the documents held in that category for the
+              chosen period; the smaller one beside it, how many folders it
+              spans. Same counts as the breakdown further down. */}
+          <View style={s.progressRow}>
+            {groupedFolders.map(group => (
+              <View key={group.key} style={s.progressCard}>
+                <View style={s.progressHead}>
+                  <Text style={s.progressHeadText}>
+                    {PERIOD_OPTIONS.find(p => p.key === period)?.label.toUpperCase()}
+                  </Text>
+                  <View style={[s.progressHeadIcon, { backgroundColor: group.color + '20' }]}>
+                    <Ionicons name={group.icon as any} size={11} color={group.color} />
+                  </View>
+                </View>
+
+                <Text style={s.progressTitle} numberOfLines={2}>{group.title.toUpperCase()}</Text>
+
+                {/* The figure is near-black and the denominator carries the
+                    category's colour, so the eye lands on the count first. */}
+                <View style={s.progressFigure}>
+                  <Text style={s.progressValue}>{group.total}</Text>
+                  <View>
+                    <Text style={[s.progressOf, { color: group.color }]}>/{group.folderCount}</Text>
+                    <Text style={s.progressOfLabel}>FOLDERS</Text>
+                  </View>
+                </View>
+              </View>
+            ))}
+
+            {/* Narrow tiles — a figure and what it counts, nothing else */}
+            <View style={s.sideCol}>
+              {sideCards.map(tile => (
+                <View key={tile.label} style={s.sideCard}>
+                  <Text style={s.sideValue}>{tile.value}</Text>
+                  <Text style={s.sideLabel}>{tile.label}</Text>
+                </View>
+              ))}
+            </View>
+          </View>
+
 
           {/* Period picker modal */}
           <Modal visible={periodOpen} transparent animationType="fade" onRequestClose={() => setPeriodOpen(false)}>
@@ -399,201 +438,182 @@ export function AdminDashboardScreen({ onViewAllDocuments }: { onViewAllDocument
             </Pressable>
           </Modal>
 
-          {/* ── Folder breakdown — one card per category (TAX / BK / CFO) ── */}
-          <View style={isDesktop ? s.catGrid : undefined}>
-          {groupedFolders.map(group => (
-            <View key={group.key} style={[s.catCard, isDesktop && s.catCardDesktop]}>
-              {/* Category header */}
-              <View style={s.catHeader}>
-                <View style={[s.catBadge, { backgroundColor: group.color + '18' }]}>
-                  <Ionicons name={group.icon as any} size={15} color={group.color} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={s.catTitle}>{group.title}</Text>
-                  <Text style={s.catSub}>{group.folderCount} folder{group.folderCount !== 1 ? 's' : ''}</Text>
-                </View>
-                <View style={[s.catTotalPill, { backgroundColor: group.color + '14', borderColor: group.color + '40' }]}>
-                  <Text style={[s.catTotalNum, { color: group.color }]}>{group.total}</Text>
-                  <Text style={[s.catTotalLabel, { color: group.color }]}>docs</Text>
-                </View>
-              </View>
 
-              <View style={s.catDivider} />
+          {/* ── RECENT UPLOADS — a centred heading over the two columns ── */}
+          <View style={s.uploadsHeader}>
+            <View style={{ flex: 1 }} />
+            <Text style={s.uploadsHeading}>RECENT UPLOADS</Text>
+            <View style={{ flex: 1, alignItems: 'flex-end' }}>
+              <TouchableOpacity style={s.sectionAction} onPress={onViewAllDocuments}>
+                <Text style={s.sectionActionText}>View All</Text>
+                <Text style={s.viewAllArrow}> ›</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
 
-              {/* Folder rows within this category */}
-              {group.rows.map((row, idx) => {
-                const isLast = idx === group.rows.length - 1;
+          {/* ── The chart, then the two upload columns beside it ── */}
+          <View style={s.uploadCols}>
 
-                // ── Expandable "Monthly Reporting" group ──
-                if (row.kind === 'group') {
-                  const expanded = expandedGroups.has(row.groupId);
-                  const pct = Math.round((row.total / maxFolder) * 100);
+            {/* Clients per service. Bars are drawn to the tallest one. */}
+            <View style={s.chartCard}>
+              <Text style={s.chartTitle}>CLIENTS BY SERVICE</Text>
+              <View style={s.chartPlot}>
+                {CATEGORIES.map(cat => {
+                  const value = stats.clientsByService[cat.key] ?? 0;
+                  const tallest = Math.max(1, ...Object.values(stats.clientsByService));
+                  const hovered = hoverBar === cat.key;
                   return (
-                    <View key={row.groupId}>
-                      <TouchableOpacity style={s.folderRow} onPress={() => toggleGroup(row.groupId)} activeOpacity={0.7}>
-                        <View style={[s.folderIconCircle, { backgroundColor: group.color + '18' }]}>
-                          <Ionicons name="bar-chart-outline" size={14} color={group.color} />
-                        </View>
-                        <Text style={s.folderLabel} numberOfLines={2}>{row.label}</Text>
-                        <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={14} color="#94A3B8" style={{ marginRight: 4 }} />
-                        <View style={s.barTrack}>
-                          <View style={[s.barFill, { width: `${Math.max(pct, row.total > 0 ? 6 : 0)}%` as any, backgroundColor: group.color }]} />
-                        </View>
-                        <Text style={[s.folderCount, { color: group.color }]}>{row.total}</Text>
-                      </TouchableOpacity>
+                    <View key={cat.key} style={s.chartCol}>
+                      <Text style={s.chartValue}>{value}</Text>
 
-                      {/* Subfolders (real per-folder counts) */}
-                      {expanded && row.children.map(child => {
-                        const cmeta = FOLDER_META[child.table] ?? { label: child.table, color: group.color, icon: 'folder-outline' };
-                        const cpct  = Math.round((child.count / maxFolder) * 100);
-                        // Parent already says "Monthly Reporting" — show only the inner part.
-                        const childLabel = (cmeta.label.match(/\(([^)]+)\)/)?.[1]) ?? cmeta.label;
+                      <View style={s.chartBarTrack}>
+                        {/* Hover tooltip. Web only — there is no pointer to
+                            hover with on a touch screen. */}
+                        {hovered && (
+                          <View style={s.chartTip} pointerEvents="none">
+                            <Text style={s.chartTipTitle}>{cat.key}</Text>
+                            <Text style={s.chartTipValue}>Clients: {value}</Text>
+                          </View>
+                        )}
+                        <Pressable
+                          style={{ flex: 1, justifyContent: 'flex-end' }}
+                          onHoverIn={() => setHoverBar(cat.key)}
+                          onHoverOut={() => setHoverBar(null)}
+                        >
+                          <View
+                            style={[
+                              s.chartBar,
+                              { height: `${Math.max(2, (value / tallest) * 100)}%`, backgroundColor: CHART_COLORS[cat.key] },
+                              hovered && s.chartBarOn,
+                            ]}
+                          />
+                        </Pressable>
+                      </View>
 
+                      <Text style={s.chartAxis}>{cat.key}</Text>
+                    </View>
+                  );
+                })}
+              </View>
+            </View>
+
+            {stats.recentUploads.length === 0 ? (
+              <View style={[s.emptyCard, { flex: 2 }]}>
+                <View style={s.emptyIconWrap}>
+                  <Ionicons name="cloud-upload-outline" size={32} color="#E8B923" />
+                </View>
+                <Text style={s.emptyTitle}>No uploads yet</Text>
+                <Text style={s.emptyText}>Documents uploaded by clients will appear here.</Text>
+              </View>
+            ) : (
+              <>
+              {[
+                { title: 'CLIENT UPLOADS',   rows: clientUploads },
+                { title: 'INTERNAL UPLOADS', rows: internalUploads },
+              ].map(col => {
+                // Both columns show the same number of rows, so they stay the
+                // same height whichever side has more.
+                const page      = uploadPage[col.title] ?? 0;
+                const pageCount = Math.max(1, Math.ceil(col.rows.length / UPLOADS_PER_PAGE));
+                const safePage  = Math.min(page, pageCount - 1);
+                const pageRows  = col.rows.slice(safePage * UPLOADS_PER_PAGE, safePage * UPLOADS_PER_PAGE + UPLOADS_PER_PAGE);
+                const step = (by: number) =>
+                  setUploadPage(p => ({ ...p, [col.title]: Math.min(pageCount - 1, Math.max(0, safePage + by)) }));
+
+                return (
+                <View key={col.title} style={s.uploadCol}>
+                  <Text style={s.uploadColTitle}>{col.title}</Text>
+
+                  {col.rows.length === 0 ? (
+                    <View style={s.uploadColEmpty}>
+                      <Text style={s.uploadColEmptyText}>Nothing here yet</Text>
+                    </View>
+                  ) : (
+                    <View style={s.card}>
+                      {pageRows.map((doc, i) => {
+                        const meta     = FOLDER_META[doc.document_type] ?? { label: doc.document_type, color: '#E8B923', icon: 'document-outline' };
+                        const ext      = doc.name.split('.').pop()?.toUpperCase().slice(0, 4) ?? 'FILE';
+                        const extColor = EXT_COLORS[ext] ?? meta.color;
+                        const isLast   = i === pageRows.length - 1;
+                        // Legacy rows have no uploaded_by_role; those were client uploads.
+                        const isInternal = doc.uploaded_by_role === 'staff' || doc.uploaded_by_role === 'admin';
                         return (
-                          <View key={child.table} style={s.subRow}>
-                            <View style={[s.subDot, { backgroundColor: cmeta.color }]} />
-                            <Text style={s.subLabel} numberOfLines={2}>{childLabel}</Text>
-                            <View style={s.barTrack}>
-                              <View style={[s.barFill, { width: `${Math.max(cpct, child.count > 0 ? 6 : 0)}%` as any, backgroundColor: cmeta.color }]} />
+                          <View key={i}>
+                            <View style={s.recentRow}>
+                              {/* File extension badge */}
+                              <View style={[s.extBox, { backgroundColor: extColor + '18' }]}>
+                                <Text style={[s.extText, { color: extColor }]}>{ext}</Text>
+                              </View>
+
+                              {/* File info */}
+                              <View style={{ flex: 1, minWidth: 0 }}>
+                                <Text style={s.recentName} numberOfLines={1}>{doc.name}</Text>
+                                <View style={s.recentMetaRow}>
+                                  <Ionicons name="person-outline" size={10} color="#94A3B8" />
+                                  <Text style={s.recentEmail} numberOfLines={1}>{doc.email}</Text>
+                                </View>
+                                {/* Folder chip, and who put the file there */}
+                                <View style={s.recentMetaRow}>
+                                  <View style={[s.folderChip, { backgroundColor: meta.color + '15', borderColor: meta.color + '40' }]}>
+                                    <Text style={[s.folderChipText, { color: meta.color }]} numberOfLines={1}>{meta.label}</Text>
+                                  </View>
+                                  <View style={[s.originChip, isInternal ? s.originInternal : s.originClient]}>
+                                    <Text style={[s.originText, isInternal ? s.originTextInternal : s.originTextClient]}>
+                                      {isInternal ? 'INTERNAL UPLOAD' : 'CLIENT UPLOAD'}
+                                    </Text>
+                                  </View>
+                                </View>
+                              </View>
+
+                              {/* Right — date + menu */}
+                              <View style={s.recentRight}>
+                                <Text style={s.recentDate}>{fmtDate(doc.created_at)}</Text>
+                                <Text style={s.recentTime}>{fmtTime(doc.created_at)}</Text>
+                                <TouchableOpacity style={s.moreBtn} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }} onPress={() => setMenuDoc(doc)}>
+                                  <Ionicons name="ellipsis-vertical" size={15} color="#94A3B8" />
+                                </TouchableOpacity>
+                              </View>
                             </View>
-                            <Text style={[s.folderCount, { color: cmeta.color }]}>{child.count}</Text>
+                            {!isLast && <View style={s.divider} />}
                           </View>
                         );
                       })}
-                      {!isLast && <View style={s.divider} />}
-                    </View>
-                  );
-                }
 
-                // ── Collector folder (e.g. Required Info) → expandable with its items ──
-                const meta = FOLDER_META[row.table] ?? { label: row.table, color: group.color, icon: 'folder-outline' };
-                const pct  = Math.round((row.count / maxFolder) * 100);
+                      {/* Pager — only once there is more than one page */}
+                      {pageCount > 1 && (
+                        <View style={s.pager}>
+                          <TouchableOpacity
+                            style={[s.pagerBtn, safePage === 0 && s.pagerBtnOff]}
+                            onPress={() => step(-1)}
+                            disabled={safePage === 0}
+                          >
+                            <Ionicons name="chevron-back" size={14} color={safePage === 0 ? '#C9BDB0' : '#3A3131'} />
+                            <Text style={[s.pagerText, safePage === 0 && s.pagerTextOff]}>Back</Text>
+                          </TouchableOpacity>
 
-                if (isRequirementFolder(row.table)) {
-                  const collectorId = `col_${row.table}`;
-                  const expanded = expandedGroups.has(collectorId);
-                  const items = itemsForFolder(row.table);
-                  return (
-                    <View key={row.table}>
-                      <TouchableOpacity style={s.folderRow} onPress={() => toggleGroup(collectorId)} activeOpacity={0.7}>
-                        <View style={[s.folderIconCircle, { backgroundColor: meta.color + '18' }]}>
-                          <Ionicons name={meta.icon as any} size={14} color={meta.color} />
+                          <Text style={s.pagerCount}>{safePage + 1} / {pageCount}</Text>
+
+                          <TouchableOpacity
+                            style={[s.pagerBtn, safePage >= pageCount - 1 && s.pagerBtnOff]}
+                            onPress={() => step(1)}
+                            disabled={safePage >= pageCount - 1}
+                          >
+                            <Text style={[s.pagerText, safePage >= pageCount - 1 && s.pagerTextOff]}>Next</Text>
+                            <Ionicons name="chevron-forward" size={14} color={safePage >= pageCount - 1 ? '#C9BDB0' : '#3A3131'} />
+                          </TouchableOpacity>
                         </View>
-                        <Text style={s.folderLabel} numberOfLines={2}>{meta.label}</Text>
-                        <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={14} color="#94A3B8" style={{ marginRight: 4 }} />
-                        <View style={s.barTrack}>
-                          <View style={[s.barFill, { width: `${Math.max(pct, row.count > 0 ? 6 : 0)}%` as any, backgroundColor: meta.color }]} />
-                        </View>
-                        <Text style={[s.folderCount, { color: meta.color }]}>{row.count}</Text>
-                      </TouchableOpacity>
-
-                      {/* Required items inside — count of docs tagged to each */}
-                      {expanded && items.map(item => {
-                        const cnt  = reqCounts[reqKey(item.service, item.key)] ?? 0;
-                        const cpct = Math.round((cnt / maxFolder) * 100);
-                        return (
-                          <View key={item.key} style={s.subRow}>
-                            <View style={[s.subDot, { backgroundColor: meta.color }]} />
-                            <Text style={s.subLabel} numberOfLines={2}>{item.label}</Text>
-                            <View style={s.barTrack}>
-                              <View style={[s.barFill, { width: `${Math.max(cpct, cnt > 0 ? 6 : 0)}%` as any, backgroundColor: meta.color }]} />
-                            </View>
-                            <Text style={[s.folderCount, { color: meta.color }]}>{cnt}</Text>
-                          </View>
-                        );
-                      })}
-                      {!isLast && <View style={s.divider} />}
+                      )}
                     </View>
-                  );
-                }
-
-                // ── Normal folder row ──
-                return (
-                  <View key={row.table}>
-                    <View style={s.folderRow}>
-                      <View style={[s.folderIconCircle, { backgroundColor: meta.color + '18' }]}>
-                        <Ionicons name={meta.icon as any} size={14} color={meta.color} />
-                      </View>
-                      <Text style={s.folderLabel} numberOfLines={2}>{meta.label}</Text>
-                      <View style={s.barTrack}>
-                        <View style={[s.barFill, { width: `${Math.max(pct, row.count > 0 ? 6 : 0)}%` as any, backgroundColor: meta.color }]} />
-                      </View>
-                      <Text style={[s.folderCount, { color: meta.color }]}>{row.count}</Text>
-                    </View>
-                    {!isLast && <View style={s.divider} />}
-                  </View>
+                  )}
+                </View>
                 );
               })}
-            </View>
-          ))}
+              </>
+            )}
           </View>
-
-          {/* ── Section label: RECENT UPLOADS ── */}
-          <View style={s.sectionHeaderRow}>
-            <Text style={s.sectionLabel}>RECENT UPLOADS</Text>
-            <TouchableOpacity style={s.sectionAction} onPress={onViewAllDocuments}>
-              <Text style={s.sectionActionText}>View All</Text>
-              <Text style={s.viewAllArrow}> ›</Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* ── Recent uploads card ── */}
-          {stats.recentUploads.length === 0 ? (
-            <View style={s.emptyCard}>
-              <View style={s.emptyIconWrap}>
-                <Ionicons name="cloud-upload-outline" size={32} color="#E8B923" />
-              </View>
-              <Text style={s.emptyTitle}>No uploads yet</Text>
-              <Text style={s.emptyText}>Documents uploaded by clients will appear here.</Text>
-            </View>
-          ) : (
-            <View style={s.card}>
-              {stats.recentUploads.map((doc, i) => {
-                const meta     = FOLDER_META[doc.document_type] ?? { label: doc.document_type, color: '#E8B923', icon: 'document-outline' };
-                const ext      = doc.name.split('.').pop()?.toUpperCase().slice(0, 4) ?? 'FILE';
-                const extColor = EXT_COLORS[ext] ?? meta.color;
-                const isLast   = i === stats.recentUploads.length - 1;
-                return (
-                  <View key={i}>
-                    <View style={s.recentRow}>
-                      {/* File extension badge */}
-                      <View style={[s.extBox, { backgroundColor: extColor + '18' }]}>
-                        <Text style={[s.extText, { color: extColor }]}>{ext}</Text>
-                      </View>
-
-                      {/* File info */}
-                      <View style={{ flex: 1, minWidth: 0 }}>
-                        <Text style={s.recentName} numberOfLines={1}>{doc.name}</Text>
-                        <View style={s.recentMetaRow}>
-                          <Ionicons name="person-outline" size={10} color="#94A3B8" />
-                          <Text style={s.recentEmail} numberOfLines={1}>{doc.email}</Text>
-                        </View>
-                        {/* Folder chip */}
-                        <View style={s.recentMetaRow}>
-                          <View style={[s.folderChip, { backgroundColor: meta.color + '15', borderColor: meta.color + '40' }]}>
-                            <Text style={[s.folderChipText, { color: meta.color }]}>{meta.label}</Text>
-                          </View>
-                        </View>
-                      </View>
-
-                      {/* Right — date + menu */}
-                      <View style={s.recentRight}>
-                        <Text style={s.recentDate}>{fmtDate(doc.created_at)}</Text>
-                        <Text style={s.recentTime}>{fmtTime(doc.created_at)}</Text>
-                        <TouchableOpacity style={s.moreBtn} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }} onPress={() => setMenuDoc(doc)}>
-                          <Ionicons name="ellipsis-vertical" size={15} color="#94A3B8" />
-                        </TouchableOpacity>
-                      </View>
-                    </View>
-                    {!isLast && <View style={s.divider} />}
-                  </View>
-                );
-              })}
-            </View>
-          )}
 
           {/* Bottom breathing room */}
-          <View style={{ height: 32 }} />
+          <View style={{ height: 12 }} />
         </ScrollView>
       )}
 
@@ -773,8 +793,8 @@ const s = StyleSheet.create({
 
   // ── Scroll ────────────────────────────────────────────
   scroll: {
-    padding: 20,
-    gap: 20,
+    padding: 16,
+    gap: 10,
   },
 
   // ── Section header row ────────────────────────────────
@@ -813,46 +833,44 @@ const s = StyleSheet.create({
     gap: 10,
   },
 
-  // ── Single stat card ──────────────────────────────────
-  statCard: {
+  // ── The two narrow tiles beside the category cards ────
+  // The tiles stack to the same height as a card beside them.
+  sideCol: {
+    gap: 8,
+    height: 132,
+    justifyContent: 'space-between',
+  },
+  sideCard: {
     flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    width: 240,
     backgroundColor: '#FFFFFF',
-    borderRadius: 18,
-    borderTopWidth: 3,
-    borderColor: '#E8E0D0',
-    borderWidth: 1,
+    borderRadius: 14,
+    borderColor: '#1C1713',
+    borderWidth: 2,
     shadowColor: '#3A3131',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 3,
-    padding: 12,
-    gap: 4,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.20,
+    shadowRadius: 16,
+    elevation: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
   },
-  statIconWrap: {
-    width: 42, height: 42, borderRadius: 13,
-    alignItems: 'center', justifyContent: 'center',
-    marginBottom: 4,
-  },
-  statCardInner: {
-    gap: 2,
-  },
-  statValue: {
-    fontSize: 26,
+  sideValue: {
+    color: '#2C2320',
+    fontSize: 24,
     fontWeight: '800',
     letterSpacing: -0.5,
   },
-  statLabel: {
+  sideLabel: {
+    flex: 1,
     color: '#6B5E52',
-    fontSize: 11,
-    fontWeight: '700',
-    lineHeight: 14,
-  },
-  statSub: {
-    color: '#A8998A',
     fontSize: 9,
-    fontWeight: '500',
-    marginTop: 1,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+    lineHeight: 12,
   },
 
   // ── Shared white card ─────────────────────────────────
@@ -865,8 +883,8 @@ const s = StyleSheet.create({
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.06,
-    shadowRadius: 12,
-    elevation: 3,
+    shadowRadius: 16,
+    elevation: 6,
     overflow: 'hidden',
   },
 
@@ -881,8 +899,8 @@ const s = StyleSheet.create({
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.06,
-    shadowRadius: 12,
-    elevation: 3,
+    shadowRadius: 16,
+    elevation: 6,
     overflow: 'hidden',
   },
   // Desktop: lay the category cards out as a 3-column grid.
@@ -979,14 +997,14 @@ const s = StyleSheet.create({
   recentRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    gap: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    gap: 10,
   },
   extBox: {
-    width: 46,
-    height: 46,
-    borderRadius: 13,
+    width: 38,
+    height: 38,
+    borderRadius: 11,
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
@@ -1022,6 +1040,281 @@ const s = StyleSheet.create({
     fontSize: 10,
     fontWeight: '600',
   },
+
+  // ── Category total cards ──────────────────────────────
+  // Cards keep their own size; the row spreads them out rather than stretching
+  // any one of them to fill the space.
+  progressRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 16,
+    marginBottom: 12,
+  },
+  // Squarer than wide, as the mock draws them — a fixed height with the figure
+  // sitting high and space left under it, rather than a letterbox strip.
+  // Roughly square, as the mock draws them. A fixed width rather than a share
+  // of the row, or three cards stretch into letterbox strips on a wide screen.
+  progressCard: {
+    width: 285,
+    height: 132,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    borderWidth: 2,
+    borderColor: '#1C1713',
+    shadowColor: '#3A3131',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.20,
+    shadowRadius: 16,
+    elevation: 6,
+    padding: 12,
+    gap: 6,
+  },
+  progressHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#F5F0E8',
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    marginHorizontal: -4,
+    marginTop: -4,
+  },
+  progressHeadText: {
+    color: '#A8998A',
+    fontSize: 8,
+    fontWeight: '800',
+    letterSpacing: 0.6,
+  },
+  progressHeadIcon: {
+    width: 20, height: 20, borderRadius: 6,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  progressTitle: {
+    color: '#3A3131',
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.4,
+    lineHeight: 13,
+  },
+  // Big figure, with the denominator smaller beside it — as the mock reads.
+  progressFigure: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 3,
+  },
+  progressValue: {
+    color: '#1C1713',
+    fontSize: 44,
+    fontWeight: '800',
+    letterSpacing: -2,
+    lineHeight: 46,
+  },
+  progressOf: {
+    fontSize: 20,
+    fontWeight: '700',
+    lineHeight: 24,
+  },
+  progressOfLabel: {
+    color: '#A8998A',
+    fontSize: 7,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+
+  // ── Recent uploads, two columns ───────────────────────
+  uploadsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 10,
+    marginBottom: 8,
+  },
+  uploadsHeading: {
+    color: '#A8998A',
+    fontSize: 20,
+    fontWeight: '700',
+    letterSpacing: 1,
+  },
+  // ── Clients-by-service chart ──────────────────────────
+  chartCard: {
+    // Narrower than an upload column, as the mock has it.
+    flex: 0.8,
+    minWidth: 0,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    borderWidth: 2,
+    borderColor: '#1C1713',
+    shadowColor: '#3A3131',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.20,
+    shadowRadius: 16,
+    elevation: 6,
+    padding: 14,
+    gap: 12,
+  },
+  chartTitle: {
+    color: '#1C1713',
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 0.6,
+    textAlign: 'center',
+  },
+  chartPlot: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'space-around',
+    minHeight: 330,
+    gap: 10,
+  },
+  chartCol: {
+    flex: 1,
+    alignItems: 'center',
+    height: '100%',
+    gap: 4,
+  },
+  chartValue: {
+    color: '#6B5E52',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  // The track is what gives each bar its full height to grow inside.
+  chartBarTrack: {
+    flex: 1,
+    width: '70%',
+    justifyContent: 'flex-end',
+  },
+  chartBar: {
+    width: '100%',
+    borderTopLeftRadius: 4,
+    borderTopRightRadius: 4,
+  },
+  chartBarOn: {
+    opacity: 0.82,
+  },
+  // Sits above the bar it belongs to, centred on the column.
+  chartTip: {
+    position: 'absolute',
+    bottom: '100%',
+    alignSelf: 'center',
+    marginBottom: 6,
+    backgroundColor: '#1C1713',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    zIndex: 10,
+  },
+  chartTipTitle: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '800',
+    textAlign: 'center',
+  },
+  chartTipValue: {
+    color: '#E8E0D0',
+    fontSize: 11,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  chartAxis: {
+    color: '#6B5E52',
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.4,
+  },
+
+  uploadCols: {
+    flexDirection: 'row',
+    gap: 12,
+    // Stretch, so the chart and both columns end level rather than each
+    // stopping wherever its own content runs out.
+    alignItems: 'stretch',
+  },
+  uploadCol: {
+    flex: 1,
+    minWidth: 0,
+    gap: 8,
+    // The list inside grows to fill, so the pager sits at the bottom of the
+    // column rather than floating just under the last row.
+    justifyContent: 'flex-start',
+  },
+  uploadColTitle: {
+    color: '#6B5E52',
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.8,
+    textAlign: 'center',
+  },
+  // ── Pager under each upload column ────────────────────
+  pager: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderTopWidth: 1,
+    borderTopColor: '#F2EDE3',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  pagerBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 7,
+    backgroundColor: '#F5F0E8',
+  },
+  pagerBtnOff: { backgroundColor: 'transparent' },
+  pagerText: {
+    color: '#3A3131',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  pagerTextOff: { color: '#C9BDB0' },
+  pagerCount: {
+    color: '#A8998A',
+    fontSize: 11,
+    fontWeight: '600',
+  },
+
+  // Fills the column so an empty side still ends level with the full one.
+  uploadColEmpty: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#E8E0D0',
+    shadowColor: '#3A3131',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.20,
+    shadowRadius: 16,
+    elevation: 6,
+    paddingVertical: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  uploadColEmptyText: {
+    color: '#A8998A',
+    fontSize: 12,
+  },
+
+  // Who put the file in the folder: the client, or one of us.
+  originChip: {
+    borderRadius: 5,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  originInternal: { backgroundColor: '#E8B923' },
+  originClient:   { backgroundColor: '#DBEAFE' },
+  originText: {
+    fontSize: 8,
+    fontWeight: '800',
+    letterSpacing: 0.3,
+  },
+  originTextInternal: { color: '#3A3131' },
+  originTextClient:   { color: '#1E40AF' },
   recentRight: {
     alignItems: 'flex-end',
     gap: 2,

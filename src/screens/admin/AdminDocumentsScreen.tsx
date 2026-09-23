@@ -40,6 +40,7 @@ import {
   rejectDocument,
   Document,
 } from '../../db/documents';
+import { getAllClients, Profile, ClientService } from '../../db/profiles';
 import {
   REQUIRED_UPLOADS,
   RequiredItem,
@@ -483,9 +484,7 @@ export function AdminDocumentsScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [query, setQuery]           = useState('');
   const [filter, setFilter]         = useState('pending'); // default: show pending first
-  const [filterOpen, setFilterOpen] = useState(false);     // per-folder dropdown
   const monthBarRef = useWheelScroll();     // a mouse wheel moves it too
-  const filterSheet = useSheetStyles('sm');
   const [viewerDoc, setViewerDoc]   = useState<Document | null>(null);
   const [convDoc, setConvDoc]       = useState<Document | null>(null);
   const [deleteDoc, setDeleteDoc]   = useState<Document | null>(null);
@@ -494,11 +493,25 @@ export function AdminDocumentsScreen() {
   const [actionBusy, setActionBusy] = useState<string | null>(null); // doc id being actioned
   const [browserOpen, setBrowserOpen] = useState(false);
   // The list answers "what came in"; the tree answers "where does it live".
-  const [view, setView] = useState<'list' | 'folders'>('list');
+  // 'clients' is the default: a card per client with how many documents of
+  // the chosen kind they have, which is the way into their own folders.
+  const [view, setView] = useState<'clients' | 'list' | 'folders'>('clients');
+  // Which side of the split is showing. Unsorted means staff have not filed
+  // the document into a subfolder yet — that is the work waiting to be done.
+  const [sortTab, setSortTab] = useState<'unsorted' | 'sorted'>('unsorted');
   // Which month to show, or 'all'. The month a document COVERS, not the day it
   // arrived — that is the whole reason it is tagged.
   const [period, setPeriod] = useState<string>('all');
   const [uploadOpen, setUploadOpen] = useState(false);
+  const [clients, setClients] = useState<Profile[]>([]);
+
+  // Keyed lower-case: document rows and profiles do not always agree on the
+  // casing of an address, and a miss here would label a card with the wrong
+  // person's name.
+  const clientByEmail = useMemo(
+    () => new Map(clients.map(c => [(c.email ?? '').toLowerCase(), c])),
+    [clients],
+  );
 
   const load = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
@@ -506,8 +519,10 @@ export function AdminDocumentsScreen() {
       if (mountedRef.current) { setLoading(false); setRefreshing(false); }
     }, 8000);
     try {
-      const docs = await getAllDocuments();
-      if (mountedRef.current) setDocuments(docs);
+      // Clients come along too: the cards show each one's name, services and
+      // whether they are active, none of which is on a document row.
+      const [docs, people] = await Promise.all([getAllDocuments(), getAllClients()]);
+      if (mountedRef.current) { setDocuments(docs); setClients(people); }
     } catch (e) { console.error(e); }
     finally { clearTimeout(safetyTimer); if (mountedRef.current) { setLoading(false); setRefreshing(false); } }
   }, []);
@@ -541,6 +556,59 @@ export function AdminDocumentsScreen() {
     .sort((a, b) =>
       periodOf(b).localeCompare(periodOf(a))
       || new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+  // ── One card per client, for the clients view ────────────────────────────
+  // A document counts as sorted once staff have filed it into a subfolder.
+  // Everything else is still waiting to be put somewhere.
+  const clientCards = useMemo(() => {
+    const wantSorted = sortTab === 'sorted';
+    const byEmail = new Map<string, { email: string; docs: Document[] }>();
+
+    documents.forEach(d => {
+      const isSorted = !!d.subfolder_id;
+      if (isSorted !== wantSorted) return;
+      if (period !== 'all' && periodOf(d) !== period) return;
+      const email = d.email ?? '';
+      if (!email) return;
+      const row = byEmail.get(email);
+      if (row) row.docs.push(d);
+      else byEmail.set(email, { email, docs: [d] });
+    });
+
+    const q = query.trim().toLowerCase();
+    return [...byEmail.values()]
+      .map(r => ({ ...r, profile: clientByEmail.get(r.email.toLowerCase()) }))
+      .filter(r => !q ||
+        r.email.toLowerCase().includes(q) ||
+        r.profile?.full_name?.toLowerCase().includes(q))
+      // Most waiting first — that is the queue staff work through.
+      .sort((a, b) => b.docs.length - a.docs.length ||
+        (a.profile?.full_name ?? a.email).localeCompare(b.profile?.full_name ?? b.email));
+  }, [documents, sortTab, period, query, clientByEmail]);
+
+  // Folder tabs for the list view. Built from the documents on screen, so a
+  // folder this client has nothing in does not get a tab.
+  const folderTabs = useMemo(() => {
+    const scope = documents.filter(d =>
+      (!query.trim() || d.email?.toLowerCase().includes(query.toLowerCase())) &&
+      (period === 'all' || periodOf(d) === period));
+
+    const counts = new Map<string, number>();
+    scope.forEach(d => {
+      const k = d.document_type ?? '';
+      counts.set(k, (counts.get(k) ?? 0) + 1);
+    });
+
+    const pending = scope.filter(d => (d.approval_status ?? 'approved') === 'pending').length;
+
+    return [
+      { key: 'all', label: 'All', count: scope.length },
+      ...(pending > 0 ? [{ key: 'pending', label: 'Pending', count: pending }] : []),
+      ...FOLDERS
+        .filter(f => f.key !== 'all' && f.key !== 'pending' && (counts.get(f.key) ?? 0) > 0)
+        .map(f => ({ key: f.key, label: f.label, count: counts.get(f.key) ?? 0 })),
+    ];
+  }, [documents, query, period]);
 
   const { isPhone } = useResponsive();
 
@@ -681,35 +749,40 @@ export function AdminDocumentsScreen() {
         <View style={isPhone ? s.actionsPhone : s.actions}>
           {!isPhone && <ApprovalPill status={approval} />}
 
-          {/* Approve / Reject for pending */}
-          {approval === 'pending' && (
-            <View style={s.approvalRow}>
-              <TouchableOpacity
-                style={[s.approveBtn, isBusy && { opacity: 0.5 }]}
-                onPress={() => setApproveDoc(item)}
-                disabled={!!isBusy}
-                activeOpacity={0.75}
-              >
-                {isBusy
-                  ? <ActivityIndicator size={12} color="#065F46" />
-                  : <Ionicons name="checkmark" size={14} color="#065F46" />}
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[s.rejectBtn, isBusy && { opacity: 0.5 }]}
-                onPress={() => setRejectDoc(item)}
-                disabled={!!isBusy}
-                activeOpacity={0.75}
-              >
-                <Ionicons name="close" size={14} color="#991B1B" />
-              </TouchableOpacity>
-            </View>
-          )}
-
-          {/* View / Download / Notes / Delete always visible */}
-          <View style={s.btnRow}>
-            <TouchableOpacity style={[s.actionBtn, s.viewBtn]} onPress={() => handleView(item)} activeOpacity={0.75}>
-              <Ionicons name="eye-outline" size={14} color="#1C1713" />
+          {/* The three the design puts first: read it, then decide. Labelled
+              rather than icon-only, because accept and reject are not
+              guessable from a tick and a cross alone. */}
+          <View style={s.decideRow}>
+            <TouchableOpacity style={s.viewWideBtn} onPress={() => handleView(item)} activeOpacity={0.8}>
+              <Text style={s.viewWideText}>View</Text>
             </TouchableOpacity>
+
+            {approval === 'pending' && (
+              <>
+                <TouchableOpacity
+                  style={[s.acceptWideBtn, isBusy && { opacity: 0.5 }]}
+                  onPress={() => setApproveDoc(item)}
+                  disabled={!!isBusy}
+                  activeOpacity={0.8}
+                >
+                  {isBusy
+                    ? <ActivityIndicator size={12} color="#166534" />
+                    : <Text style={s.acceptWideText}>Accept</Text>}
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[s.rejectWideBtn, isBusy && { opacity: 0.5 }]}
+                  onPress={() => setRejectDoc(item)}
+                  disabled={!!isBusy}
+                  activeOpacity={0.8}
+                >
+                  <Text style={s.rejectWideText}>Reject</Text>
+                </TouchableOpacity>
+              </>
+            )}
+          </View>
+
+          {/* Download, notes and delete stay as icons — they are secondary. */}
+          <View style={s.btnRow}>
             <TouchableOpacity style={[s.actionBtn, s.dlBtn]} onPress={() => dl.downloadSingle(item)} activeOpacity={0.75}>
               <Ionicons name="download-outline" size={14} color="#1C1713" />
             </TouchableOpacity>
@@ -789,16 +862,22 @@ export function AdminDocumentsScreen() {
             <Ionicons name="cloud-upload-outline" size={16} color="#2C2320" />
             <Text style={s.uploadHeaderText}>Upload</Text>
           </TouchableOpacity>
-          {/* Every client's folder structure, or back to the flat list */}
+          {/* Cycles the three ways of looking at the same documents:
+              by client, as a flat list, then by folder structure. */}
           <TouchableOpacity
-            style={[s.browseBtn, view === 'folders' && s.browseBtnOn]}
-            onPress={() => setView(v => (v === 'folders' ? 'list' : 'folders'))}
+            style={[s.browseBtn, view !== 'clients' && s.browseBtnOn]}
+            onPress={() => setView(v =>
+              v === 'clients' ? 'list' : v === 'list' ? 'folders' : 'clients')}
             activeOpacity={0.75}
           >
+            {/* The icon shows where pressing takes you, not where you are —
+                the same way the old two-way toggle read. */}
             <Ionicons
-              name={view === 'folders' ? 'list-outline' : 'git-branch-outline'}
+              name={view === 'clients' ? 'list-outline'
+                  : view === 'list'    ? 'git-branch-outline'
+                  : 'people-outline'}
               size={18}
-              color={view === 'folders' ? '#2C2320' : '#FFFFFF'}
+              color="#FFFFFF"
             />
           </TouchableOpacity>
           {/* Browse by folder */}
@@ -813,123 +892,82 @@ export function AdminDocumentsScreen() {
         </View>
       </LinearGradient>
 
-      {/* ── Search Bar ── */}
-      {view === 'list' && <View style={s.searchWrap}>
-        <View style={s.searchBox}>
-          <Ionicons name="search-outline" size={16} color="#94A3B8" />
-          <TextInput
-            style={[s.searchInput, { outlineWidth: 0 } as any]}
-            placeholder="Search by name or client email..."
-            placeholderTextColor="#94A3B8"
-            value={query}
-            onChangeText={setQuery}
-          />
-          {!!query && (
-            <TouchableOpacity onPress={() => setQuery('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-              <Ionicons name="close-circle" size={16} color="#94A3B8" />
-            </TouchableOpacity>
+      {/* One toolbar under the header, rather than three strips that used to
+          overlap each other: where you are, then the folder tabs, then the
+          months. Each row has a fixed height so nothing is ever clipped. */}
+      {view === 'list' && (
+        <View style={s.toolbar}>
+          {!!query.trim() && (
+            <View style={s.crumb}>
+              {/* Match the email exactly, lower-cased both sides — a partial
+                  search term must not be read as somebody's address. */}
+              <Text style={s.crumbText} numberOfLines={1}>
+                {clients.find(c => c.email?.toLowerCase() === query.trim().toLowerCase())?.full_name
+                  || query.trim()}
+              </Text>
+              <TouchableOpacity
+                onPress={() => { setQuery(''); setView('clients'); }}
+                style={s.crumbClear}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Ionicons name="close" size={13} color="#6B5E52" />
+                <Text style={s.crumbClearText}>All clients</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={s.tabStrip}
+            contentContainerStyle={s.tabStripContent}
+          >
+            {folderTabs.map(t => {
+              const on = filter === t.key;
+              return (
+                <TouchableOpacity
+                  key={t.key}
+                  onPress={() => setFilter(t.key)}
+                  style={[s.fTab, on ? s.fTabOn : s.fTabOff]}
+                  activeOpacity={0.85}
+                >
+                  <Text style={[s.fTabText, on && s.fTabTextOn]} numberOfLines={1}>{t.label}</Text>
+                  <View style={[s.fTabCount, on && s.fTabCountOn]}>
+                    <Text style={[s.fTabCountText, on && s.fTabCountTextOn]}>{t.count}</Text>
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+
+          {monthsPresent.length > 1 && (
+            <ScrollView
+              ref={monthBarRef}
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={s.monthStrip}
+              contentContainerStyle={s.monthStripContent}
+            >
+              {['all', ...monthsPresent].map(m => {
+                const on = period === m;
+                return (
+                  <TouchableOpacity
+                    key={m}
+                    style={[s.mChip, on && s.mChipOn]}
+                    onPress={() => setPeriod(m)}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={[s.mChipText, on && s.mChipTextOn]}>
+                      {m === 'all' ? 'All months' : formatMonthLabel(m)}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
           )}
         </View>
-      </View>}
-
-      {/* ── Filter dropdown (per-folder, grouped) ── */}
-      {/* Month — the month a document covers, across every folder. */}
-      {view === 'list' && monthsPresent.length > 1 && (
-        <ScrollView
-          ref={monthBarRef}
-          horizontal
-          showsHorizontalScrollIndicator
-          style={s.monthBar}
-          contentContainerStyle={s.monthBarContent}
-        >
-          {['all', ...monthsPresent].map(m => {
-            const on = period === m;
-            return (
-              <TouchableOpacity
-                key={m}
-                style={[s.monthChip, on && s.monthChipOn]}
-                onPress={() => setPeriod(m)}
-                activeOpacity={0.8}
-              >
-                <Ionicons
-                  name={m === 'all' ? 'albums-outline' : on ? 'calendar' : 'calendar-outline'}
-                  size={12}
-                  color={on ? '#2C2320' : '#B5905B'}
-                />
-                <Text style={[s.monthChipText, on && s.monthChipTextOn]}>
-                  {m === 'all' ? 'All months' : formatMonthLabel(m)}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
       )}
 
-      {view === 'list' && <View style={s.filterWrap}>
-        <TouchableOpacity style={s.filterBtn} onPress={() => setFilterOpen(true)} activeOpacity={0.8}>
-          <Ionicons name="funnel-outline" size={15} color="#B5905B" />
-          <Text style={s.filterBtnText} numberOfLines={1}>
-            {FOLDERS.find(f => f.key === filter)?.label ?? 'All'}
-          </Text>
-          {(() => {
-            const cnt = filter === 'pending' ? pendingCount
-              : filter === 'all' ? documents.length
-              : documents.filter(d => d.document_type === filter).length;
-            return cnt > 0 ? (
-              <View style={s.filterBtnCount}><Text style={s.filterBtnCountText}>{cnt}</Text></View>
-            ) : null;
-          })()}
-          <Ionicons name="chevron-down" size={16} color="#94A3B8" style={{ marginLeft: 'auto' }} />
-        </TouchableOpacity>
-      </View>}
-
-      {/* Filter dropdown modal — grouped by category */}
-      <Modal visible={filterOpen} transparent animationType="fade" onRequestClose={() => setFilterOpen(false)}>
-        <Pressable style={[fd.overlay, filterSheet.overlay]} onPress={() => setFilterOpen(false)}>
-          <Pressable style={[fd.sheet, filterSheet.sheet]} onPress={() => {}}>
-            <View style={fd.handle} />
-            <Text style={fd.title}>Filter by folder</Text>
-            <ScrollView style={{ maxHeight: 460 }} showsVerticalScrollIndicator={false}>
-              {FILTER_GROUPS.map(group => (
-                <View key={group.title} style={{ marginBottom: 6 }}>
-                  <Text style={fd.groupLabel}>{group.title}</Text>
-                  {group.keys.map(key => {
-                    const f = FOLDERS.find(x => x.key === key);
-                    if (!f) return null;
-                    const active = filter === key;
-                    const cnt = key === 'pending' ? pendingCount
-                      : key === 'all' ? documents.length
-                      : documents.filter(d => d.document_type === key).length;
-                    return (
-                      <TouchableOpacity
-                        key={key}
-                        style={[fd.row, active && fd.rowActive]}
-                        onPress={() => { setFilter(key); setFilterOpen(false); }}
-                        activeOpacity={0.7}
-                      >
-                        <View style={[fd.dot, { backgroundColor: f.color }]} />
-                        <Text style={[fd.rowText, active && { color: '#1C1713', fontWeight: '700' }]} numberOfLines={1}>{f.label}</Text>
-                        {cnt > 0 && <Text style={[fd.rowCount, active && { color: '#B5905B' }]}>{cnt}</Text>}
-                        {active && <Ionicons name="checkmark" size={16} color="#E8B923" style={{ marginLeft: 6 }} />}
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-              ))}
-            </ScrollView>
-          </Pressable>
-        </Pressable>
-      </Modal>
-
-      {/* ── Pending notice banner ── */}
-      {filter === 'pending' && pendingCount > 0 && (
-        <View style={s.pendingBanner}>
-          <Ionicons name="shield-checkmark-outline" size={14} color="#92400E" />
-          <Text style={s.pendingBannerText}>
-            {pendingCount} file{pendingCount !== 1 ? 's' : ''} waiting for your review
-          </Text>
-        </View>
-      )}
 
       {/* ── List ── */}
       {loading ? (
@@ -937,6 +975,109 @@ export function AdminDocumentsScreen() {
           <ActivityIndicator color="#10B981" size="large" />
           <Text style={s.loadingText}>Fetching documents…</Text>
         </View>
+      ) : view === 'clients' ? (
+        <>
+          {/* Finding a client by name or email. This went missing when the old
+              search bar was removed with the list view's filter row. */}
+          <View style={s.clientSearchWrap}>
+            <View style={s.clientSearchBox}>
+              <Ionicons name="search-outline" size={16} color="#94A3B8" />
+              <TextInput
+                style={[s.clientSearchInput, { outlineWidth: 0 } as any]}
+                placeholder="Search clients by name or email…"
+                placeholderTextColor="#94A3B8"
+                value={query}
+                onChangeText={setQuery}
+              />
+              {!!query && (
+                <TouchableOpacity onPress={() => setQuery('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                  <Ionicons name="close-circle" size={16} color="#94A3B8" />
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+
+          {/* Unsorted first — it is the pile that still needs working through. */}
+          <View style={s.sortTabs}>
+            {([
+              { key: 'unsorted' as const, label: 'UNSORTED' },
+              { key: 'sorted'   as const, label: 'SORTED'   },
+            ]).map(t => {
+              const on = sortTab === t.key;
+              return (
+                <TouchableOpacity
+                  key={t.key}
+                  onPress={() => setSortTab(t.key)}
+                  style={[s.sortTab, on ? s.sortTabOn : s.sortTabOff]}
+                  activeOpacity={0.85}
+                >
+                  <Text style={[s.sortTabText, on ? s.sortTabTextOn : s.sortTabTextOff]}>
+                    {t.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
+          <FlatList
+            data={clientCards}
+            keyExtractor={c => c.email}
+            numColumns={4}
+            columnWrapperStyle={s.clientGridRow}
+            contentContainerStyle={s.clientList}
+            renderItem={({ item }) => {
+              const p        = item.profile;
+              const services = (p?.services?.length ? p.services : ['BK']) as ClientService[];
+              return (
+                <TouchableOpacity
+                  style={s.clientCard}
+                  // Show everything of theirs, not just what is pending —
+                  // the count on the card is of all their unsorted files.
+                  onPress={() => { setQuery(item.email); setFilter('all'); setView('list'); }}
+                  activeOpacity={0.85}
+                >
+                  <View style={s.clientAvatar}>
+                    <Text style={s.clientAvatarText}>
+                      {(p?.full_name ?? item.email).slice(0, 2).toUpperCase()}
+                    </Text>
+                  </View>
+
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <Text style={s.clientName} numberOfLines={1}>
+                      {p?.full_name || item.email}
+                    </Text>
+                    <View style={s.clientTags}>
+                      {services.map(svc => (
+                        <View key={svc} style={s.clientSvc}>
+                          <Text style={s.clientSvcText}>{svc}</Text>
+                        </View>
+                      ))}
+                      {p && (p.is_active
+                        ? <View style={s.clientActive}><Text style={s.clientActiveText}>ACTIVE</Text></View>
+                        : <View style={s.clientInactive}><Text style={s.clientInactiveText}>INACTIVE</Text></View>
+                      )}
+                    </View>
+                  </View>
+
+                  {/* How many documents of this kind are waiting on them. */}
+                  <View style={s.clientCount}>
+                    <Text style={s.clientCountText}>{item.docs.length}</Text>
+                  </View>
+                </TouchableOpacity>
+              );
+            }}
+            refreshControl={
+              <RefreshControl refreshing={refreshing} onRefresh={() => load(true)} tintColor="#E8B923" />
+            }
+            ListEmptyComponent={
+              <Text style={s.emptyText}>
+                {sortTab === 'unsorted'
+                  ? 'Nothing waiting to be filed.'
+                  : 'Nothing filed into a folder yet.'}
+              </Text>
+            }
+          />
+        </>
       ) : view === 'folders' ? (
         // Every client's structure, from the same documents already loaded.
         <AllClientFoldersView documents={documents} onOpen={handleView} />
@@ -1040,8 +1181,10 @@ const s = StyleSheet.create({
     backgroundColor: '#E8B923', paddingHorizontal: 12,
   },
   uploadHeaderText: { color: '#2C2320', fontSize: 13, fontWeight: '800' },
-  monthBar: { flexGrow: 0, marginTop: 10 },
-  monthBarContent: { paddingHorizontal: 16, gap: 6 },
+  // A fixed height with the chips centred in it, so they are never clipped
+  // when the strip scrolls sideways.
+  monthBar: { flexGrow: 0, height: 50 },
+  monthBarContent: { paddingHorizontal: 16, gap: 6, alignItems: 'center' },
   monthChip: {
     flexDirection: 'row', alignItems: 'center', gap: 5,
     paddingHorizontal: 11, paddingVertical: 6, borderRadius: 9,
@@ -1088,6 +1231,227 @@ const s = StyleSheet.create({
   pendingBannerText: { color: '#92400E', fontSize: 12, fontWeight: '600', flex: 1 },
 
   list: { padding: 16, gap: 10, paddingBottom: 48 },
+
+  // ── Client search ─────────────────────────────────────
+  clientSearchWrap: { paddingHorizontal: 20, paddingTop: 14 },
+  clientSearchBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    alignSelf: 'center',
+    width: '100%',
+    maxWidth: 520,
+    height: 44,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E3DCCF',
+    backgroundColor: '#FFFFFF',
+  },
+  clientSearchInput: { flex: 1, color: '#1C1713', fontSize: 14 },
+
+  // ── Unsorted / Sorted tabs ────────────────────────────
+  sortTabs: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 6,
+    paddingTop: 10,
+  },
+  sortTab: {
+    minWidth: 150,
+    paddingVertical: 10,
+    paddingHorizontal: 26,
+    alignItems: 'center',
+    borderTopLeftRadius: 12,
+    borderTopRightRadius: 12,
+  },
+  sortTabOn:  { backgroundColor: '#FFFFFF' },
+  sortTabOff: { backgroundColor: '#D6D3CE' },
+  sortTabText: { fontSize: 14, fontWeight: '800', letterSpacing: 0.8 },
+  sortTabTextOn:  { color: '#DC2626' },
+  sortTabTextOff: { color: '#3A3131' },
+
+  // ── Client cards ──────────────────────────────────────
+  // ── View / Accept / Reject ────────────────────────────
+  decideRow: { flexDirection: 'row', gap: 8 },
+  viewWideBtn: {
+    minWidth: 78,
+    paddingVertical: 7,
+    paddingHorizontal: 14,
+    borderRadius: 7,
+    borderWidth: 1,
+    borderColor: '#E8B923',
+    backgroundColor: '#FEF9E7',
+    alignItems: 'center',
+  },
+  viewWideText: { color: '#8A6D1B', fontSize: 12, fontWeight: '700' },
+  acceptWideBtn: {
+    minWidth: 78,
+    paddingVertical: 7,
+    paddingHorizontal: 14,
+    borderRadius: 7,
+    borderWidth: 1,
+    borderColor: '#86EFAC',
+    backgroundColor: '#DCFCE7',
+    alignItems: 'center',
+  },
+  acceptWideText: { color: '#166534', fontSize: 12, fontWeight: '700' },
+  rejectWideBtn: {
+    minWidth: 78,
+    paddingVertical: 7,
+    paddingHorizontal: 14,
+    borderRadius: 7,
+    borderWidth: 1,
+    borderColor: '#FCA5A5',
+    backgroundColor: '#FEE2E2',
+    alignItems: 'center',
+  },
+  rejectWideText: { color: '#B91C1C', fontSize: 12, fontWeight: '700' },
+
+  // ── Toolbar ───────────────────────────────────────────
+  // One block holding the breadcrumb, the folder tabs and the months. Each
+  // row has its own fixed height, which is what stops them clipping.
+  toolbar: {
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#EDE7DC',
+  },
+
+  crumb: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    height: 44,
+    paddingHorizontal: 20,
+  },
+  crumbText: { color: '#1C1713', fontSize: 15, fontWeight: '700', flexShrink: 1 },
+  crumbClear: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 7,
+    backgroundColor: '#F5F0E8',
+  },
+  crumbClearText: { color: '#6B5E52', fontSize: 11, fontWeight: '700' },
+
+  tabStrip: { flexGrow: 0, height: 46 },
+  tabStripContent: { paddingHorizontal: 20, gap: 6, alignItems: 'center' },
+  fTab: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    height: 32,
+    paddingHorizontal: 14,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  fTabOn:  { backgroundColor: '#3A3131', borderColor: '#3A3131' },
+  fTabOff: { backgroundColor: '#FFFFFF', borderColor: '#E3DCCF' },
+  fTabText: { color: '#6B5E52', fontSize: 12, fontWeight: '700', maxWidth: 190 },
+  fTabTextOn: { color: '#FFFFFF' },
+  fTabCount: {
+    minWidth: 19,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: 8,
+    backgroundColor: '#F1EDE6',
+    alignItems: 'center',
+  },
+  fTabCountOn: { backgroundColor: '#E8B923' },
+  fTabCountText: { color: '#6B5E52', fontSize: 10, fontWeight: '800' },
+  fTabCountTextOn: { color: '#3A3131' },
+
+  monthStrip: { flexGrow: 0, height: 44 },
+  monthStripContent: { paddingHorizontal: 20, gap: 6, alignItems: 'center' },
+  mChip: {
+    height: 28,
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#E3DCCF',
+    backgroundColor: '#FFFFFF',
+  },
+  mChipOn: { backgroundColor: '#E8B923', borderColor: '#E8B923' },
+  mChipText: { color: '#6B5E52', fontSize: 11.5, fontWeight: '600' },
+  mChipTextOn: { color: '#3A3131', fontWeight: '700' },
+
+  // Room for the count badge, which sits above the top edge of each card.
+  clientList: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 48 },
+  // flex-start, not space-between: a part-filled last row would otherwise
+  // stretch its cards to fill the gap and they would not match the rest.
+  clientGridRow: { gap: 14, marginBottom: 16, justifyContent: 'flex-start' },
+  clientCard: {
+    // A quarter of the row each, and no growing: a part-filled last row then
+    // keeps its cards the same size as every other row's.
+    flexGrow: 0,
+    flexShrink: 1,
+    flexBasis: '23%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    height: 104,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    padding: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.24,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  clientAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: '#D9D2C6',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  clientAvatarText: { color: '#6B5E52', fontSize: 13, fontWeight: '800' },
+  clientName: { color: '#1C1713', fontSize: 13, fontWeight: '700' },
+  clientTags: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 5 },
+  clientSvc: {
+    backgroundColor: '#D8CCB4',
+    borderRadius: 5,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  clientSvcText: { color: '#1C1713', fontSize: 9, fontWeight: '800' },
+  clientActive: {
+    backgroundColor: '#DCFCE7',
+    borderRadius: 5,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  clientActiveText: { color: '#15803D', fontSize: 9, fontWeight: '800' },
+  clientInactive: {
+    backgroundColor: '#FEE2E2',
+    borderRadius: 5,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  clientInactiveText: { color: '#B91C1C', fontSize: 9, fontWeight: '800' },
+  // The count sits proud of the card's corner, as the design draws it.
+  clientCount: {
+    position: 'absolute',
+    top: -10,
+    right: -6,
+    minWidth: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 2,
+    borderColor: '#F87171',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 6,
+  },
+  clientCountText: { color: '#DC2626', fontSize: 13, fontWeight: '800' },
 
   card: {
     flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFFFFF',

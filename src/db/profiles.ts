@@ -4,6 +4,13 @@ import { BankAccount, normalizeBankAccounts } from './requirements';
 export type UserRole = 'client' | 'staff' | 'admin';
 export type ClientService = 'BK' | 'TAX' | 'CFO';
 
+/**
+ * active — subscription is current
+ * paused — subscription is paused or delayed; they are coming back
+ * closed — service is cancelled or no longer provided
+ */
+export type AccountStatus = 'active' | 'paused' | 'closed';
+
 export interface Profile {
   id: string;
   full_name: string;
@@ -13,6 +20,12 @@ export interface Profile {
   avatar_url: string | null;
   role: UserRole;
   is_active: boolean;
+  /**
+   * Where the subscription stands. `is_active` only says on or off; this
+   * tells a pause from a cancellation. A trigger keeps the two in step, so
+   * setting one updates the other.
+   */
+  account_status?: AccountStatus;
   services: ClientService[];      // which categories/requirements the client sees
   has_qbo_access: boolean;        // true → hide "Prior Month Bookkeeping / QBO Access"
   bank_accounts: BankAccount[];   // one required Bank Statements slot per account
@@ -84,7 +97,7 @@ export async function removeBankAccounts(userId: string, ids: string[]): Promise
 
 export async function updateClientProfile(
   userId: string,
-  updates: Partial<Pick<Profile, 'full_name' | 'plan' | 'is_active' | 'services' | 'has_qbo_access' | 'bank_accounts'>>,
+  updates: Partial<Pick<Profile, 'full_name' | 'plan' | 'is_active' | 'account_status' | 'services' | 'has_qbo_access' | 'bank_accounts'>>,
 ): Promise<boolean> {
   const { error } = await supabase.from('profiles').update(updates).eq('id', userId);
   if (error) { console.error('updateClientProfile:', error.message); return false; }
