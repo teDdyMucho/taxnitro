@@ -471,21 +471,54 @@ export function ClientDocumentsScreen({
     return [...buckets.values()].sort((a, b) => a.order - b.order || a.title.localeCompare(b.title));
   }, [documents, clientItems, subfolders]);
 
-  // All three tabs, always — a client can be given a service later, and the
-  // empty tab is where its folders will appear.
-  const serviceTabs = ['TAX', 'BK', 'CFO'] as ClientService[];
+  // The services this client takes. An older record with none recorded is read
+  // as BK, which is what the rest of the app does with it.
+  const taken = useMemo<ClientService[]>(
+    () => (client.services?.length ? client.services : (['BK'] as ClientService[])),
+    [client.services]);
 
-  // Open on a service this client actually has, rather than always on TAX.
-  const defaultService = useMemo<ClientService>(() => {
-    const has = client.services?.length ? client.services : (['BK'] as ClientService[]);
-    return serviceTabs.find(s => has.includes(s)) ?? 'BK';
-  }, [client.services]);
+  // What is still filed under each service, whether or not they still take it.
+  const filedUnder = useMemo(() => {
+    const n: Record<string, number> = { TAX: 0, BK: 0, CFO: 0 };
+    documents.forEach(d => {
+      const svc = serviceOfFolderKey(`tbl:${d.document_type ?? ''}`);
+      if (svc) n[svc] += 1;
+    });
+    return n;
+  }, [documents]);
+
+  // Camaree: "the folder tabs don't delete right away if a service is removed …
+  // once a service is removed, the tab needs to be archived or deleted."
+  //
+  // All three used to show, always, on the reasoning that an empty tab is where
+  // a service's folders will appear if it is given later. That reads as though
+  // the client takes all three, and it is the CFO clients who are about to have
+  // BK taken off them.
+  //
+  // So a tab shows for a service they take. A service they no longer take shows
+  // only while something is still filed under it, marked archived — deleting a
+  // tab with fifty bank statements behind it would put those files out of reach
+  // from this screen. It goes by itself once the folders are empty.
+  const serviceTabs = useMemo<ClientService[]>(
+    () => (['TAX', 'BK', 'CFO'] as ClientService[])
+      .filter(svc => taken.includes(svc) || filedUnder[svc] > 0),
+    [taken, filedUnder]);
+
+  const isArchived = (svc: ClientService) => !taken.includes(svc);
+
+  // Open on a service this client actually has, rather than always on TAX or on
+  // one they have just been taken off.
+  const defaultService = useMemo<ClientService>(
+    () => serviceTabs.find(s => taken.includes(s)) ?? serviceTabs[0] ?? 'BK',
+    [serviceTabs, taken]);
 
   // While a folder is open, the tab follows that folder's service — otherwise
   // closing it would land on a tab the folder is not even listed under.
-  const shownService = activeService
-    ?? (activeFolderKey ? serviceOfFolderKey(activeFolderKey) : null)
-    ?? defaultService;
+  // A tab that has gone — the service was removed and its last file with it —
+  // must not stay selected, or the page would sit on a tab that is not there.
+  const chosen = activeService
+    ?? (activeFolderKey ? serviceOfFolderKey(activeFolderKey) : null);
+  const shownService = (chosen && serviceTabs.includes(chosen)) ? chosen : defaultService;
 
   const visibleFolders = useMemo(() => {
     return folders.filter(f => {
@@ -695,6 +728,9 @@ export function ClientDocumentsScreen({
                 activeOpacity={0.85}
               >
                 <Text style={[s.tabText, on ? s.tabTextOn : s.tabTextOff]}>{svc}</Text>
+                {isArchived(svc) && (
+                  <Text style={[s.tabNote, on ? s.tabTextOn : s.tabTextOff]}>archived</Text>
+                )}
               </TouchableOpacity>
             );
           })}
@@ -961,6 +997,8 @@ const s = StyleSheet.create({
   tabOn:  { backgroundColor: Colors.bgDeep },
   tabOff: { backgroundColor: '#C9A75C' },
   tabText: { fontSize: 13, fontWeight: '800', letterSpacing: 0.6 },
+  // Says why a tab is still here for a service the client no longer takes.
+  tabNote: { fontSize: 9, fontWeight: '700', letterSpacing: 0.4, opacity: 0.75, marginTop: 1 },
   tabTextOn:  { color: Colors.textPrimary },
   tabTextOff: { color: '#3A3131' },
 
