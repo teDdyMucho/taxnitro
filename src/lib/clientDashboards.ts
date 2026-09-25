@@ -402,9 +402,10 @@ const ENTRIES: Entry[] = [
     },
   },
   {
-    // TODO: Tribal Indemnity's sign-in email — no client account exists for
-    // them yet. Until one does and it is listed here, they have no dashboard.
-    emails: [],
+    // Paul, 23 Sep: "tribal indemnity = tribalinsurance@gmail.com". No portal
+    // account carries it yet; listed now so their dashboard is theirs the day
+    // one is made, rather than waiting on somebody to remember this file.
+    emails: ['tribalinsurance@gmail.com'],
     dashboard: {
       key: 'tribal-indemnity',
       label: 'Financial Dashboard',
@@ -420,8 +421,9 @@ const ENTRIES: Entry[] = [
     },
   },
   {
-    // TODO: Strong Little Hands Daycare's sign-in email, as above.
-    emails: [],
+    // Paul, 23 Sep: "Strong Little Hands = armstrong.jen27@gmail.com". Same
+    // again — no account under it yet.
+    emails: ['armstrong.jen27@gmail.com'],
     dashboard: {
       key: 'strong-little-hands-daycare',
       label: 'Financial Dashboard',
