@@ -156,16 +156,26 @@ const STEER_ROWS: RowMap = {
   draws: 88, equity: 92,
 };
 
+/**
+ * Read again for v8, which drops a row from the revenue block and so sits one
+ * line above v6 throughout, and two by the balance sheet.
+ *
+ * The departure noted against v6 is over: its TOTAL INCOME card counted revenue
+ * alone while its own statement included other income, and this screen followed
+ * the statement. v8's card is revenue plus other income — $93,830 and $302 to
+ * the $94,132 it shows — so workbook and screen now say the same thing, which
+ * is what headlineIncome below reads.
+ */
 const BATTLE_PROTECTION_ROWS: RowMap = {
-  income: [35, 36, 37], totalIncome: 38,
-  headlineIncome: [38, 69], headlineExpense: [64, 74],
-  payroll: [48, 49, 50],
-  opexFirst: 43, opexLast: 63, totalOpex: 64, grossProfit: 66,
-  otherIncome: [68], totalOtherIncome: 69,
-  otherExpense: [71, 72, 73], totalOtherExpense: 74, netOther: 75,
-  netIncome: 76,
-  cash: 84, currentAssets: 87, cards: 95, currentLiabilities: 97,
-  draws: 101, equity: 105,
+  income: [34, 35, 36], totalIncome: 37,
+  headlineIncome: [37, 68], headlineExpense: [63, 73],
+  payroll: [47, 48, 49],
+  opexFirst: 42, opexLast: 62, totalOpex: 63, grossProfit: 65,
+  otherIncome: [67], totalOtherIncome: 68,
+  otherExpense: [70, 71, 72], totalOtherExpense: 73, netOther: 74,
+  netIncome: 75,
+  cash: 83, currentAssets: 85, cards: 93, currentLiabilities: 95,
+  draws: 99, equity: 103,
 };
 
 const ACCESS_GRANTED_ROWS: RowMap = {
@@ -190,16 +200,22 @@ const TWO_G_THREE_B_ROWS: RowMap = {
   draws: 140, equity: 146,
 };
 
+/**
+ * Read again for v4, which is numbered differently from v3: a fourth revenue
+ * line — Scholarship & Uncategorised Income — and more expense rows push every
+ * figure below the revenue block down by one to six. Aug 2026 reads $85,975
+ * against $69,576 at 19%, which is their own Dashboard.
+ */
 const FIRST_STEP_ROWS: RowMap = {
-  income: [33, 34, 35], totalIncome: 36,
-  headlineIncome: [36], headlineExpense: [42, 69, 79],
-  payroll: [46, 47, 48, 49],
-  opexFirst: 46, opexLast: 68, totalOpex: 69, grossProfit: 71,
-  otherIncome: [73, 74], totalOtherIncome: 75,
-  otherExpense: [77, 78], totalOtherExpense: 79, netOther: 80,
-  netIncome: 81,
-  cash: 86, currentAssets: 88, cards: 97, currentLiabilities: 98,
-  draws: 108, equity: 111,
+  income: [33, 34, 35, 36], totalIncome: 37,
+  headlineIncome: [37], headlineExpense: [43, 73, 83],
+  payroll: [47, 48, 49, 50],
+  opexFirst: 47, opexLast: 72, totalOpex: 73, grossProfit: 75,
+  otherIncome: [77, 78], totalOtherIncome: 79,
+  otherExpense: [81, 82], totalOtherExpense: 83, netOther: 84,
+  netIncome: 85,
+  cash: 90, currentAssets: 92, cards: 102, currentLiabilities: 103,
+  draws: 114, equity: 117,
 };
 
 /**
@@ -342,6 +358,8 @@ const ENTRIES: Entry[] = [
       loadNotes: () => import('../data/firstStepSheetsNotes').then(m => m.FIRST_STEP_NOTES),
       rows: FIRST_STEP_ROWS,
       forecast: 'workbook',
+      // v4 closes August; the workbook forecasts Sep-Dec 2026.
+      lastActual: 7,
     },
   },
   {
@@ -369,6 +387,8 @@ const ENTRIES: Entry[] = [
       loadNotes: () => import('../data/accessGrantedSheetsNotes').then(m => m.ACCESS_GRANTED_NOTES),
       rows: ACCESS_GRANTED_ROWS,
       forecast: 'workbook',
+      // v3.1 closes August; the workbook forecasts Sep–Dec 2026.
+      lastActual: 7,
     },
   },
   {
@@ -383,6 +403,8 @@ const ENTRIES: Entry[] = [
       loadNotes: () => import('../data/battleProtectionSheetsNotes').then(m => m.BATTLE_PROTECTION_NOTES),
       rows: BATTLE_PROTECTION_ROWS,
       forecast: 'workbook',
+      // v8 closes August; the workbook forecasts Sep-Dec 2026.
+      lastActual: 7,
     },
   },
   {
@@ -464,6 +486,8 @@ const ENTRIES: Entry[] = [
       loadNotes: () => import('../data/steerSheetsNotes').then(m => m.STEER_NOTES),
       rows: STEER_ROWS,
       forecast: 'workbook',
+      // v3 closes August; the workbook forecasts Sep-Dec 2026.
+      lastActual: 7,
     },
   },
 ];
