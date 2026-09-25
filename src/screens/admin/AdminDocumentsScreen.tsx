@@ -483,6 +483,12 @@ export function AdminDocumentsScreen() {
   const [loading, setLoading]       = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [query, setQuery]           = useState('');
+  // Set when a client card is opened, cleared as soon as anyone types. The list
+  // matched the search box as a substring, so opening ann@acme.com also listed
+  // joann@acme.com's documents under her heading — with Accept, Decline and
+  // Delete sitting on them. Typing still matches loosely; a card means exactly
+  // that client.
+  const [clientExact, setClientExact] = useState(false);
   const [filter, setFilter]         = useState('pending'); // default: show pending first
   const monthBarRef = useWheelScroll();     // a mouse wheel moves it too
   const [viewerDoc, setViewerDoc]   = useState<Document | null>(null);
@@ -547,9 +553,11 @@ export function AdminDocumentsScreen() {
     if (filter !== 'all' && filter !== 'pending' && d.document_type !== filter) return false;
     if (period !== 'all' && periodOf(d) !== period) return false;
     if (!query.trim()) return true;
+    const q = query.trim().toLowerCase();
+    if (clientExact) return (d.email ?? '').toLowerCase() === q;
     return (
-      d.name?.toLowerCase().includes(query.toLowerCase()) ||
-      d.email?.toLowerCase().includes(query.toLowerCase())
+      d.name?.toLowerCase().includes(q) ||
+      d.email?.toLowerCase().includes(q)
     );
   })
     // Newest month first; within a month, the newest upload.
@@ -654,7 +662,10 @@ export function AdminDocumentsScreen() {
           documentTable:  table,
           service:        requirement.service,
           requirementKey: requirement.key,
-          month:          monthOf(),
+          // The month the document covers. monthOf() — today — meant approving
+          // an August P&L in September satisfied September's slot with it, and
+          // took the place of whatever September was actually waiting for.
+          month:          periodOf(doc),
           taggedBy:       approver,
         });
       }
@@ -987,7 +998,7 @@ export function AdminDocumentsScreen() {
                 placeholder="Search clients by name or email…"
                 placeholderTextColor="#94A3B8"
                 value={query}
-                onChangeText={setQuery}
+                onChangeText={t => { setClientExact(false); setQuery(t); }}
               />
               {!!query && (
                 <TouchableOpacity onPress={() => setQuery('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
@@ -1033,7 +1044,7 @@ export function AdminDocumentsScreen() {
                   style={s.clientCard}
                   // Show everything of theirs, not just what is pending —
                   // the count on the card is of all their unsorted files.
-                  onPress={() => { setQuery(item.email); setFilter('all'); setView('list'); }}
+                  onPress={() => { setQuery(item.email); setClientExact(true); setFilter('all'); setView('list'); }}
                   activeOpacity={0.85}
                 >
                   <View style={s.clientAvatar}>

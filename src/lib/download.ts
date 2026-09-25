@@ -55,8 +55,16 @@ function uniqueName(taken: Set<string>, name: string): string {
   return candidate;
 }
 
-/** Save one file. */
+/**
+  * Save one file.
+  *
+  * A row with no document_url used to be handed to the browser as href="",
+  * which resolves to the page you are on -- so it saved this app's own HTML
+  * under the document's name, and the zip did the same through fetch(''),
+  * counting it among the files it had saved.
+  */
 export async function downloadOne(file: DownloadableFile): Promise<void> {
+  if (!file.url) throw new Error('That file has no stored copy to download.');
   const href = withDownloadParam(file.url, safeFileName(file.name));
 
   if (Platform.OS !== 'web') {
@@ -116,6 +124,7 @@ export async function downloadZip(
     const f = files[i];
     onProgress?.({ done: i, total: files.length });
     try {
+      if (!f.url) throw new Error('no stored copy');
       const res = await fetch(f.url);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       zip.file(uniqueName(taken, safeFileName(f.name)), await res.blob());

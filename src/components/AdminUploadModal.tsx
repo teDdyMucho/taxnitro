@@ -266,9 +266,19 @@ export function AdminUploadModal({ visible, onClose, onUploaded, fixedClient }: 
     return prev.filter(f => f.id !== id);
   });
 
-  /** Drop a whole destination bucket — key is `${folderKey}::${subfolderId}`. */
+  /** The key a queued file belongs under — the four parts the buckets are built from. */
+  const bucketKeyOf = (f: PickedFile) =>
+    `${f.folderKey}::${f.subfolderId ?? ''}::${f.label ?? ''}::${f.period}`;
+
+  /**
+   * Drop a whole destination bucket.
+   *
+   * This compared the first two parts of a four-part key, so it matched
+   * nothing: the confirm read "0 file(s) queued", removing removed none of
+   * them, and the files went up with the rest.
+   */
   const removeGroup = (key: string) => setPicked(prev => {
-    const inBucket = (f: PickedFile) => `${f.folderKey}::${f.subfolderId ?? ''}` === key;
+    const inBucket = (f: PickedFile) => bucketKeyOf(f) === key;
     prev.filter(inBucket).forEach(revoke);
     return prev.filter(f => !inBucket(f));
   });
@@ -770,7 +780,7 @@ export function AdminUploadModal({ visible, onClose, onUploaded, fixedClient }: 
                   {confirmRemove.kind === 'all'
                     ? `${picked.length} file${picked.length !== 1 ? 's' : ''} will be removed from this upload. You'll need to add them again.`
                     : confirmRemove.kind === 'group'
-                      ? `${picked.filter(f => `${f.folderKey}::${f.subfolderId ?? ''}` === confirmRemove.id).length} file(s) queued for "${confirmRemove.name}" will be removed.`
+                      ? `${picked.filter(f => bucketKeyOf(f) === confirmRemove.id).length} file(s) queued for "${confirmRemove.name}" will be removed.`
                       : `"${confirmRemove.name}" will be removed from this upload.`}
                 </Text>
 

@@ -68,7 +68,9 @@ export function ClientDashboardScreen({
   const [sheets, setSheets] = useState<ClientSheets | null>(null);
   const [notes, setNotes] = useState<ClientNotes | null>(null);
   const [tab, setTab] = useState<TabKey>('dash');
-  const [month, setMonth] = useState(7);
+  // Opens on the client's last closed month. This was a fixed 7 (August), so a
+  // client whose actuals stop in July — 2G3B Eats — opened on a forecast.
+  const [month, setMonth] = useState(dashboard.lastActual ?? LAST_ACTUAL);
   const [assumptions, setAssumptions] = useState<Assumptions>(DEFAULT_ASSUMPTIONS);
   const tabBarRef   = useWheelScroll();   // a mouse wheel moves these sideways strips
   const monthRowRef = useWheelScroll();
@@ -129,6 +131,9 @@ export function ClientDashboardScreen({
   // Where this client's actuals stop. Most stand at July; D&J Tropical Sno has
   // closed August, and its figures must not be labelled a forecast.
   const lastActual = dashboard.lastActual ?? LAST_ACTUAL;
+  // Said in the prose on the FS-R tab, so it cannot drift from the shading.
+  const actualSpan   = `Jan–${MONTHS[lastActual]}`;
+  const forecastSpan = lastActual < 11 ? `${MONTHS[lastActual + 1]}–Dec` : 'nothing';
   const fsr = useMemo(
     () => (sheets ? buildForecast(sheets, assumptions, rows, dashboard.forecast, lastActual) : null),
     [sheets, assumptions, rows, dashboard.forecast, lastActual]);
@@ -618,17 +623,26 @@ export function ClientDashboardScreen({
       case 'fsr':
         return (
           <>
+            {/*
+              Written from the client's own boundary. These two sentences said
+              "January to July … August to December" whoever was looking, so
+              nine of the ten clients were told their closed August was a
+              forecast — on the same page that shades it as actual and an
+              Assumptions tab that says Jan–Aug.
+            */}
             {subhead('FS-R — Restated & Forecast',
-              liveScenario
-                ? 'Restated statements. January to July 2026 are booked actuals; August to December are forecast from the scenario levers.'
-                : 'Restated statements. January to July 2026 are booked actuals; August to December are the forecast as this client’s own workbook computed it.')}
+              `Restated statements. ${actualSpan} are booked actuals; ${forecastSpan} `
+              + (liveScenario
+                ? 'are forecast from the scenario levers.'
+                : 'are the forecast as this client’s own workbook computed it.'))}
             <View style={s.pad}>
               <View style={s.note}>
                 <Ionicons name="information-circle-outline" size={16} color={Colors.primaryDark} />
                 <Text style={s.noteText}>
+                  {`${actualSpan} 2026 are booked actuals. ${forecastSpan} 2026 are forecast, shaded below, and `}
                   {liveScenario
-                    ? 'Jan–Jul 2026 are booked actuals. Aug–Dec 2026 are forecast, shaded below, and move with the scenario on the Assumptions tab.'
-                    : 'Jan–Jul 2026 are booked actuals. Aug–Dec 2026 are forecast, shaded below, and are shown exactly as this client’s workbook computed them — the scenario picker does not move them.'}
+                    ? 'move with the scenario on the Assumptions tab.'
+                    : 'are shown exactly as this client’s workbook computed them — the scenario picker does not move them.'}
                 </Text>
               </View>
               <UeStatement rows={Object.values(fsr)} forecastFrom={lastActual} />

@@ -44,23 +44,37 @@ export async function markAllNotificationsRead(userId: string): Promise<boolean>
   return true;
 }
 
+/**
+ * Both deletes ask for the rows back.
+ *
+ * A delete that row-level security refuses is not an error — it matches
+ * nothing and returns quietly — so these reported success while the table was
+ * untouched and every notification came back on the next refresh. Asking which
+ * rows went is the difference between "deleted" and "asked politely".
+ */
 export async function deleteNotification(notificationId: string): Promise<boolean> {
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('notifications')
     .delete()
-    .eq('id', notificationId);
+    .eq('id', notificationId)
+    .select('id');
 
   if (error) { console.error('deleteNotification:', error.message); return false; }
+  if (!data?.length) { console.error('deleteNotification: nothing was deleted'); return false; }
   return true;
 }
 
 export async function deleteAllNotifications(userId: string): Promise<boolean> {
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('notifications')
     .delete()
-    .eq('user_id', userId);
+    .eq('user_id', userId)
+    .select('id');
 
   if (error) { console.error('deleteAllNotifications:', error.message); return false; }
+  // Nothing to clear is a fine outcome; nothing cleared when there was
+  // something is not, and the caller can now tell.
+  if (!data) { console.error('deleteAllNotifications: nothing was deleted'); return false; }
   return true;
 }
 
