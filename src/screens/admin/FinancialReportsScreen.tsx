@@ -7,7 +7,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Colors } from '../../constants/colors';
 import { getAllClients, type Profile } from '../../db/profiles';
-import { allDashboards, dashboardForClient, type ClientDashboard } from '../../lib/clientDashboards';
+import { allDashboardEntries, dashboardForClient, type ClientDashboard } from '../../lib/clientDashboards';
 import { ClientDashboardScreen } from './ClientDashboardScreen';
 
 // Financial Reports — the clients whose dashboard has been built.
@@ -31,6 +31,8 @@ interface WithDashboard {
    */
   client: Profile | null;
   dashboard: ClientDashboard;
+  /** The address their account will sign in under, shown until it exists. */
+  emails: string[];
 }
 
 const mkInitials = (name: string) =>
@@ -51,8 +53,9 @@ export function FinancialReportsScreen({ onBack }: { onBack?: () => void }) {
       // Every dashboard that has been built, each matched to its client where
       // one exists. Built from the dashboards rather than from the client list,
       // which is what leaves room for a report whose client has no account yet.
-      const withDash: WithDashboard[] = allDashboards().map(dashboard => ({
+      const withDash: WithDashboard[] = allDashboardEntries().map(({ dashboard, emails }) => ({
         dashboard,
+        emails,
         client: clients.find(c => dashboardForClient(c)?.key === dashboard.key) ?? null,
       }));
       setRows(withDash);
@@ -107,7 +110,7 @@ export function FinancialReportsScreen({ onBack }: { onBack?: () => void }) {
             </Text>
           </View>
         ) : (
-          rows.map(({ client, dashboard }) => (
+          rows.map(({ client, dashboard, emails }) => (
             <TouchableOpacity
               key={dashboard.key}
               style={[s.card, wide && s.cardWide]}
@@ -157,7 +160,10 @@ export function FinancialReportsScreen({ onBack }: { onBack?: () => void }) {
                   {client?.full_name || dashboard.name}
                 </Text>
                 <Text style={s.cardMeta} numberOfLines={1}>
-                  {client?.email ?? 'No portal account yet — staff view only'}
+                  {client?.email
+                    ?? (emails[0]
+                      ? `${emails[0]} — no portal account yet`
+                      : 'No portal account yet — staff view only')}
                 </Text>
               </View>
               <View style={s.pill}>

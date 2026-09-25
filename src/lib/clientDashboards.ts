@@ -481,3 +481,16 @@ export function dashboardForClient(
 export function allDashboards(): ClientDashboard[] {
   return ENTRIES.map(e => e.dashboard);
 }
+
+/**
+ * Every dashboard with the address it is waiting for.
+ *
+ * The list of reports shows the client's own name and email once they have an
+ * account. Before that there is no profile to read either from, and the row
+ * fell back to saying only that the account was missing — which read as though
+ * nobody knew who the report belonged to. The address is known; it is right
+ * here. So it is handed over and the row can say whose it is.
+ */
+export function allDashboardEntries(): { dashboard: ClientDashboard; emails: string[] }[] {
+  return ENTRIES.map(e => ({ dashboard: e.dashboard, emails: e.emails }));
+}
