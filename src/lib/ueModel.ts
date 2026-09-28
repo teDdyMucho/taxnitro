@@ -182,6 +182,20 @@ export const signed = (n: number) => (n >= 0 ? '' : '-') + '$' + nf(n);
 /** Every ratio in the workbook is IFERROR(…, 0) — divide by zero reads as zero. */
 export const div = (a: number, b: number) => (b ? a / b : 0);
 
+/**
+ * Movement against a base that can be negative.
+ *
+ * div(now, prev) - 1 reads backwards once prev is below zero: cash improving
+ * from -$31,619 to -$28,218 came out as -10.8%, a fall, and worsening from
+ * -$53,808 to -$63,730 came out as +18.4%. Dividing the change by the SIZE of
+ * the base keeps the sign the direction of travel.
+ */
+export const movePct = (now: number, prev: number) =>
+  (prev ? (now - prev) / Math.abs(prev) : 0);
+
+/** Whether a base is worth comparing against at all. */
+export const comparable = (base: number) => Math.abs(base) > 0.005;
+
 // ── Assumptions ──────────────────────────────────────────────────────────────
 // Section numbers match the workbook's own ASSUMPTIONS tab.
 
@@ -493,8 +507,18 @@ export function buildDashboard(f: Fsr, m: number, map: RowMap,
     : `Income closed at ${kfmt(inc)} for ${label}, ${dI >= 0 ? 'higher' : 'lower'} by ${pct(Math.abs(div(dI, pI)))} `
       + `(${money(Math.abs(dI))}) vs ${priorLabel(m)}, mainly due to ${dI >= 0 ? 'higher' : 'lower'} `
       + `${(dI >= 0 ? d.incUp : d.incDown).label} (${money(Math.abs((dI >= 0 ? d.incUp : d.incDown).change))}). `
-      + `Against ${lyLabel(m)}, income is ${inc >= income25(R, f, m) ? 'up' : 'down'} ${pct(Math.abs(div(inc - income25(R, f, m), income25(R, f, m))))}, `
-      + `while YTD 2026 of ${kfmt(y26i)} is ${pct(Math.abs(div(y26i - y25i, y25i)))} ${y26i >= y25i ? 'ahead of' : 'behind'} the same period in 2025.`;
+      // Said only where there is a prior year to say it against. With no 2025
+      // the division fell back to 0 and the sentence read "up 0.0%" and "0.0%
+      // ahead of the same period in 2025" — a comparison with nothing, next to
+      // a table that correctly showed a dash and a notice saying there is no
+      // prior year. D&J Tropical Sno, Strong Little Hands, STEER and 2G3B all
+      // read that way.
+      + (comparable(income25(R, f, m))
+        ? `Against ${lyLabel(m)}, income is ${inc >= income25(R, f, m) ? 'up' : 'down'} ${pct(Math.abs(movePct(inc, income25(R, f, m))))}. `
+        : `There is no ${lyLabel(m)} to compare against. `)
+      + (comparable(y25i)
+        ? `YTD 2026 of ${kfmt(y26i)} is ${pct(Math.abs(movePct(y26i, y25i)))} ${y26i >= y25i ? 'ahead of' : 'behind'} the same period in 2025.`
+        : `YTD 2026 stands at ${kfmt(y26i)}, with no 2025 to set it beside.`);
 
   let expenseComment: string;
   if (exp === 0) {
@@ -506,9 +530,17 @@ export function buildDashboard(f: Fsr, m: number, map: RowMap,
     // Only named when a line actually moved the other way — as the workbook does.
     if (up && off.change < 0) s += `, partially offset by lower ${off.label} (${money(Math.abs(off.change))})`;
     if (!up && off.change > 0) s += `, partially offset by higher ${off.label} (${money(off.change)})`;
-    s += `. Against ${lyLabel(m)}, spend is ${exp >= expense25(R, f, m) ? 'up' : 'down'} ${pct(Math.abs(div(exp - expense25(R, f, m), expense25(R, f, m))))}, `
-       + `and YTD 2026 spend of ${kfmt(y26e)} is ${pct(Math.abs(div(y26e - y25e, y25e)))} ${y26e >= y25e ? 'above' : 'below'} 2025`
-       + `, leaving ${net >= 0 ? 'net income' : 'a net loss'} for the month of ${kfmt(Math.abs(net))}.`;
+    s += '. ';
+    // As above: no 2025, no comparison.
+    if (comparable(expense25(R, f, m))) {
+      s += `Against ${lyLabel(m)}, spend is ${exp >= expense25(R, f, m) ? 'up' : 'down'} ${pct(Math.abs(movePct(exp, expense25(R, f, m))))}, `;
+    }
+    if (comparable(y25e)) {
+      s += `and YTD 2026 spend of ${kfmt(y26e)} is ${pct(Math.abs(movePct(y26e, y25e)))} ${y26e >= y25e ? 'above' : 'below'} 2025, `;
+    } else {
+      s += `YTD 2026 spend stands at ${kfmt(y26e)}, `;
+    }
+    s += `leaving ${net >= 0 ? 'net income' : 'a net loss'} for the month of ${kfmt(Math.abs(net))}.`;
     expenseComment = s;
   }
 
@@ -541,7 +573,11 @@ export function buildDashboard(f: Fsr, m: number, map: RowMap,
     expenseSeries: {
       current: e26,
       prior: MONTHS.map((_, i) => expense25(R, f, i)),
-      trend: e26.map(v => v * 1.4),
+      // The same three-month average the income chart draws. This was
+      // e26.map(v => v * 1.4) — every bar multiplied by 1.4 and labelled
+      // "Trend" — which also set the top of the scale, so every expense bar,
+      // 2025 included, was drawn at 71% of its height.
+      trend: e26.map((v, i) => (i > m ? 0 : i < 2 ? v : (e26[i] + e26[i - 1] + e26[i - 2]) / 3)),
     },
     incomeRows: rows(inc, pI, income25(R, f, m), y26i, y25i),
     expenseRows: rows(exp, pE, expense25(R, f, m), y26e, y25e),
@@ -550,16 +586,29 @@ export function buildDashboard(f: Fsr, m: number, map: RowMap,
     balanceCards: [
       {
         title: 'Cash & Bank', value: money(cash),
-        sub: `Prior month ${money(prev(R.cash))} (${pct(div(cash, prev(R.cash)) - 1)})`,
-        note: `Covers about ${days.toFixed(1)} days of payroll. ` + (cash < pay / 2
+        sub: `Prior month ${money(prev(R.cash))}`
+          + (comparable(prev(R.cash)) ? ` (${pct(movePct(cash, prev(R.cash)))})` : ''),
+        note: (pay > 0
+          ? `Covers about ${days.toFixed(1)} days of payroll. `
+          : 'No payroll posted this month, so there is nothing to measure the cash against. ')
+          + (pay > 0 && cash < pay / 2
           ? 'That is under half a month — fund payroll and payroll taxes before any other spend.'
           : 'Hold at least 15 days of payroll as a floor.'),
       },
       ...(R.cards && cards !== null ? [{
         title: 'Credit Cards', value: money(cards), sub: `Prior month ${money(prev(R.cards))}`,
-        note: `Card balances are ${pct(div(cards, cash))} of cash on hand. ` + (div(cards, cash) > 0.25
-          ? 'Pay down monthly to avoid interest.'
-          : 'Comfortably covered — keep clearing the balance in full each month.'),
+        // Measured against cash only while there is cash. Overdrawn, the ratio
+        // goes negative, slips under the 0.25 test and printed the reassuring
+        // line: FTG's Aug 2026 read "-97.4% of cash on hand — comfortably
+        // covered" against $62,052 of cards and $63,730 overdrawn, and ten of
+        // their twelve months read that way.
+        note: cash > 0
+          ? `Card balances are ${pct(div(cards, cash))} of cash on hand. ` + (div(cards, cash) > 0.25
+            ? 'Pay down monthly to avoid interest.'
+            : 'Comfortably covered — keep clearing the balance in full each month.')
+          : (cards > 0
+            ? 'There is no cash to cover these balances — the accounts are overdrawn. Clearing them has to come out of trading or funding.'
+            : 'A credit balance sits on the cards, so nothing is owed on them this month.'),
       }] : []),
       {
         title: 'Total Equity', value: money(equity), sub: `Prior month ${money(prev(R.equity))}`,
@@ -569,19 +618,35 @@ export function buildDashboard(f: Fsr, m: number, map: RowMap,
       },
       {
         title: 'Payroll Cost (Month)', value: money(pay), sub: `Revenue ${money(inc)}   |   Target 50%`,
-        note: `Payroll, benefits and contract labour are ${pct(div(pay, inc))} of this month's revenue. ` + (div(pay, inc) > 0.6
-          ? 'Well above the 50% goal — the main margin lever.'
-          : 'At or near the 50% goal.'),
+        // A month with no revenue has no share to be near the goal. D&J
+        // Tropical Sno posts nothing from January to June, and every one of
+        // those months read "0.0% of this month's revenue. At or near the 50%
+        // goal." — of nothing.
+        note: inc > 0
+          ? `Payroll, benefits and contract labour are ${pct(div(pay, inc))} of this month's revenue. ` + (div(pay, inc) > 0.6
+            ? 'Well above the 50% goal — the main margin lever.'
+            : 'At or near the 50% goal.')
+          : 'No revenue posted this month, so there is no share to measure payroll against.',
       },
     ],
     ratioCards: [
       {
-        title: 'Current Ratio', value: div(ca, cl).toFixed(2) + 'x',
-        sub: `Prior month ${div(prev(R.currentAssets), prev(R.currentLiabilities)).toFixed(2)}x   |   Target 1.20x`,
-        note: 'Current assets divided by current liabilities — can the company pay what falls due within a year? '
-          + (div(ca, cl) < 1
-            ? 'Below 1.00x it cannot, and lenders or bonding agents decline at this level.'
-            : 'At or above 1.00x — keep building toward 1.20x.'),
+        // Only where there are current liabilities to divide by. At zero the
+        // division fell back to 0.00x and the card called the healthiest
+        // possible position the worst — Strong Little Hands, who owe nothing,
+        // read "0.00x … lenders or bonding agents decline at this level" every
+        // month. Negative liabilities (a credit balance) read "-1.06x" beside a
+        // Working Capital card saying "$133,772 Positive".
+        title: 'Current Ratio', value: cl > 0 ? div(ca, cl).toFixed(2) + 'x' : '—',
+        sub: prev(R.currentLiabilities) > 0
+          ? `Prior month ${div(prev(R.currentAssets), prev(R.currentLiabilities)).toFixed(2)}x   |   Target 1.20x`
+          : 'Target 1.20x',
+        note: cl > 0
+          ? 'Current assets divided by current liabilities — can the company pay what falls due within a year? '
+            + (div(ca, cl) < 1
+              ? 'Below 1.00x it cannot, and lenders or bonding agents decline at this level.'
+              : 'At or above 1.00x — keep building toward 1.20x.')
+          : `No current liabilities are recorded this month, so there is nothing for the ratio to divide by. Current assets stand at ${money(ca)}.`,
       },
       {
         title: 'Payroll % of Revenue', value: pct(div(pay, inc)), sub: 'Target 50.0%',

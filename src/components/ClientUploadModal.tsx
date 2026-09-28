@@ -407,7 +407,13 @@ export function ClientUploadModal({
             documentTable:  option.folder,
             service:        option.requirement.service,
             requirementKey: option.requirement.key,
-            month:          monthOf(),
+            // The month the client said this covers, not the month they sent
+            // it. monthOf() stood here, so a January statement handed over in
+            // September opened September's slot: January stayed grey for good,
+            // September turned yellow for something nobody had sent, and the
+            // slot being one per month meant the back-filled file took the seat
+            // of whatever September was waiting for.
+            month:          period,
           });
         }
       }

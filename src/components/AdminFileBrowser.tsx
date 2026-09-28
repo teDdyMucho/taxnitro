@@ -20,6 +20,11 @@ import { supabase } from '../lib/supabase';
 import {
   approveDocument, rejectDocument, deleteDocumentWithReason, moveDocumentToFolder,
 } from '../db/documents';
+// The client's dashboard radio hangs off document_requirements, not off the
+// document row. Approving here only flipped the document, so a file approved
+// from this screen left the client's checklist yellow for ever and a decline
+// never showed as declined -- All Documents has always done both.
+import { approveRequirementForDocument, rejectRequirementForDocument } from '../db/requirements';
 import { getClientServicesByEmail } from '../db/profiles';
 import { moveDestinations, folderLabel } from '../lib/folderCatalog';
 import type { Document } from '../db/documents';
@@ -326,6 +331,7 @@ export function AdminFileBrowser({ visible, onClose }: Props) {
     setActionBusy(file.id);
     const ok = await approveDocument(file.id, folderTable, user?.email ?? 'admin');
     if (ok) {
+      await approveRequirementForDocument(file.id, user?.email ?? 'admin');
       const update = (f: FileRow) => f.id === file.id ? { ...f, approval_status: 'approved' } : f;
       setFiles(prev => prev.map(update));
       setNav(prev => prev.kind === 'detail' && prev.file.id === file.id
@@ -344,6 +350,7 @@ export function AdminFileBrowser({ visible, onClose }: Props) {
     setActionBusy(rejectTarget.id);
     const ok = await rejectDocument(rejectTarget.id, rejectFolder, user?.email ?? 'admin', note);
     if (ok) {
+      await rejectRequirementForDocument(rejectTarget.id, user?.email ?? 'admin');
       const update = (f: FileRow) => f.id === rejectTarget.id ? { ...f, approval_status: 'rejected', approval_note: note || null } : f;
       setFiles(prev => prev.map(update));
       setNav(prev => prev.kind === 'detail' && prev.file.id === rejectTarget.id
@@ -819,8 +826,14 @@ export function AdminFileBrowser({ visible, onClose }: Props) {
     const { category: cat, folder } = nav;
     return (
       <View style={{ flex: 1 }}>
-        {/* Subfolder management — available even when the folder has no files yet */}
-        {renderSubfolderBar(false)}
+        {/*
+          No subfolder bar here. A folder made at this level was created with no
+          owner, and a subfolder with no owner is shown to every client in the
+          system — the same "older shared folders" the delete dialog warns about.
+          It belongs one level in, where a client is open and the folder can be
+          theirs. The chips here were a second hazard: they listed every
+          client's subfolders, and a tap deleted whichever it was.
+        */}
         {clients.length === 0 ? (
           <View style={fb.emptyWrap}><Ionicons name="people-outline" size={52} color="rgba(232,185,35,0.25)" /><Text style={fb.emptyTitle}>No files yet</Text><Text style={fb.emptySub}>Create subfolders above. Files appear here once uploaded.</Text></View>
         ) : (

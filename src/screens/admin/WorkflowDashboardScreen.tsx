@@ -23,9 +23,13 @@ import { useWheelScroll } from '../../hooks/useWheelScroll';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
+// Counted from the first of the month, never from today. setMonth() on the
+// 31st overflows — on 31 October, "one month back" is 1 October and September
+// never appears in the list at all, so that day its workflows cannot be opened
+// or created. Five of the twelve entries were duplicates.
 const MONTHS = Array.from({ length: 12 }, (_, i) => {
-  const d = new Date();
-  d.setMonth(d.getMonth() - i);
+  const now = new Date();
+  const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 });
 

@@ -45,3 +45,6 @@ yarn-error.*
 # Python leftovers from the workbook scripts
 __pycache__/
 *.pyc
+
+# EOD notes stay on the machine they were written on -- not in the repo.
+EOD-*.md

@@ -182,8 +182,17 @@ function RootView({ folders, documents, loading, refreshing, onRefresh, onSelect
   const unread = documents.filter(d => d.status !== 'viewed').length;
 
   const stats = (root: RootFolder) => {
-    const keys = root.subFolders.map(s => s.key);
-    const docs = documents.filter(d => keys.includes(d.document_type ?? ''));
+    // Down through the groups, not just the folders on the face of the card.
+    // A group -- Monthly Reporting, Prior Years -- is not a table, so matching
+    // its key against a document's folder found nothing, and everything filed
+    // in Required Info, For Client Review, Final Statements, Previous Tax
+    // Returns or Transcripts went uncounted: a client whose only files were
+    // their four monthly uploads read "0 documents" with no new badge, while
+    // the screen one tap in counted them correctly.
+    const keys = (list: SubFolder[]): string[] =>
+      list.flatMap(sf => (sf.children ? keys(sf.children) : [sf.key]));
+    const leaves = keys(root.subFolders);
+    const docs = documents.filter(d => leaves.includes(d.document_type ?? ''));
     return { total: docs.length, unread: docs.filter(d => d.status !== 'viewed').length };
   };
 
