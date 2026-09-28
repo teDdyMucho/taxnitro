@@ -11,6 +11,20 @@ export type ClientService = 'BK' | 'TAX' | 'CFO';
  */
 export type AccountStatus = 'active' | 'paused' | 'closed';
 
+/**
+ * How each status is drawn. Kept beside the type so the two screens that show
+ * it — the client list and a client's folders — cannot drift apart.
+ */
+export const STATUS_LOOK: Record<AccountStatus, { label: string; bg: string; text: string }> = {
+  active: { label: 'ACTIVE', bg: '#DCFCE7', text: '#15803D' },
+  paused: { label: 'PAUSED', bg: '#FEF3C7', text: '#92400E' },
+  closed: { label: 'CLOSED', bg: '#FEE2E2', text: '#B91C1C' },
+};
+
+/** The status of a profile, allowing for rows written before the column existed. */
+export const statusOf = (p: { account_status?: AccountStatus; is_active?: boolean }): AccountStatus =>
+  p.account_status ?? (p.is_active === false ? 'paused' : 'active');
+
 export interface Profile {
   id: string;
   full_name: string;

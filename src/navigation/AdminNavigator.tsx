@@ -143,6 +143,8 @@ export function AdminNavigator({ onLogout }: { onLogout: () => void }) {
           onFolderChange={setClientFolderKey}
           onBack={() => { setSelectedClient(null); setClientFolderKey(null); }}
           onOpenDashboard={() => setShowDashboard(true)}
+          // The tray edits the client in place, so keep our copy in step.
+          onClientChange={setSelectedClient}
         />
       );
     }
@@ -154,10 +156,8 @@ export function AdminNavigator({ onLogout }: { onLogout: () => void }) {
           <ClientListScreen
             onSelectClient={(c, section: ClientSection = 'documents') => {
               // A different client starts at their folder list, not wherever
-              // the last one was left. Asking for Business Details does too —
-              // the panel sits above the folders, so a folder must not be open
-              // over the top of it.
-              if (c.id !== selectedClient?.id || section === 'details') setClientFolderKey(null);
+              // the last one was left.
+              if (c.id !== selectedClient?.id) setClientFolderKey(null);
               setSelectedClient(c);
               setShowDashboard(section === 'cfo');
             }}

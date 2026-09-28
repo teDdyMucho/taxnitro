@@ -20,7 +20,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import WebView from 'react-native-webview';
 import { Colors } from '../../constants/colors';
 import { StatusBadge } from '../../components/StatusBadge';
-import { Profile, ClientService } from '../../db/profiles';
+import { Profile, ClientService, STATUS_LOOK, statusOf } from '../../db/profiles';
+import { ClientManageModal } from '../../components/ClientManageModal';
 import { useAuth } from '../../context/AuthContext';
 import { useSheetStyles } from '../../hooks/useSheetStyles';
 import {
@@ -56,6 +57,8 @@ interface Props {
    */
   openFolderKey?: string | null;
   onFolderChange?: (key: string | null) => void;
+  /** Told when the tray saves, so the screen above can update its copy. */
+  onClientChange?: (client: Profile) => void;
 }
 
 
@@ -313,7 +316,7 @@ function serviceOfFolderKey(key: string): ClientService | null {
 }
 
 export function ClientDocumentsScreen({
-  client, onBack, onOpenDashboard, openFolderKey = null, onFolderChange,
+  client, onBack, onOpenDashboard, openFolderKey = null, onFolderChange, onClientChange,
 }: Props) {
   // Built per client from their own workbook, so most clients have none.
   const clientDashboard = dashboardForClient(client);
@@ -336,6 +339,9 @@ export function ClientDocumentsScreen({
   const [activeFolderKey, setActiveFolder] = useState<string | null>(openFolderKey);
   // Which service tab is showing, when the client is on more than one.
   const [activeService, setActiveService] = useState<ClientService | null>(null);
+  // The manage tray, opened by the gear in the header. It sits on this screen
+  // rather than sending you back to the clients list to change a setting.
+  const [manageOpen, setManageOpen] = useState(false);
   // One setter, so the parent is told every time — there is no way to change
   // the folder here and forget to report it.
   const setActiveFolderKey = useCallback((key: string | null) => {
@@ -663,6 +669,30 @@ export function ClientDocumentsScreen({
             </View>
           )}
         </View>
+
+        {/* Where their subscription stands. Only on the client, not inside a
+            folder — there it would be about the wrong thing. */}
+        {!openFolder && (() => {
+          const look = STATUS_LOOK[statusOf(client)];
+          return (
+            <View style={[s.acctStatus, { backgroundColor: look.bg }]}>
+              <Text style={[s.acctStatusText, { color: look.text }]}>{look.label}</Text>
+            </View>
+          );
+        })()}
+
+        {/* The manage tray, where their status and services are set. */}
+        {!openFolder && (
+          <TouchableOpacity
+            style={s.manageBtn}
+            onPress={() => setManageOpen(true)}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            activeOpacity={0.75}
+          >
+            <Ionicons name="settings-outline" size={17} color="rgba(255,255,255,0.75)" />
+          </TouchableOpacity>
+        )}
+
         <View style={{ gap: 6 }}>
           <TouchableOpacity style={s.sendFileBtn} onPress={() => setUploadOpen(true)} activeOpacity={0.85}>
             <Ionicons name="cloud-upload-outline" size={15} color="#3A3131" />
@@ -844,6 +874,20 @@ export function ClientDocumentsScreen({
         onClose={() => setRequestOpen(false)}
         onCreated={() => {}}
       />
+
+      {manageOpen && (
+        <ClientManageModal
+          client={client}
+          onClose={() => setManageOpen(false)}
+          onSave={updated => { onClientChange?.(updated); setManageOpen(false); }}
+          // The tray offers a way into the CFO suite; from here that is the
+          // dashboard button this screen already has.
+          onViewDocs={(_c, section) => {
+            setManageOpen(false);
+            if (section === 'cfo') onOpenDashboard?.();
+          }}
+        />
+      )}
     </View>
   );
 }
@@ -927,6 +971,26 @@ const s = StyleSheet.create({
   metaRow:      { flexDirection: 'row', gap: 10, marginTop: 4 },
   metaPill:     { flexDirection: 'row', alignItems: 'center', gap: 4 },
   metaPillText: { color: 'rgba(255,255,255,0.5)', fontSize: 11 },
+
+  // Account status, sitting between the client's name and the header buttons.
+  acctStatus: {
+    borderRadius: 7,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    alignSelf: 'center',
+    flexShrink: 0,
+  },
+  acctStatusText: { fontSize: 11, fontWeight: '800', letterSpacing: 0.6 },
+  manageBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+    alignSelf: 'center',
+    backgroundColor: 'rgba(255,255,255,0.10)',
+    flexShrink: 0,
+  },
 
   sectionLabel: {
     color: Colors.textMuted,
