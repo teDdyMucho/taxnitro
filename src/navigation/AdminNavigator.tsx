@@ -165,7 +165,7 @@ export function AdminNavigator({ onLogout }: { onLogout: () => void }) {
         );
       case 'Staff':     return <StaffManagementScreen />;
       case 'Workflow':  return <WorkflowDashboardScreen />;
-      case 'Reports':   return <FinancialReportsScreen onBack={() => handleTabPress('Dashboard')} />;
+      case 'Reports':   return <FinancialReportsScreen />;
       case 'Profile':   return <ProfileScreen onLogout={onLogout} />;
     }
   };

@@ -83,6 +83,10 @@ interface Stats {
   newDocs:       number;
   docsThisWeek:  number;
   folderCounts:  { table: string; count: number }[];
+  // Every document's table and date, and nothing else — the period counts on
+  // the category cards are made from this. Counting from recentUploads capped
+  // the totals at its 60-row slice, which quietly wrong-footed busy months.
+  docMeta:       { table: string; created_at: string }[];
   // uploaded_by_role is null on rows that predate the column; those were all
   // client uploads, which is what the read paths elsewhere assume too.
   recentUploads: { id: string; name: string; email: string; created_at: string; document_type: string; document_url: string; uploaded_by_role?: string | null }[];
@@ -160,7 +164,7 @@ export function AdminDashboardScreen({ onViewAllDocuments }: { onViewAllDocument
   const mountedRef = useRef(true);
   useEffect(() => () => { mountedRef.current = false; }, []);
 
-  const [stats, setStats]           = useState<Stats>({ totalClients: 0, totalStaff: 0, clientsByService: { TAX: 0, BK: 0, CFO: 0 }, totalDocs: 0, newDocs: 0, docsThisWeek: 0, folderCounts: [], recentUploads: [] });
+  const [stats, setStats]           = useState<Stats>({ totalClients: 0, totalStaff: 0, clientsByService: { TAX: 0, BK: 0, CFO: 0 }, totalDocs: 0, newDocs: 0, docsThisWeek: 0, folderCounts: [], docMeta: [], recentUploads: [] });
   const [reqCounts, setReqCounts]   = useState<Record<string, number>>({}); // docs tagged per requirement item
   const [loading, setLoading]       = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -210,6 +214,7 @@ export function AdminDashboardScreen({ onViewAllDocuments }: { onViewAllDocument
         newDocs:       allDocs.filter(d => d.status === 'new').length,
         docsThisWeek:  allDocs.filter(d => d.created_at >= weekAgo).length,
         folderCounts:  FOLDER_TABLES.map((table, i) => ({ table, count: tableResults[i].data?.length ?? 0 })),
+        docMeta:       allDocs.map(d => ({ table: d.document_type ?? '', created_at: d.created_at })),
         // Enough to page through on both sides of the split, not so many that
         // the whole list is held in memory for a dashboard panel.
         recentUploads: [...allDocs].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).slice(0, 60) as any,
@@ -233,8 +238,8 @@ export function AdminDashboardScreen({ onViewAllDocuments }: { onViewAllDocument
       }
       return {
         ...f,
-        count: stats.recentUploads.filter(d =>
-          d.document_type === f.table && d.created_at >= periodStart
+        count: stats.docMeta.filter(d =>
+          d.table === f.table && d.created_at >= periodStart
         ).length,
       };
     }),
@@ -642,28 +647,10 @@ export function AdminDashboardScreen({ onViewAllDocuments }: { onViewAllDocument
               <Ionicons name="chevron-forward" size={16} color="#A8998A" />
             </TouchableOpacity>
 
-            <TouchableOpacity style={s.menuItem} onPress={() => { setMenuDoc(null); onViewAllDocuments?.(); }}>
-              <View style={[s.menuItemIcon, { backgroundColor: 'rgba(181,144,91,0.12)' }]}>
-                <Ionicons name="documents-outline" size={18} color="#B5905B" />
-              </View>
-              <Text style={s.menuItemText}>Go to Documents</Text>
-              <Ionicons name="chevron-forward" size={16} color="#A8998A" />
-            </TouchableOpacity>
-
-            <TouchableOpacity style={s.menuItem} onPress={() => {
-              if (menuDoc?.document_url) {
-                Platform.OS === 'web'
-                  ? window.open(menuDoc.document_url, '_blank')
-                  : Linking.openURL(menuDoc.document_url);
-              }
-              setMenuDoc(null);
-            }}>
-              <View style={[s.menuItemIcon, { backgroundColor: 'rgba(44,35,32,0.08)' }]}>
-                <Ionicons name="download-outline" size={18} color="#2C2320" />
-              </View>
-              <Text style={s.menuItemText}>Download</Text>
-              <Ionicons name="chevron-forward" size={16} color="#A8998A" />
-            </TouchableOpacity>
+            {/* "Download" and "Go to Documents" used to sit here. The first
+                had the same handler as View Document, word for word; the
+                second did what the screen's own View All link does, without
+                even carrying the document along. */}
 
             <View style={s.menuDivider} />
 

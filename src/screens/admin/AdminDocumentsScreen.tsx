@@ -40,7 +40,7 @@ import {
   rejectDocument,
   Document,
 } from '../../db/documents';
-import { getAllClients, Profile, ClientService } from '../../db/profiles';
+import { getAllClients, Profile, ClientService, STATUS_LOOK, statusOf } from '../../db/profiles';
 import {
   REQUIRED_UPLOADS,
   RequiredItem,
@@ -597,8 +597,18 @@ export function AdminDocumentsScreen() {
   // Folder tabs for the list view. Built from the documents on screen, so a
   // folder this client has nothing in does not get a tab.
   const folderTabs = useMemo(() => {
+    // The same email matching the list itself uses. Substring matching here
+    // while the list matched exactly gave ann@acme.com tab counts that
+    // included joann@acme.com's files.
+    const q = query.trim().toLowerCase();
+    const matchesQuery = (d: Document) =>
+      !q ||
+      (clientExact
+        ? (d.email ?? '').toLowerCase() === q
+        : (d.email ?? '').toLowerCase().includes(q) || d.name?.toLowerCase().includes(q));
+
     const scope = documents.filter(d =>
-      (!query.trim() || d.email?.toLowerCase().includes(query.toLowerCase())) &&
+      matchesQuery(d) &&
       (period === 'all' || periodOf(d) === period));
 
     const counts = new Map<string, number>();
@@ -616,7 +626,7 @@ export function AdminDocumentsScreen() {
         .filter(f => f.key !== 'all' && f.key !== 'pending' && (counts.get(f.key) ?? 0) > 0)
         .map(f => ({ key: f.key, label: f.label, count: counts.get(f.key) ?? 0 })),
     ];
-  }, [documents, query, period]);
+  }, [documents, query, period, clientExact]);
 
   const { isPhone } = useResponsive();
 
@@ -854,7 +864,8 @@ export function AdminDocumentsScreen() {
           </Text>
           <Text style={s.headerSub} numberOfLines={1}>
             {documents.length} total
-            {pendingCount > 0 ? ` · ${pendingCount} pending` : ''}
+            {/* The pending count lives in the amber badge beside the
+                buttons; saying it here too said the same thing twice. */}
             {newCount > 0 ? ` · ${newCount} new` : ''}
           </Text>
         </View>
@@ -917,7 +928,7 @@ export function AdminDocumentsScreen() {
                   || query.trim()}
               </Text>
               <TouchableOpacity
-                onPress={() => { setQuery(''); setView('clients'); }}
+                onPress={() => { setQuery(''); setClientExact(false); setView('clients'); }}
                 style={s.crumbClear}
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               >
@@ -1006,6 +1017,22 @@ export function AdminDocumentsScreen() {
                 </TouchableOpacity>
               )}
             </View>
+
+            {/* The month picked over in the list view filters these cards
+                too. Without this chip it did so invisibly — cards vanished
+                and nothing on screen said why. */}
+            {period !== 'all' && (
+              <TouchableOpacity
+                onPress={() => setPeriod('all')}
+                style={s.periodChip}
+                hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="calendar-outline" size={12} color="#3A3131" />
+                <Text style={s.periodChipText}>{formatMonthLabel(period)}</Text>
+                <Ionicons name="close" size={12} color="#3A3131" />
+              </TouchableOpacity>
+            )}
           </View>
 
           {/* Unsorted first — it is the pile that still needs working through. */}
@@ -1063,10 +1090,17 @@ export function AdminDocumentsScreen() {
                           <Text style={s.clientSvcText}>{svc}</Text>
                         </View>
                       ))}
-                      {p && (p.is_active
-                        ? <View style={s.clientActive}><Text style={s.clientActiveText}>ACTIVE</Text></View>
-                        : <View style={s.clientInactive}><Text style={s.clientInactiveText}>INACTIVE</Text></View>
-                      )}
+                      {/* The same three-state badge the Clients tab shows —
+                          reading is_active here called a paused client
+                          INACTIVE on one tab and PAUSED on the other. */}
+                      {p && (() => {
+                        const look = STATUS_LOOK[statusOf(p)];
+                        return (
+                          <View style={[s.clientStatus, { backgroundColor: look.bg }]}>
+                            <Text style={[s.clientStatusText, { color: look.text }]}>{look.label}</Text>
+                          </View>
+                        );
+                      })()}
                     </View>
                   </View>
 
@@ -1260,6 +1294,18 @@ const s = StyleSheet.create({
     backgroundColor: '#FFFFFF',
   },
   clientSearchInput: { flex: 1, color: '#1C1713', fontSize: 14 },
+  periodChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'center',
+    gap: 5,
+    marginTop: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    backgroundColor: '#E8B923',
+  },
+  periodChipText: { color: '#3A3131', fontSize: 11.5, fontWeight: '700' },
 
   // ── Unsorted / Sorted tabs ────────────────────────────
   sortTabs: {
@@ -1433,20 +1479,13 @@ const s = StyleSheet.create({
     paddingVertical: 2,
   },
   clientSvcText: { color: '#1C1713', fontSize: 9, fontWeight: '800' },
-  clientActive: {
-    backgroundColor: '#DCFCE7',
+  // Coloured by STATUS_LOOK, the same source the Clients tab uses.
+  clientStatus: {
     borderRadius: 5,
     paddingHorizontal: 6,
     paddingVertical: 2,
   },
-  clientActiveText: { color: '#15803D', fontSize: 9, fontWeight: '800' },
-  clientInactive: {
-    backgroundColor: '#FEE2E2',
-    borderRadius: 5,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-  },
-  clientInactiveText: { color: '#B91C1C', fontSize: 9, fontWeight: '800' },
+  clientStatusText: { fontSize: 9, fontWeight: '800' },
   // The count sits proud of the card's corner, as the design draws it.
   clientCount: {
     position: 'absolute',

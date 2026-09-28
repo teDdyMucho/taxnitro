@@ -916,12 +916,8 @@ export function ClientDocumentsScreen({
           client={client}
           onClose={() => setManageOpen(false)}
           onSave={updated => { onClientChange?.(updated); setManageOpen(false); }}
-          // The tray offers a way into the CFO suite; from here that is the
-          // dashboard button this screen already has.
-          onViewDocs={(_c, section) => {
-            setManageOpen(false);
-            if (section === 'cfo') onOpenDashboard?.();
-          }}
+          // No onOpenCfo: this screen's header already has the Dashboard
+          // button, so the tray's CFO card would be the same door twice.
         />
       )}
     </View>

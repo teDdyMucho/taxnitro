@@ -1,14 +1,14 @@
 import React, { useState } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView,
-  Modal, Pressable, ActivityIndicator, Alert, Platform,
+  Modal, Pressable, ActivityIndicator, Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Colors } from '../constants/colors';
 import { useSheetStyles } from '../hooks/useSheetStyles';
 import {
-  updateClientProfile, sendPasswordReset,
+  updateClientProfile,
   Profile, ClientService, AccountStatus, statusOf, STATUS_LOOK,
 } from '../db/profiles';
 import { normalizeBankAccounts, BankAccount } from '../db/requirements';
@@ -23,9 +23,6 @@ import {
 // It lives here rather than on the clients list because two screens open it —
 // the list, and the gear on a client's own folders screen. Kept on the list it
 // would have meant leaving the client's screen just to change a setting.
-
-/** Which part of a client is being opened from the tray. */
-export type ClientSection = 'documents' | 'cfo';
 
 const PLANS = ['Free', 'Basic', 'Pro', 'Enterprise'] as const;
 
@@ -91,13 +88,17 @@ export function ClientManageModal({
   client,
   onClose,
   onSave,
-  onViewDocs,
+  onOpenCfo,
 }: {
   client: Profile;
   onClose: () => void;
   onSave: (updated: Profile) => void;
-  /** Opens the client, at the part of them the caller asked for. */
-  onViewDocs: (client: Profile, section: ClientSection) => void;
+  /**
+   * Opens the client's CFO dashboard. Left out by the client's own screen,
+   * which already carries a Dashboard button in its header — the card here
+   * would be the same thing one tap further away.
+   */
+  onOpenCfo?: () => void;
 }) {
   const sheet = useSheetStyles('md');
   const [name, setName]           = useState(client.full_name ?? '');
@@ -352,13 +353,13 @@ export function ClientManageModal({
                 section goes when there is nothing to show. Documents and
                 Business Details both led to the same screen the card itself
                 opens, so they were doing nothing this tray needed. */}
-            {((client.services ?? []).includes('CFO') || !!dashboardForClient(client)) && (
+            {!!onOpenCfo && ((client.services ?? []).includes('CFO') || !!dashboardForClient(client)) && (
             <View style={mm.field}>
               <Text style={mm.label}>Quick Actions</Text>
               <View style={mm.actionGrid}>
                 <TouchableOpacity
                   style={[mm.actionCard, !dashboardForClient(client) && { opacity: 0.55 }]}
-                  onPress={() => dashboardForClient(client) && onViewDocs(client, 'cfo')}
+                  onPress={() => dashboardForClient(client) && onOpenCfo?.()}
                   disabled={!dashboardForClient(client)}
                   activeOpacity={0.75}
                 >
@@ -388,12 +389,8 @@ export function ClientManageModal({
                 <Text style={mm.infoLabel}>Client ID</Text>
                 <Text style={mm.infoValue} numberOfLines={1}>{client.id.slice(0, 16)}…</Text>
               </View>
-              <View style={mm.infoRow}>
-                <Text style={mm.infoLabel}>Current Plan</Text>
-                <Text style={[mm.infoValue, { color: PLAN_COLORS[client.plan]?.text ?? Colors.textPrimary }]}>
-                  {client.plan}
-                </Text>
-              </View>
+              {/* "Current Plan" used to sit here — the value from before your
+                  edits, directly under the picker that changes it. */}
             </View>
           </ScrollView>
 

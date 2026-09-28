@@ -38,7 +38,7 @@ interface WithDashboard {
 const mkInitials = (name: string) =>
   (name || '?').split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
 
-export function FinancialReportsScreen({ onBack }: { onBack?: () => void }) {
+export function FinancialReportsScreen() {
   const [rows, setRows] = useState<WithDashboard[] | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
   // A row on a wide screen is far wider than it is tall, and the motif is sized

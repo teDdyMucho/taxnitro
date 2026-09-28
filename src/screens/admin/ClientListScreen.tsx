@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
-  TextInput, ActivityIndicator, RefreshControl, Alert,
+  TextInput, ActivityIndicator, RefreshControl,
   Modal, Pressable, ScrollView, Platform, Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -11,10 +11,10 @@ import { Colors } from '../../constants/colors';
 import { useAuth } from '../../context/AuthContext';
 import { useSheetStyles } from '../../hooks/useSheetStyles';
 import {
-  getAllClients, updateClientProfile, sendPasswordReset, Profile, ClientService, AccountStatus, STATUS_LOOK, statusOf,
+  getAllClients, Profile, ClientService, AccountStatus, STATUS_LOOK, statusOf,
 } from '../../db/profiles';
 import {
-  getRequirementCountsForMonth, getFulfilledRequirements,
+  getFulfilledRequirements,
   itemsForClient, reqKey, monthOf, formatMonthLabel, serviceLabel,
   BankAccount, normalizeBankAccounts,
 } from '../../db/requirements';
@@ -93,8 +93,6 @@ const toast = StyleSheet.create({
 
 // ── Add Client Modal ──────────────────────────────────────────────────────────
 
-import { supabase } from '../../lib/supabase';
-import { dashboardForClient } from '../../lib/clientDashboards';
 
 // Inlined at bundle time by Metro — must be top-level, not inside a function
 const SUPABASE_URL         = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
@@ -836,7 +834,6 @@ export function ClientListScreen({ onSelectClient }: Props) {
   useEffect(() => () => { mountedRef.current = false; }, []);
 
   const [clients, setClients]       = useState<Profile[]>([]);
-  const [reqCounts, setReqCounts]   = useState<Record<string, number>>({});
   const [query, setQuery]           = useState('');
   // Which service the list is narrowed to, or null for all of them.
   const [svcFilter, setSvcFilter]   = useState<ClientService | null>(null);
@@ -867,11 +864,11 @@ export function ClientListScreen({ onSelectClient }: Props) {
       if (mountedRef.current) { setLoading(false); setRefreshing(false); }
     }, 8000);
     try {
-      const [data, counts] = await Promise.all([
-        getAllClients(),
-        getRequirementCountsForMonth(monthOf()),
-      ]);
-      if (mountedRef.current) { setClients(data); setReqCounts(counts); }
+      // Just the clients. The per-requirement counts used to be fetched
+      // alongside, feeding a progress bar the cards no longer draw — a
+      // request per load whose answer nothing read.
+      const data = await getAllClients();
+      if (mountedRef.current) setClients(data);
     }
     catch (e) { console.error(e); }
     finally { clearTimeout(safetyTimer); if (mountedRef.current) { setLoading(false); setRefreshing(false); } }
@@ -1032,7 +1029,7 @@ export function ClientListScreen({ onSelectClient }: Props) {
         <Text style={s.sectionLabel}>
           {query || svcFilter || statFilter !== 'all'
             ? `${filtered.length} result${filtered.length !== 1 ? 's' : ''}`
-            : `All Clients · required docs accepted (${formatMonthLabel(monthOf())})`}
+            : 'All Clients'}
         </Text>
       )}
 
@@ -1106,7 +1103,7 @@ export function ClientListScreen({ onSelectClient }: Props) {
             setManaging(null);
             showToast('Client updated');
           }}
-          onViewDocs={(c, section) => { setManaging(null); onSelectClient(c, section); }}
+          onOpenCfo={() => { const c = managing; setManaging(null); if (c) onSelectClient(c, 'cfo'); }}
         />
       )}
 
@@ -1125,7 +1122,9 @@ export function ClientListScreen({ onSelectClient }: Props) {
         onClose={() => setAddOpen(false)}
         onDone={() => {
           setAddOpen(false);
-          showToast('Invite link generated — share it with your client');
+          // The flow creates the account outright with a password — no invite
+          // link is involved, and the old toast said one had been made.
+          showToast('Client account created');
           load(true);
         }}
       />
