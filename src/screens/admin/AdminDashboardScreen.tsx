@@ -12,7 +12,6 @@ import { useSheetStyles } from '../../hooks/useSheetStyles';
 import { useResponsive } from '../../hooks/useResponsive';
 import { supabase } from '../../lib/supabase';
 import { FOLDER_TABLES } from '../../db/documents';
-import { isRequirementFolder, itemsForFolder, reqKey, getRequirementDocCounts } from '../../db/requirements';
 
 // ─── Folder metadata (FTG brand palette only) ───────────────────────────────
 const FOLDER_META: Record<string, { label: string; color: string; icon: string }> = {
@@ -39,9 +38,13 @@ const FOLDER_META: Record<string, { label: string; color: string; icon: string }
 };
 
 // Group folder tables into the three categories for the segregated breakdown.
-type CategoryKey = 'TAX' | 'BK' | 'CFO';
+// The four categories a client is assigned to, in the spec's order. YER has
+// no folder tables yet — its prefix is spoken for so files land in the right
+// place the day they exist, but until then nothing matches it.
+type CategoryKey = 'TAX' | 'YER' | 'BK' | 'CFO';
 const CATEGORIES: { key: CategoryKey; title: string; color: string; icon: string; match: (t: string) => boolean }[] = [
   { key: 'TAX', title: 'Tax Documents & Returns', color: '#00B16A', icon: 'reader-outline',   match: t => t.startsWith('tax_') },
+  { key: 'YER', title: 'Year-End Review',         color: '#4A3E3E', icon: 'calendar-outline', match: t => t.startsWith('yer_') },
   { key: 'BK',  title: 'Bookkeeping & Financials', color: '#008C5A', icon: 'calculator-outline', match: t => t.startsWith('bk_') },
   { key: 'CFO', title: 'CFO Advisory',             color: '#B5905B', icon: 'trending-up-outline', match: t => t.startsWith('cfo_') },
 ];
@@ -51,13 +54,11 @@ const CATEGORIES: { key: CategoryKey; title: string; color: string; icon: string
 // read as disabled.
 const CHART_COLORS: Record<CategoryKey, string> = {
   TAX: '#D8CCB4',
+  YER: '#4A3E3E',
   BK:  '#A8A29A',
   CFO: '#C9A75C',
 };
 
-function categoryOf(table: string): CategoryKey {
-  return (CATEGORIES.find(c => c.match(table))?.key ?? 'TAX');
-}
 
 // File extension colors (FTG palette)
 const EXT_COLORS: Record<string, string> = {
@@ -83,13 +84,22 @@ interface Stats {
   newDocs:       number;
   docsThisWeek:  number;
   folderCounts:  { table: string; count: number }[];
-  // Every document's table and date, and nothing else — the period counts on
-  // the category cards are made from this. Counting from recentUploads capped
-  // the totals at its 60-row slice, which quietly wrong-footed busy months.
-  docMeta:       { table: string; created_at: string }[];
+  // Every document's table, date and owner, and nothing else — the progress
+  // cards count from this. Counting from recentUploads capped the totals at
+  // its 60-row slice, which quietly wrong-footed busy months.
+  docMeta:       { table: string; created_at: string; email: string }[];
+  // Which services each client is assigned (keyed by lower-cased email), and
+  // their display name. The progress cards count by assignment, and the
+  // upload rows are labelled by client, as the spec asks — not by address.
+  svcByEmail:    Record<string, string[]>;
+  nameByEmail:   Record<string, string>;
+  // The two snapshot tiles: client files waiting on us, and our deliverables
+  // waiting on a client.
+  pendingFtg:    number;
+  forReview:     number;
   // uploaded_by_role is null on rows that predate the column; those were all
   // client uploads, which is what the read paths elsewhere assume too.
-  recentUploads: { id: string; name: string; email: string; created_at: string; document_type: string; document_url: string; uploaded_by_role?: string | null }[];
+  recentUploads: { id: string; name: string; email: string; created_at: string; document_type: string; document_url: string; uploaded_by_role?: string | null; subfolder_id?: string | null }[];
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -164,8 +174,7 @@ export function AdminDashboardScreen({ onViewAllDocuments }: { onViewAllDocument
   const mountedRef = useRef(true);
   useEffect(() => () => { mountedRef.current = false; }, []);
 
-  const [stats, setStats]           = useState<Stats>({ totalClients: 0, totalStaff: 0, clientsByService: { TAX: 0, BK: 0, CFO: 0 }, totalDocs: 0, newDocs: 0, docsThisWeek: 0, folderCounts: [], docMeta: [], recentUploads: [] });
-  const [reqCounts, setReqCounts]   = useState<Record<string, number>>({}); // docs tagged per requirement item
+  const [stats, setStats]           = useState<Stats>({ totalClients: 0, totalStaff: 0, clientsByService: { TAX: 0, YER: 0, BK: 0, CFO: 0 }, svcByEmail: {}, nameByEmail: {}, pendingFtg: 0, forReview: 0, totalDocs: 0, newDocs: 0, docsThisWeek: 0, folderCounts: [], docMeta: [], recentUploads: [] });
   const [loading, setLoading]       = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [menuDoc, setMenuDoc]       = useState<RecentDoc | null>(null);
@@ -188,33 +197,50 @@ export function AdminDashboardScreen({ onViewAllDocuments }: { onViewAllDocument
       const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
       const [clientRes, staffRes, ...tableResults] = await Promise.all([
         // Rows rather than a head-count, so the same request also answers how
-        // many clients each service has — that is the chart below.
-        supabase.from('profiles').select('id, services').eq('role', 'client'),
+        // many clients each service has, and what to call them on a row.
+        supabase.from('profiles').select('id, services, email, full_name').eq('role', 'client'),
         supabase.from('profiles').select('id', { count: 'exact', head: true }).in('role', ['staff', 'admin']),
-        ...FOLDER_TABLES.map(t => supabase.from(t).select('id, name, email, created_at, status, document_url, uploaded_by_role').order('created_at', { ascending: false })),
+        ...FOLDER_TABLES.map(t => supabase.from(t).select('id, name, email, created_at, status, document_url, uploaded_by_role, approval_status, subfolder_id').order('created_at', { ascending: false })),
       ]);
       const allDocs = tableResults.flatMap((r, i) => (r.data ?? []).map(d => ({ ...d, document_type: FOLDER_TABLES[i] })));
-      const reqDocCounts = await getRequirementDocCounts();
-      if (mountedRef.current) setReqCounts(reqDocCounts);
       // Clients per service. A client on both BK and CFO counts in both, so
-      // these bars deliberately sum to more than the client total.
-      const clientRows = (clientRes.data ?? []) as { services?: string[] | null }[];
+      // these figures deliberately sum to more than the client total.
+      const clientRows = (clientRes.data ?? []) as { services?: string[] | null; email?: string | null; full_name?: string | null }[];
       const clientsPerService = (svc: string) =>
         clientRows.filter(c => (c.services ?? ['BK']).includes(svc)).length;
+
+      const svcByEmail: Record<string, string[]> = {};
+      const nameByEmail: Record<string, string> = {};
+      clientRows.forEach(c => {
+        const key = (c.email ?? '').toLowerCase();
+        if (!key) return;
+        svcByEmail[key]  = c.services ?? ['BK'];
+        nameByEmail[key] = c.full_name ?? '';
+      });
+
+      // The two snapshot tiles, split on who put the file there — a pending
+      // client upload waits on FTG, a pending staff upload waits on the client.
+      const pendingDocs = allDocs.filter(d => (d.approval_status ?? 'approved') === 'pending');
+      const isInternalRole = (r?: string | null) => r === 'staff' || r === 'admin';
 
       if (mountedRef.current) setStats({
         totalClients:  clientRows.length,
         totalStaff:    staffRes.count ?? 0,
         clientsByService: {
           TAX: clientsPerService('TAX'),
+          YER: clientsPerService('YER'),
           BK:  clientsPerService('BK'),
           CFO: clientsPerService('CFO'),
         },
+        svcByEmail,
+        nameByEmail,
+        pendingFtg: pendingDocs.filter(d => !isInternalRole(d.uploaded_by_role)).length,
+        forReview:  pendingDocs.filter(d => isInternalRole(d.uploaded_by_role)).length,
         totalDocs:     allDocs.length,
         newDocs:       allDocs.filter(d => d.status === 'new').length,
         docsThisWeek:  allDocs.filter(d => d.created_at >= weekAgo).length,
         folderCounts:  FOLDER_TABLES.map((table, i) => ({ table, count: tableResults[i].data?.length ?? 0 })),
-        docMeta:       allDocs.map(d => ({ table: d.document_type ?? '', created_at: d.created_at })),
+        docMeta:       allDocs.map(d => ({ table: d.document_type ?? '', created_at: d.created_at, email: (d.email ?? '').toLowerCase() })),
         // Enough to page through on both sides of the split, not so many that
         // the whole list is held in memory for a dashboard panel.
         recentUploads: [...allDocs].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).slice(0, 60) as any,
@@ -225,82 +251,42 @@ export function AdminDashboardScreen({ onViewAllDocuments }: { onViewAllDocument
 
   useEffect(() => { if (!authLoading && user?.id) load(); }, [authLoading, user?.id]);
 
-  // Filter folder counts by selected period. For a Required-Info COLLECTOR folder,
-  // the count is the sum of its required-item TAG counts (document_requirements),
-  // so the folder / Monthly Reporting / category totals match the item breakdown.
   const periodStart = useMemo(() => getPeriodStart(period), [period]);
-  const filteredFolderCounts = useMemo(() =>
-    stats.folderCounts.map(f => {
-      if (isRequirementFolder(f.table)) {
-        const count = itemsForFolder(f.table)
-          .reduce((sum, item) => sum + (reqCounts[reqKey(item.service, item.key)] ?? 0), 0);
-        return { ...f, count };
-      }
-      return {
-        ...f,
-        count: stats.docMeta.filter(d =>
-          d.table === f.table && d.created_at >= periodStart
-        ).length,
-      };
-    }),
-  [stats, periodStart, reqCounts]);
 
-  const maxFolder = Math.max(...filteredFolderCounts.map(f => f.count), 1);
-
-  // Segregate folders by category (TAX / BK / CFO). Within a category, the three
-  // "Monthly Reporting (...)" folders collapse into ONE expandable parent row that
-  // shows the combined total, with the 3 real subfolders revealed on expand.
-  const groupedFolders = useMemo(() =>
+  // The four progress cards, counted by assignment as the spec asks:
+  //   TOTAL   — clients assigned to the category.
+  //   STARTED — of those, how many have at least one document in that
+  //             category's folders within the chosen period.
+  // "Started" is not stored anywhere, so this is its observable reading. YER
+  // has no folder tables yet, so its started count sits at 0 until they exist.
+  const progressByCategory = useMemo(() =>
     CATEGORIES.map(cat => {
-      const folders = filteredFolderCounts.filter(f => categoryOf(f.table) === cat.key);
-      const total   = folders.reduce((acc, f) => acc + f.count, 0);
+      const started = new Set<string>();
+      stats.docMeta.forEach(d => {
+        if (!d.email || d.created_at < periodStart) return;
+        if (!cat.match(d.table)) return;
+        if ((stats.svcByEmail[d.email] ?? []).includes(cat.key)) started.add(d.email);
+      });
+      return { ...cat, started: started.size, total: stats.clientsByService[cat.key] ?? 0 };
+    }),
+  [stats, periodStart]);
 
-      const mrChildren = folders.filter(f => f.table.includes('_mr_'));
-      const rest       = folders.filter(f => !f.table.includes('_mr_'));
-
-      // Build the display rows: normal folder rows, plus a single Monthly Reporting
-      // group row (inserted where the first MR folder was) when there are MR folders.
-      type Row =
-        | { kind: 'folder'; table: string; count: number }
-        | { kind: 'group'; groupId: string; label: string; total: number; children: { table: string; count: number }[] };
-
-      let rows: Row[];
-      if (mrChildren.length > 0) {
-        const mrTotal = mrChildren.reduce((a, f) => a + f.count, 0);
-        const groupRow: Row = {
-          kind: 'group',
-          groupId: `${cat.key}_monthly_reporting`,
-          label: 'Monthly Reporting',
-          total: mrTotal,
-          children: mrChildren.map(f => ({ table: f.table, count: f.count })),
-        };
-        // Keep 'rest' order, then append the Monthly Reporting group at the end.
-        rows = [...rest.map(f => ({ kind: 'folder', table: f.table, count: f.count } as Row)), groupRow];
-      } else {
-        rows = folders.map(f => ({ kind: 'folder', table: f.table, count: f.count } as Row));
-      }
-
-      return { ...cat, rows, total, folderCount: folders.length };
-    }).filter(g => g.rows.length > 0),
-  [filteredFolderCounts]);
-
-  // Narrow tiles down the right of the card row, as the mock has them.
-  // Every figure here is one the screen already gathers.
-  //
-  // The old overview cards carried "↑ 20% this month" and the like. Those were
-  // fixed strings, not measurements — nothing computed them — so they are gone
-  // rather than restyled.
+  // The two snapshot tiles the spec names: client files waiting on FTG, and
+  // FTG deliverables waiting on a client.
   const sideCards = [
-    { value: stats.newDocs,      label: 'DOCUMENTS NOT\nYET OPENED' },
-    { value: stats.totalClients, label: 'TOTAL\nCLIENTS' },
-    { value: stats.totalDocs,    label: 'TOTAL\nDOCUMENTS' },
+    { value: stats.pendingFtg, label: 'DOCUMENTS PENDING\nFTG APPROVAL' },
+    { value: stats.forReview,  label: 'DOCUMENTS FOR\nCLIENT REVIEW' },
   ];
 
-  // The mock shows recent uploads in two columns. Split on who put the file
-  // there, which the rows already carry — nothing extra is fetched for this.
-  // Legacy rows have no uploaded_by_role and were all client uploads.
-  const clientUploads   = stats.recentUploads.filter(d => d.uploaded_by_role !== 'staff' && d.uploaded_by_role !== 'admin');
-  const internalUploads = stats.recentUploads.filter(d => d.uploaded_by_role === 'staff' || d.uploaded_by_role === 'admin');
+  // The feed splits on whether the file has been filed into a folder yet —
+  // the same reading of sorted the Documents tab uses. Who uploaded it stays
+  // as the tag on each row.
+  const sortedUploads   = stats.recentUploads.filter(d => !!d.subfolder_id);
+  const unsortedUploads = stats.recentUploads.filter(d => !d.subfolder_id);
+
+  /** The client's name for a row, falling back to the address for strays. */
+  const labelFor = (email: string | null | undefined) =>
+    stats.nameByEmail[(email ?? '').toLowerCase()] || email || 'Unknown client';
 
   // ─────────────────────────────────────────────────────────────────────────
   return (
@@ -381,12 +367,12 @@ export function AdminDashboardScreen({ onViewAllDocuments }: { onViewAllDocument
             </TouchableOpacity>
           </View>
 
-          {/* ── One row: a card per category, then two narrow tiles ──
-              The big figure is the documents held in that category for the
-              chosen period; the smaller one beside it, how many folders it
-              spans. Same counts as the breakdown further down. */}
+          {/* ── One row: a progress card per category, then two tiles ──
+              Per the spec: counts by client assignment. The big figure is
+              how many of the category's clients have started in the chosen
+              period; the denominator, how many it has in all. */}
           <View style={s.progressRow}>
-            {groupedFolders.map(group => (
+            {progressByCategory.map(group => (
               <View key={group.key} style={s.progressCard}>
                 <View style={s.progressHead}>
                   <Text style={s.progressHeadText}>
@@ -397,15 +383,18 @@ export function AdminDashboardScreen({ onViewAllDocuments }: { onViewAllDocument
                   </View>
                 </View>
 
-                <Text style={s.progressTitle} numberOfLines={2}>{group.title.toUpperCase()}</Text>
+                <Text style={s.progressTitle} numberOfLines={2}>{group.key} CLIENT PROGRESS</Text>
 
                 {/* The figure is near-black and the denominator carries the
                     category's colour, so the eye lands on the count first. */}
                 <View style={s.progressFigure}>
-                  <Text style={s.progressValue}>{group.total}</Text>
                   <View>
-                    <Text style={[s.progressOf, { color: group.color }]}>/{group.folderCount}</Text>
-                    <Text style={s.progressOfLabel}>FOLDERS</Text>
+                    <Text style={s.progressStartedLabel}>STARTED</Text>
+                    <Text style={s.progressValue}>{group.started}</Text>
+                  </View>
+                  <View>
+                    <Text style={[s.progressOf, { color: group.color }]}>/{group.total}</Text>
+                    <Text style={s.progressOfLabel}>TOTAL</Text>
                   </View>
                 </View>
               </View>
@@ -513,8 +502,8 @@ export function AdminDashboardScreen({ onViewAllDocuments }: { onViewAllDocument
             ) : (
               <>
               {[
-                { title: 'CLIENT UPLOADS',   rows: clientUploads },
-                { title: 'INTERNAL UPLOADS', rows: internalUploads },
+                { title: 'SORTED',   rows: sortedUploads },
+                { title: 'UNSORTED', rows: unsortedUploads },
               ].map(col => {
                 // Both columns show the same number of rows, so they stay the
                 // same height whichever side has more.
@@ -555,7 +544,10 @@ export function AdminDashboardScreen({ onViewAllDocuments }: { onViewAllDocument
                                 <Text style={s.recentName} numberOfLines={1}>{doc.name}</Text>
                                 <View style={s.recentMetaRow}>
                                   <Ionicons name="person-outline" size={10} color="#94A3B8" />
-                                  <Text style={s.recentEmail} numberOfLines={1}>{doc.email}</Text>
+                                  {/* The client's name, as the spec asks —
+                                      the address only for strays with no
+                                      profile to name them. */}
+                                  <Text style={s.recentEmail} numberOfLines={1}>{labelFor(doc.email)}</Text>
                                 </View>
                                 {/* Folder chip, and who put the file there */}
                                 <View style={s.recentMetaRow}>
@@ -1098,6 +1090,12 @@ const s = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: -2,
     lineHeight: 46,
+  },
+  progressStartedLabel: {
+    color: '#A8998A',
+    fontSize: 7,
+    fontWeight: '700',
+    letterSpacing: 0.5,
   },
   progressOf: {
     fontSize: 20,

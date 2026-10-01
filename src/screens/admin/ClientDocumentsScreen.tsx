@@ -309,6 +309,7 @@ function serviceOfFolderKey(key: string): ClientService | null {
   if (key.startsWith('tbl:')) {
     const t = key.slice(4);
     if (t.startsWith('tax_')) return 'TAX';
+    if (t.startsWith('yer_')) return 'YER';
     if (t.startsWith('cfo_')) return 'CFO';
     if (t.startsWith('bk_'))  return 'BK';
   }
@@ -506,7 +507,7 @@ export function ClientDocumentsScreen({
   // tab with fifty bank statements behind it would put those files out of reach
   // from this screen. It goes by itself once the folders are empty.
   const serviceTabs = useMemo<ClientService[]>(
-    () => (['TAX', 'BK', 'CFO'] as ClientService[])
+    () => (['TAX', 'YER', 'BK', 'CFO'] as ClientService[])
       .filter(svc => taken.includes(svc) || filedUnder[svc] > 0),
     [taken, filedUnder]);
 

@@ -7,7 +7,7 @@ import { supabase } from '../lib/supabase';
 //
 // To add / remove a required item, just edit this list. `key` must be unique.
 
-export type RequirementService = 'BK' | 'TAX' | 'CFO';
+export type RequirementService = 'BK' | 'TAX' | 'CFO' | 'YER';
 
 export interface RequiredItem {
   key: string;
@@ -116,7 +116,7 @@ function expandBankStatements(items: RequiredItem[], accounts: BankAccount[]): R
 
 /** Display label for a service (used in checklist group headers). */
 export function serviceLabel(service: RequirementService): string {
-  return service === 'BK' ? 'Bookkeeping' : service === 'TAX' ? 'Tax' : 'CFO';
+  return service === 'BK' ? 'Bookkeeping' : service === 'TAX' ? 'Tax' : service === 'YER' ? 'Year-End Review' : 'CFO';
 }
 
 // A "required-docs" collector folder — the CLIENT uploads here and tags which

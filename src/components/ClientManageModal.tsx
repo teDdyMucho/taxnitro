@@ -26,10 +26,11 @@ import {
 
 const PLANS = ['Free', 'Basic', 'Pro', 'Enterprise'] as const;
 
-const ALL_SERVICES: ClientService[] = ['BK', 'TAX', 'CFO'];
+const ALL_SERVICES: ClientService[] = ['TAX', 'YER', 'BK', 'CFO'];
 const SERVICE_LABEL: Record<ClientService, string> = {
   BK:  'Bookkeeping',
   TAX: 'TAX',
+  YER: 'YER',
   CFO: 'CFO',
 };
 

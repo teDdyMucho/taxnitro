@@ -5,7 +5,7 @@ import { BankAccount, normalizeBankAccounts } from '../db/requirements';
 import { useIdleLogout, IDLE_TIMEOUT_MS } from '../hooks/useIdleLogout';
 
 export type UserRole = 'client' | 'staff' | 'admin';
-export type ClientService = 'BK' | 'TAX' | 'CFO';
+export type ClientService = 'BK' | 'TAX' | 'CFO' | 'YER';
 
 export interface AuthUser {
   id: string;

@@ -27,17 +27,20 @@ import {
 
 const PLANS = ['Free', 'Basic', 'Pro', 'Enterprise'] as const;
 
-// The three client-type services and their display labels.
-const ALL_SERVICES: ClientService[] = ['BK', 'TAX', 'CFO'];
+// The client-type services and their display labels, in the spec's order.
+const ALL_SERVICES: ClientService[] = ['TAX', 'YER', 'BK', 'CFO'];
 const SERVICE_LABEL: Record<ClientService, string> = {
   BK:  'Bookkeeping',
   TAX: 'TAX',
+  YER: 'YER',
   CFO: 'CFO',
 };
 
 // Filter-button colours, matching the blocks down the side of the design.
+// YER is the dark brown block, so its text has to be light.
 const SERVICE_FILTER_COLORS: Record<ClientService, { bg: string; text: string }> = {
   TAX: { bg: '#D8CCB4', text: '#1C1713' },
+  YER: { bg: '#4A3E3E', text: '#FFFFFF' },
   BK:  { bg: '#A8A29A', text: '#1C1713' },
   CFO: { bg: '#C9A75C', text: '#1C1713' },
 };
@@ -917,7 +920,9 @@ export function ClientListScreen({ onSelectClient }: Props) {
           <View style={s.metaRow}>
             {(item.services?.length ? item.services : ['BK'] as ClientService[]).map(svc => (
               <View key={svc} style={[s.svcTag, { backgroundColor: SERVICE_FILTER_COLORS[svc].bg }]}>
-                <Text style={s.svcTagText}>{svc}</Text>
+                {/* The colour pair travels together — dark text on YER's dark
+                    brown block would vanish. */}
+                <Text style={[s.svcTagText, { color: SERVICE_FILTER_COLORS[svc].text }]}>{svc}</Text>
               </View>
             ))}
             {(() => {

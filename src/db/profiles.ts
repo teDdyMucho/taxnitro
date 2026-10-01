@@ -2,7 +2,7 @@ import { supabase } from '../lib/supabase';
 import { BankAccount, normalizeBankAccounts } from './requirements';
 
 export type UserRole = 'client' | 'staff' | 'admin';
-export type ClientService = 'BK' | 'TAX' | 'CFO';
+export type ClientService = 'BK' | 'TAX' | 'CFO' | 'YER';
 
 /**
  * active — subscription is current
