@@ -49,13 +49,18 @@ const CATEGORIES = [
     title: 'Tax Documents & Returns',
     color: '#E8B923',
     folders: [
+      // Unsorted lives here, not in a service: it is the pile staff sort FROM.
+      { table: 'unsorted_uploads',       label: 'Unsorted Uploads',  icon: 'help-circle-outline'        as const },
+      { table: 'tax_identification',     label: 'Identification',    icon: 'card-outline'               as const },
+      { table: 'tax_irs_notices',        label: 'IRS Notices',       icon: 'mail-open-outline'          as const },
+      { table: 'tax_ip_pins',            label: 'IP Pins',           icon: 'key-outline'                as const },
+      { table: 'tax_return_information', label: 'Tax Returns',       icon: 'information-circle-outline' as const },
+      { table: 'tax_prior_transcripts',  label: 'Transcripts',       icon: 'reader-outline'             as const },
       { table: 'tax_contracts',          label: 'Tax Contracts',     icon: 'document-text-outline'      as const },
       { table: 'tax_invoices',           label: 'Tax Invoices',      icon: 'receipt-outline'            as const },
+      { table: 'tax_additional_docs',    label: 'Other Tax Docs',    icon: 'folder-outline'             as const },
       { table: 'tax_client_uploads',     label: 'Client Uploads',    icon: 'cloud-upload-outline'       as const },
-      { table: 'tax_additional_docs',   label: 'Additional Tax Docs', icon: 'folder-outline'          as const },
-      { table: 'tax_return_information', label: 'Tax Returns',       icon: 'information-circle-outline' as const },
-      { table: 'tax_prior_returns',      label: 'Previous Tax Returns',      icon: 'document-attach-outline' as const },
-      { table: 'tax_prior_transcripts',  label: 'Previous Year Transcripts', icon: 'reader-outline'          as const },
+      { table: 'tax_prior_returns',      label: 'Previous Tax Returns', icon: 'document-attach-outline' as const },
     ],
   },
   {

@@ -157,7 +157,7 @@ export function ClientDetailsPanel({ clientEmail, clientName }: {
               ) : (
                 <TouchableOpacity style={s.addBtn} onPress={() => setAdding(true)} activeOpacity={0.85}>
                   <Ionicons name="add" size={16} color={Colors.primaryDeep} />
-                  <Text style={s.addText}>Add a detail</Text>
+                  <Text style={s.addText}>Add Note</Text>
                 </TouchableOpacity>
               )}
 
@@ -246,9 +246,13 @@ const s = StyleSheet.create({
   headSub: { fontSize: 11.5, color: Colors.textMuted, marginTop: 2 },
   body: { paddingHorizontal: 14, paddingBottom: 14, gap: 10 },
 
+  // A small pill, not a bar across the panel — it is an aside, not the point
+  // of the section.
   addBtn: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
-    backgroundColor: Colors.primary, borderRadius: 10, paddingVertical: 10,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5,
+    backgroundColor: Colors.primary, borderRadius: 16,
+    paddingVertical: 7, paddingHorizontal: 14,
+    alignSelf: 'flex-start',
   },
   addText: { color: Colors.primaryDeep, fontSize: 13, fontWeight: '800' },
 

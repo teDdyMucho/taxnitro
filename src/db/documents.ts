@@ -40,6 +40,13 @@ export const FOLDER_TABLES = [
   'tax_return_information',
   'tax_prior_returns',
   'tax_prior_transcripts',
+  'tax_identification',
+  'tax_irs_notices',
+  'tax_ip_pins',
+  // No service prefix on purpose: the pile of documents nobody has filed yet
+  // belongs to the client, not to one of their services, and the folder shows
+  // under every tab because of it.
+  'unsorted_uploads',
   'bk_contracts',
   'bk_invoices',
   'bk_bank_accounts',

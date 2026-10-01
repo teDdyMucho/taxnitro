@@ -15,13 +15,17 @@ import { FOLDER_TABLES } from '../../db/documents';
 
 // ─── Folder metadata (FTG brand palette only) ───────────────────────────────
 const FOLDER_META: Record<string, { label: string; color: string; icon: string }> = {
+  unsorted_uploads:       { label: 'Unsorted Uploads', color: '#D64541', icon: 'help-circle-outline'      },
+  tax_identification:     { label: 'Identification',  color: '#B5905B', icon: 'card-outline'              },
+  tax_irs_notices:        { label: 'IRS Notices',     color: '#E8B923', icon: 'mail-open-outline'          },
+  tax_ip_pins:            { label: 'IP Pins',         color: '#B5905B', icon: 'key-outline'                },
   tax_client_uploads:     { label: 'Client Uploads',  color: '#E8B923', icon: 'cloud-upload-outline'      },
-  tax_additional_docs:    { label: 'Additional Tax Docs', color: '#E8B923', icon: 'folder-outline'        },
+  tax_additional_docs:    { label: 'Other Tax Docs',  color: '#E8B923', icon: 'folder-outline'        },
   tax_contracts:          { label: 'Tax Contracts',   color: '#B5905B', icon: 'document-text-outline'     },
   tax_invoices:           { label: 'Tax Invoices',    color: '#E8B923', icon: 'receipt-outline'            },
   tax_return_information: { label: 'Tax Returns',     color: '#B5905B', icon: 'information-circle-outline' },
-  tax_prior_returns:      { label: 'Previous Tax Returns',      color: '#E8B923', icon: 'document-attach-outline' },
-  tax_prior_transcripts:  { label: 'Previous Year Transcripts', color: '#B5905B', icon: 'reader-outline'          },
+  tax_prior_returns:      { label: 'Previous Tax Returns', color: '#E8B923', icon: 'document-attach-outline' },
+  tax_prior_transcripts:  { label: 'Transcripts',     color: '#B5905B', icon: 'reader-outline'          },
   bk_contracts:           { label: 'BK Contracts',    color: '#2C2320', icon: 'document-text-outline'     },
   bk_invoices:            { label: 'BK Invoices',     color: '#E8B923', icon: 'receipt-outline'            },
   bk_bank_accounts:       { label: 'Bank Accounts',      color: '#2C2320', icon: 'card-outline'           },
@@ -198,14 +202,16 @@ export function AdminDashboardScreen({ onViewAllDocuments }: { onViewAllDocument
       const [clientRes, staffRes, ...tableResults] = await Promise.all([
         // Rows rather than a head-count, so the same request also answers how
         // many clients each service has, and what to call them on a row.
-        supabase.from('profiles').select('id, services, email, full_name').eq('role', 'client'),
+        // select('*') on purpose: naming company_name here would fail the
+        // whole query on a database that has not run that migration yet.
+        supabase.from('profiles').select('*').eq('role', 'client'),
         supabase.from('profiles').select('id', { count: 'exact', head: true }).in('role', ['staff', 'admin']),
         ...FOLDER_TABLES.map(t => supabase.from(t).select('id, name, email, created_at, status, document_url, uploaded_by_role, approval_status, subfolder_id').order('created_at', { ascending: false })),
       ]);
       const allDocs = tableResults.flatMap((r, i) => (r.data ?? []).map(d => ({ ...d, document_type: FOLDER_TABLES[i] })));
       // Clients per service. A client on both BK and CFO counts in both, so
       // these figures deliberately sum to more than the client total.
-      const clientRows = (clientRes.data ?? []) as { services?: string[] | null; email?: string | null; full_name?: string | null }[];
+      const clientRows = (clientRes.data ?? []) as { services?: string[] | null; email?: string | null; full_name?: string | null; company_name?: string | null }[];
       const clientsPerService = (svc: string) =>
         clientRows.filter(c => (c.services ?? ['BK']).includes(svc)).length;
 
@@ -215,7 +221,8 @@ export function AdminDashboardScreen({ onViewAllDocuments }: { onViewAllDocument
         const key = (c.email ?? '').toLowerCase();
         if (!key) return;
         svcByEmail[key]  = c.services ?? ['BK'];
-        nameByEmail[key] = c.full_name ?? '';
+        // The company where there is one — business clients are known by it.
+        nameByEmail[key] = c.company_name?.trim() || c.full_name || '';
       });
 
       // The two snapshot tiles, split on who put the file there — a pending
@@ -559,6 +566,14 @@ export function AdminDashboardScreen({ onViewAllDocuments }: { onViewAllDocument
                                       {isInternal ? 'INTERNAL UPLOAD' : 'CLIENT UPLOAD'}
                                     </Text>
                                   </View>
+                                  {/* The client picked "Unsure" — nobody has
+                                      filed this yet, and the red tag is the
+                                      to-do marker the spec asks for. */}
+                                  {doc.document_type === 'unsorted_uploads' && (
+                                    <View style={s.unassignedChip}>
+                                      <Text style={s.unassignedText}>UNASSIGNED</Text>
+                                    </View>
+                                  )}
                                 </View>
                               </View>
 
@@ -1300,6 +1315,18 @@ const s = StyleSheet.create({
   },
   originTextInternal: { color: '#3A3131' },
   originTextClient:   { color: '#1E40AF' },
+  unassignedChip: {
+    borderRadius: 5,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    backgroundColor: '#D64541',
+  },
+  unassignedText: {
+    fontSize: 8,
+    fontWeight: '800',
+    letterSpacing: 0.3,
+    color: '#FFFFFF',
+  },
   recentRight: {
     alignItems: 'flex-end',
     gap: 2,

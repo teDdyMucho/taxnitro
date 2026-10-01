@@ -18,6 +18,7 @@ import {
   serviceLabel, monthOf,
 } from '../db/requirements';
 import { supabase } from '../lib/supabase';
+import { folderLabel } from '../lib/folderCatalog';
 
 // ── What a client may upload ─────────────────────────────────────────────────
 //
@@ -77,14 +78,17 @@ const EXTRA_FOLDER: Record<'BK' | 'CFO', { key: string; label: string }[]> = {
   ],
 };
 
+// The client-profile spec's upload choices, exactly: "During Upload, clients
+// can select: Unsure > which will load docs into their Unsorted folder,
+// Identification, IRS Notices, IP Pins, Tax Returns, Transcripts."
+// Staff see every folder elsewhere; this list is only what a CLIENT may pick.
 const TAX_FOLDERS: { key: string; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
-  { key: 'tax_contracts',          label: 'Tax Contracts',       icon: 'document-text-outline' },
-  { key: 'tax_invoices',           label: 'Tax Invoices',        icon: 'receipt-outline' },
-  { key: 'tax_client_uploads',     label: 'Client Uploads',      icon: 'cloud-upload-outline' },
-  { key: 'tax_additional_docs',    label: 'Additional Tax Docs', icon: 'folder-outline' },
-  { key: 'tax_return_information', label: 'Tax Returns',         icon: 'information-circle-outline' },
-  { key: 'tax_prior_returns',      label: 'Previous Tax Returns',      icon: 'document-attach-outline' },
-  { key: 'tax_prior_transcripts',  label: 'Previous Year Transcripts', icon: 'reader-outline' },
+  { key: 'unsorted_uploads',       label: 'Unsure',          icon: 'help-circle-outline' },
+  { key: 'tax_identification',     label: 'Identification',  icon: 'card-outline' },
+  { key: 'tax_irs_notices',        label: 'IRS Notices',     icon: 'mail-open-outline' },
+  { key: 'tax_ip_pins',            label: 'IP Pins',         icon: 'key-outline' },
+  { key: 'tax_return_information', label: 'Tax Returns',     icon: 'information-circle-outline' },
+  { key: 'tax_prior_transcripts',  label: 'Transcripts',     icon: 'reader-outline' },
 ];
 
 type UploadOption = {
@@ -231,9 +235,20 @@ export function ClientUploadModal({
     }
 
     if (!fixedFolder) return out;
-    return out
+    const fixed = out
       .map(g => ({ ...g, options: g.options.filter(o => o.folder === fixedFolder) }))
       .filter(g => g.options.length > 0);
+    if (fixed.length > 0) return fixed;
+    // Opened from inside a folder the generic picker no longer offers (the
+    // spec trims the picker to six choices, but clients still view every
+    // folder): the upload is aimed at the folder being looked at, so offer it.
+    return [{
+      title: 'Upload',
+      options: [{
+        id: `folder:${fixedFolder}`, label: folderLabel(fixedFolder),
+        icon: 'folder-outline', folder: fixedFolder, requirement: null,
+      }],
+    }];
   }, [user?.services, user?.hasQboAccess, user?.bankAccounts, fixedFolder]);
 
   const allOptions = useMemo(() => groups.flatMap(g => g.options), [groups]);

@@ -130,6 +130,7 @@ function AddClientModal({
 }) {
   const sheet = useSheetStyles('md');
   const [fullName, setFullName]     = useState('');
+  const [companyName, setCompanyName] = useState('');
   const [email, setEmail]           = useState('');
   const [password, setPassword]     = useState('');
   const [showPass, setShowPass]     = useState(false);
@@ -148,16 +149,21 @@ function AddClientModal({
   };
 
   const reset = () => {
-    setFullName(''); setEmail(''); setPassword(''); setPlan('Free');
+    setFullName(''); setCompanyName(''); setEmail(''); setPassword(''); setPlan('Free');
     setServices(['BK']); setHasQbo(false); setBankAccounts([]);
     setStep('form'); setErrorMsg(''); setShowPass(false);
   };
 
   // A half-filled bank row would be silently dropped on save — block instead.
   const bankIncomplete = hasIncompleteBankAccount(bankAccounts);
+  // Per the spec, a BK, CFO or YER client is a business, so their company
+  // name is part of what is required to create the contact. TAX-only clients
+  // are people and need none.
+  const needsCompany = services.some(s => s === 'BK' || s === 'CFO' || s === 'YER');
   const canSubmit =
     !!fullName.trim() && !!email.trim() && password.length >= 8 &&
-    services.length > 0 && !bankIncomplete && !loading;
+    services.length > 0 && !bankIncomplete && !loading &&
+    (!needsCompany || !!companyName.trim());
 
   const handleClose = () => { reset(); onClose(); };
   const handleDone  = () => { reset(); onDone(); };
@@ -210,6 +216,9 @@ function AddClientModal({
             id: userId,
             email: email.trim(),
             full_name: fullName.trim(),
+            // Only sent when filled in, so creating a TAX-only client still
+            // works on a database that has not run the company migration.
+            ...(companyName.trim() ? { company_name: companyName.trim() } : {}),
             client_id: generateClientId(),
             plan,
             role: 'client',
@@ -286,6 +295,16 @@ function AddClientModal({
                 <View style={ac.inputRow}>
                   <Ionicons name="person-outline" size={16} color={Colors.textMuted} />
                   <TextInput style={[ac.input, { outlineWidth: 0 } as any]} placeholder="e.g. Jane Smith" placeholderTextColor={Colors.textMuted} value={fullName} onChangeText={setFullName} />
+                </View>
+              </View>
+
+              {/* Company — required for business clients (BK, CFO, YER);
+                  a TAX-only client is a person, so it stays optional. */}
+              <View style={ac.fieldGroup}>
+                <Text style={ac.label}>Company Name{needsCompany ? '' : ' (optional)'}</Text>
+                <View style={ac.inputRow}>
+                  <Ionicons name="business-outline" size={16} color={Colors.textMuted} />
+                  <TextInput style={[ac.input, { outlineWidth: 0 } as any]} placeholder="e.g. Sparkle Bar LLC" placeholderTextColor={Colors.textMuted} value={companyName} onChangeText={setCompanyName} />
                 </View>
               </View>
 
@@ -885,24 +904,37 @@ export function ClientListScreen({ onSelectClient }: Props) {
   // Search and the service filter narrow the same list, in that order.
   // A client with no services recorded is treated as BK, which is what the
   // rest of the app assumes too.
+  // What a card sorts under: the company where there is one, the person
+  // otherwise — the spec has BK, CFO and YER clients filed by business.
+  const sortName = (c: Profile) => (c.company_name?.trim() || c.full_name || '').toLowerCase();
+
   const filtered = clients
     .filter(c =>
       !query.trim() ||
       c.full_name?.toLowerCase().includes(query.toLowerCase()) ||
+      c.company_name?.toLowerCase().includes(query.toLowerCase()) ||
       c.email?.toLowerCase().includes(query.toLowerCase())
     )
     .filter(c => !svcFilter || (c.services?.length ? c.services : ['BK']).includes(svcFilter))
-    .filter(c => matchesStat(c, statFilter));
+    .filter(c => matchesStat(c, statFilter))
+    // Alphabetical, as the spec asks. getAllClients orders by personal name,
+    // which is the wrong key for a business client.
+    .sort((a, b) => sortName(a).localeCompare(sortName(b)));
 
   const activeCount = clients.filter(c => statusOf(c) === 'active').length;
   const pausedCount = clients.filter(c => statusOf(c) === 'paused').length;
   const closedCount = clients.filter(c => statusOf(c) === 'closed').length;
 
   const renderItem = ({ item }: { item: Profile }) => {
-    const grad = avatarGradient(item.full_name);
+    const grad = avatarGradient(item.company_name?.trim() || item.full_name);
+    // The spec's naming: a TAX client is a person; BK, CFO and YER clients
+    // are businesses, with the person shown as well for TAX and YER clients
+    // and for anyone whose company is simply not recorded yet.
+    const company   = item.company_name?.trim() || '';
+    const services  = (item.services?.length ? item.services : ['BK']) as ClientService[];
+    const showPerson = !company || services.includes('TAX') || services.includes('YER');
 
     return (
-      // The whole card opens the client, as the design implies — the gear and
       // The card goes straight to their folders — that is what staff open a
       // client for. The month's progress is behind the icon beside it.
       <TouchableOpacity style={s.card} onPress={() => onSelectClient(item)} activeOpacity={0.85}>
@@ -910,12 +942,17 @@ export function ClientListScreen({ onSelectClient }: Props) {
           <Image source={{ uri: item.avatar_url }} style={s.avatar} />
         ) : (
           <LinearGradient colors={grad} style={s.avatar} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
-            <Text style={s.avatarText}>{mkInitials(item.full_name)}</Text>
+            <Text style={s.avatarText}>{mkInitials(company || item.full_name)}</Text>
           </LinearGradient>
         )}
 
         <View style={s.cardBody}>
-          <Text style={s.name} numberOfLines={2}>{item.full_name || 'Unnamed Client'}</Text>
+          {!!company && <Text style={s.name} numberOfLines={1}>{company}</Text>}
+          {showPerson && (
+            <Text style={company ? s.personUnderCompany : s.name} numberOfLines={1}>
+              {item.full_name || 'Unnamed Client'}
+            </Text>
+          )}
 
           <View style={s.metaRow}>
             {(item.services?.length ? item.services : ['BK'] as ClientService[]).map(svc => (
@@ -1014,7 +1051,7 @@ export function ClientListScreen({ onSelectClient }: Props) {
         <Ionicons name="search-outline" size={17} color={Colors.textMuted} />
         <TextInput
           style={[s.searchInput, { outlineWidth: 0 } as any]}
-          placeholder="Search by name or email…"
+          placeholder="Search by client name, business name or email…"
           placeholderTextColor={Colors.textMuted}
           value={query}
           onChangeText={setQuery}
@@ -1354,6 +1391,8 @@ const s = StyleSheet.create({
   avatarText: { color: Colors.white, fontSize: 14, fontWeight: '800' },
   cardBody:   { flex: 1, minWidth: 0, gap: 2 },
   name:  { color: Colors.textPrimary, fontSize: 12, fontWeight: '700', lineHeight: 15 },
+  // The person, shown small under the business they belong to.
+  personUnderCompany: { color: Colors.textSecondary, fontSize: 10.5, fontWeight: '600', lineHeight: 13 },
   email: { color: Colors.textMuted,  fontSize: 12 },
   metaRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 4, marginTop: 4 },
 

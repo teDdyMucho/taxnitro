@@ -384,13 +384,17 @@ const at = StyleSheet.create({
 const FOLDERS = [
   { key: 'all',                    label: 'All',            color: '#2C2320' },
   { key: 'pending',                label: 'Pending',        color: '#F59E0B' },
+  { key: 'unsorted_uploads',       label: 'Unsorted Uploads', color: '#D64541' },
+  { key: 'tax_identification',     label: 'Identification', color: '#B5905B' },
+  { key: 'tax_irs_notices',        label: 'IRS Notices',    color: '#E8B923' },
+  { key: 'tax_ip_pins',            label: 'IP Pins',        color: '#B5905B' },
   { key: 'tax_client_uploads',     label: 'Client Uploads', color: '#E8B923' },
-  { key: 'tax_additional_docs',    label: 'Additional Tax Docs', color: '#E8B923' },
+  { key: 'tax_additional_docs',    label: 'Other Tax Docs', color: '#E8B923' },
   { key: 'tax_contracts',          label: 'Tax Contracts',  color: '#B5905B' },
   { key: 'tax_invoices',           label: 'Tax Invoices',   color: '#E8B923' },
   { key: 'tax_return_information', label: 'Tax Returns',    color: '#B5905B' },
-  { key: 'tax_prior_returns',      label: 'Previous Tax Returns',      color: '#E8B923' },
-  { key: 'tax_prior_transcripts',  label: 'Previous Year Transcripts', color: '#B5905B' },
+  { key: 'tax_prior_returns',      label: 'Previous Tax Returns', color: '#E8B923' },
+  { key: 'tax_prior_transcripts',  label: 'Transcripts',    color: '#B5905B' },
   { key: 'bk_contracts',           label: 'BK Contracts',   color: '#2C2320' },
   { key: 'bk_invoices',            label: 'BK Invoices',    color: '#E8B923' },
   { key: 'bk_bank_accounts',       label: 'Bank Accounts',      color: '#2C2320' },
@@ -404,14 +408,6 @@ const FOLDERS = [
   { key: 'cfo_mr_required_info',   label: 'Monthly Reporting (Required Info)',     color: '#E8B923' },
   { key: 'cfo_mr_client_review',   label: 'Monthly Reporting (For Client Review)', color: '#B5905B' },
   { key: 'cfo_mr_final_statements', label: 'Monthly Reporting (Final Statements & Insights)', color: '#E8B923' },
-];
-
-// Filter dropdown grouped by category for a clean per-folder picker.
-const FILTER_GROUPS: { title: string; keys: string[] }[] = [
-  { title: 'Quick',                     keys: ['all', 'pending'] },
-  { title: 'Tax Documents & Returns',   keys: ['tax_contracts', 'tax_invoices', 'tax_client_uploads', 'tax_additional_docs', 'tax_return_information', 'tax_prior_returns', 'tax_prior_transcripts'] },
-  { title: 'Bookkeeping & Financials',  keys: ['bk_contracts', 'bk_invoices', 'bk_bank_accounts', 'bk_final_pnl', 'bk_mr_required_info', 'bk_mr_client_review', 'bk_mr_final_statements'] },
-  { title: 'CFO Advisory',              keys: ['cfo_contracts', 'cfo_invoices', 'cfo_additional_docs', 'cfo_mr_required_info', 'cfo_mr_client_review', 'cfo_mr_final_statements'] },
 ];
 
 const EXT_COLOR: Record<string, string> = {
@@ -588,7 +584,8 @@ export function AdminDocumentsScreen() {
       .map(r => ({ ...r, profile: clientByEmail.get(r.email.toLowerCase()) }))
       .filter(r => !q ||
         r.email.toLowerCase().includes(q) ||
-        r.profile?.full_name?.toLowerCase().includes(q))
+        r.profile?.full_name?.toLowerCase().includes(q) ||
+        r.profile?.company_name?.toLowerCase().includes(q))
       // Most waiting first — that is the queue staff work through.
       .sort((a, b) => b.docs.length - a.docs.length ||
         (a.profile?.full_name ?? a.email).localeCompare(b.profile?.full_name ?? b.email));
@@ -753,6 +750,12 @@ export function AdminDocumentsScreen() {
               <View style={[s.folderDot, { backgroundColor: folder.color }]} />
               <Text style={[s.folderLabel, { color: folder.color }]}>{folder.label}</Text>
             </View>
+            {/* Landed via "Unsure" and still waiting for staff to file it. */}
+            {item.document_type === 'unsorted_uploads' && (
+              <View style={s.unassignedPill}>
+                <Text style={s.unassignedPillText}>UNASSIGNED</Text>
+              </View>
+            )}
             <Text style={s.dateText}>{fmtDate(item.created_at)}</Text>
           </View>
           {/* Rejection note */}
@@ -1082,7 +1085,7 @@ export function AdminDocumentsScreen() {
 
                   <View style={{ flex: 1, minWidth: 0 }}>
                     <Text style={s.clientName} numberOfLines={1}>
-                      {p?.full_name || item.email}
+                      {p?.company_name?.trim() || p?.full_name || item.email}
                     </Text>
                     <View style={s.clientTags}>
                       {services.map(svc => (
@@ -1533,6 +1536,13 @@ const s = StyleSheet.create({
   folderPill:  { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 20, borderWidth: 1 },
   folderDot:   { width: 5, height: 5, borderRadius: 3 },
   folderLabel: { fontSize: 10, fontWeight: '700', letterSpacing: 0.2 },
+  unassignedPill: {
+    borderRadius: 5,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    backgroundColor: '#D64541',
+  },
+  unassignedPillText: { color: '#FFFFFF', fontSize: 9, fontWeight: '800', letterSpacing: 0.3 },
   dateText:    { color: '#94A3B8', fontSize: 10, fontWeight: '500' },
   rejectNote:  { color: '#EF4444', fontSize: 10, fontStyle: 'italic', marginTop: 2 },
 

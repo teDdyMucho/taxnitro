@@ -103,6 +103,7 @@ export function ClientManageModal({
 }) {
   const sheet = useSheetStyles('md');
   const [name, setName]           = useState(client.full_name ?? '');
+  const [company, setCompany]     = useState(client.company_name ?? '');
   const [plan, setPlan]           = useState(client.plan ?? 'Free');
   const [status, setStatus] = useState<AccountStatus>(statusOf(client));
   const [services, setServices]   = useState<ClientService[]>(
@@ -142,14 +143,15 @@ export function ClientManageModal({
     // database trigger that syncs them has not been applied yet.
     const isActive = status === 'active';
     const ok = await updateClientProfile(client.id, {
-      full_name: name, plan, is_active: isActive, account_status: status,
+      full_name: name, company_name: company.trim() || null, plan,
+      is_active: isActive, account_status: status,
       services, has_qbo_access: hasQbo,
       bank_accounts: banks,
     });
     setSaving(false);
     if (ok) {
       showToast('Client updated successfully');
-      onSave({ ...client, full_name: name, plan, is_active: isActive, account_status: status, services, has_qbo_access: hasQbo, bank_accounts: banks });
+      onSave({ ...client, full_name: name, company_name: company.trim() || null, plan, is_active: isActive, account_status: status, services, has_qbo_access: hasQbo, bank_accounts: banks });
     } else {
       showToast('Failed to update client');
     }
@@ -221,6 +223,22 @@ export function ClientManageModal({
                   value={name}
                   onChangeText={setName}
                   placeholder="Full name..."
+                  placeholderTextColor={Colors.textMuted}
+                />
+              </View>
+            </View>
+
+            {/* Company — what a BK, CFO or YER client is filed and sorted
+                under on the clients screen. */}
+            <View style={mm.field}>
+              <Text style={mm.label}>Company Name</Text>
+              <View style={mm.inputWrap}>
+                <Ionicons name="business-outline" size={15} color={Colors.textMuted} />
+                <TextInput
+                  style={[mm.input, { outlineWidth: 0 } as any]}
+                  value={company}
+                  onChangeText={setCompany}
+                  placeholder="Company name..."
                   placeholderTextColor={Colors.textMuted}
                 />
               </View>

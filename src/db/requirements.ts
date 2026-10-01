@@ -226,12 +226,18 @@ export function reqKey(service: RequirementService, key: string): string {
 /** Friendly name for a folder table, for anything that isn't a required item. */
 export const FOLDER_TABLE_LABELS: Record<string, string> = {
   tax_client_uploads:      'Client Uploads',
-  tax_additional_docs:     'Additional Tax Docs',
+  // "Other Tax Docs" and "Transcripts" are Paul's client-profile names for
+  // these two — the tables keep their old keys, the labels follow the spec.
+  tax_additional_docs:     'Other Tax Docs',
   tax_contracts:           'Tax Contracts',
   tax_invoices:            'Tax Invoices',
   tax_return_information:  'Tax Returns',
   tax_prior_returns:       'Previous Tax Returns',
-  tax_prior_transcripts:   'Previous Year Transcripts',
+  tax_prior_transcripts:   'Transcripts',
+  tax_identification:      'Identification',
+  tax_irs_notices:         'IRS Notices',
+  tax_ip_pins:             'IP Pins',
+  unsorted_uploads:        'Unsorted Uploads',
   bk_contracts:            'BK Contracts',
   bk_invoices:             'BK Invoices',
   bk_bank_accounts:        'Bank Accounts',

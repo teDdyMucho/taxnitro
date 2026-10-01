@@ -22,13 +22,19 @@ export type Service = 'TAX' | 'BK' | 'CFO';
 
 export const FOLDER_GROUPS: FolderGroup[] = [
   { title: 'Tax Documents & Returns', folders: [
+    // The client-profile spec's default set, in its order, then the folders
+    // that predate it — kept because documents already live in them.
+    { key: 'unsorted_uploads',        label: 'Unsorted Uploads' },
+    { key: 'tax_identification',      label: 'Identification' },
+    { key: 'tax_irs_notices',         label: 'IRS Notices' },
+    { key: 'tax_ip_pins',             label: 'IP Pins' },
+    { key: 'tax_return_information',  label: 'Tax Returns' },
+    { key: 'tax_prior_transcripts',   label: 'Transcripts' },
     { key: 'tax_contracts',           label: 'Tax Contracts' },
     { key: 'tax_invoices',            label: 'Tax Invoices' },
+    { key: 'tax_additional_docs',     label: 'Other Tax Docs' },
     { key: 'tax_client_uploads',      label: 'Client Uploads' },
-    { key: 'tax_additional_docs',     label: 'Additional Tax Docs' },
-    { key: 'tax_return_information',  label: 'Tax Returns' },
     { key: 'tax_prior_returns',       label: 'Previous Tax Returns' },
-    { key: 'tax_prior_transcripts',   label: 'Previous Year Transcripts' },
   ]},
   { title: 'Bookkeeping & Financials', folders: [
     { key: 'bk_contracts',            label: 'BK Contracts' },

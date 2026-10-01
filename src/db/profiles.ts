@@ -28,6 +28,12 @@ export const statusOf = (p: { account_status?: AccountStatus; is_active?: boolea
 export interface Profile {
   id: string;
   full_name: string;
+  /**
+   * The business the account is for. TAX clients are people, so theirs is
+   * usually empty; BK, CFO and YER clients are businesses, and the clients
+   * screen shows and sorts by this where it is set.
+   */
+  company_name?: string | null;
   email: string;
   client_id: string;
   plan: string;
@@ -111,7 +117,7 @@ export async function removeBankAccounts(userId: string, ids: string[]): Promise
 
 export async function updateClientProfile(
   userId: string,
-  updates: Partial<Pick<Profile, 'full_name' | 'plan' | 'is_active' | 'account_status' | 'services' | 'has_qbo_access' | 'bank_accounts'>>,
+  updates: Partial<Pick<Profile, 'full_name' | 'company_name' | 'plan' | 'is_active' | 'account_status' | 'services' | 'has_qbo_access' | 'bank_accounts'>>,
 ): Promise<boolean> {
   const { error } = await supabase.from('profiles').update(updates).eq('id', userId);
   if (error) { console.error('updateClientProfile:', error.message); return false; }

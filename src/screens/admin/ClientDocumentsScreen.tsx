@@ -35,7 +35,7 @@ import { createCustomRequest } from '../../db/customRequests';
 import {
   useDownloadSelection, DownloadSelectionBar, DownloadNotice, SelectCheckbox,
 } from '../../components/DownloadSelectionBar';
-import { listSubfoldersForClient, renameSubfolder, deleteSubfolder, descendantIds, subfolderPath, Subfolder } from '../../db/subfolders';
+import { listSubfoldersForClient, createSubfolder, renameSubfolder, deleteSubfolder, descendantIds, subfolderPath, Subfolder } from '../../db/subfolders';
 import { dashboardForClient } from '../../lib/clientDashboards';
 import { ClientDetailsPanel } from '../../components/ClientDetailsPanel';
 import { AdminUploadModal } from '../../components/AdminUploadModal';
@@ -109,12 +109,15 @@ const vm = StyleSheet.create({
 
 // ── Rename Modal ──────────────────────────────────────────────────────────────
 
-function RenameModal({ visible, current, onConfirm, onCancel, what = 'Document', note }: {
+function RenameModal({ visible, current, onConfirm, onCancel, what = 'Document', note, title, confirmLabel = 'Rename' }: {
   visible: boolean; current: string; onConfirm: (v: string) => void; onCancel: () => void;
   /** What is being renamed, so the title says it. */
   what?: string;
   /** A line under the title, when there is something worth saying. */
   note?: string;
+  /** The whole title, when it is not a rename — "New Folder". */
+  title?: string;
+  confirmLabel?: string;
 }) {
   const [value, setValue] = useState(current);
   useEffect(() => { setValue(current); }, [current, visible]);
@@ -122,13 +125,13 @@ function RenameModal({ visible, current, onConfirm, onCancel, what = 'Document',
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
       <Pressable style={rm.overlay} onPress={onCancel}>
         <Pressable style={rm.box} onPress={() => {}}>
-          <Text style={rm.title}>Rename {what}</Text>
+          <Text style={rm.title}>{title ?? `Rename ${what}`}</Text>
           {note ? <Text style={rm.note}>{note}</Text> : null}
           <TextInput
             style={rm.input}
             value={value}
             onChangeText={setValue}
-            placeholder="New name..."
+            placeholder={title ? 'Folder name...' : 'New name...'}
             placeholderTextColor={Colors.textMuted}
             autoFocus
             selectTextOnFocus
@@ -138,7 +141,7 @@ function RenameModal({ visible, current, onConfirm, onCancel, what = 'Document',
               <Text style={rm.cancelText}>Cancel</Text>
             </TouchableOpacity>
             <TouchableOpacity style={rm.confirmBtn} onPress={() => value.trim() && onConfirm(value.trim())}>
-              <Text style={rm.confirmText}>Rename</Text>
+              <Text style={rm.confirmText}>{confirmLabel}</Text>
             </TouchableOpacity>
           </View>
         </Pressable>
@@ -321,12 +324,15 @@ export function ClientDocumentsScreen({
 }: Props) {
   // Built per client from their own workbook, so most clients have none.
   const clientDashboard = dashboardForClient(client);
+  const { user } = useAuth();
   // Renaming a subfolder from where it is actually browsed. Only the staff-made
   // ones can be renamed — the folder categories are the system's, not a client's.
   const [renameSub, setRenameSub] = useState<Subfolder | null>(null);
   // Duplicate folders were arriving from the standard set, and there was no way
   // to clear one from here — rename was the only thing a folder card offered.
   const [deleteSub, setDeleteSub] = useState<Subfolder | null>(null);
+  // The "+ Add New Folder" button under the grid.
+  const [newFolderOpen, setNewFolderOpen] = useState(false);
   const insets = useSafeAreaInsets();
   const [documents, setDocuments] = useState<Document[]>([]);
   const [loading, setLoading] = useState(true);
@@ -460,6 +466,28 @@ export function ClientDocumentsScreen({
       else buckets.set(key, { key, title, icon, order, data: [row] });
     });
 
+    // The client-profile spec's default folders, present from day one whether
+    // or not anything is in them — a new client's profile must not be a blank
+    // page. Unsorted Uploads carries no service prefix, so it shows under
+    // every tab; the rest are the TAX defaults, for TAX clients only.
+    const services = client.services?.length ? client.services : ['BK'];
+    const defaults = [
+      'unsorted_uploads',
+      ...(services.includes('TAX')
+        ? ['tax_identification', 'tax_irs_notices', 'tax_ip_pins',
+           'tax_return_information', 'tax_prior_transcripts',
+           'tax_contracts', 'tax_invoices', 'tax_additional_docs']
+        : []),
+    ];
+    defaults.forEach((table, i) => {
+      const key = `tbl:${table}`;
+      if (buckets.has(key)) return;
+      buckets.set(key, {
+        key, title: folderTableLabel(table), icon: 'folder-outline',
+        order: 900 + i, data: [],
+      });
+    });
+
     // A subfolder with nothing in it yet still gets a card. The standard three
     // are made for every client before anything is filed, and a folder you
     // cannot see is a folder nobody puts anything in.
@@ -476,7 +504,7 @@ export function ClientDocumentsScreen({
     });
 
     return [...buckets.values()].sort((a, b) => a.order - b.order || a.title.localeCompare(b.title));
-  }, [documents, clientItems, subfolders]);
+  }, [documents, clientItems, subfolders, client.services]);
 
   // The services this client takes. An older record with none recorded is read
   // as BK, which is what the rest of the app does with it.
@@ -486,7 +514,7 @@ export function ClientDocumentsScreen({
 
   // What is still filed under each service, whether or not they still take it.
   const filedUnder = useMemo(() => {
-    const n: Record<string, number> = { TAX: 0, BK: 0, CFO: 0 };
+    const n: Record<string, number> = { TAX: 0, YER: 0, BK: 0, CFO: 0 };
     documents.forEach(d => {
       const svc = serviceOfFolderKey(`tbl:${d.document_type ?? ''}`);
       if (svc) n[svc] += 1;
@@ -723,14 +751,15 @@ export function ClientDocumentsScreen({
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             activeOpacity={0.75}
           >
-            <Ionicons name="settings-outline" size={17} color="rgba(255,255,255,0.75)" />
+            <Ionicons name="settings-outline" size={15} color="#FFFFFF" />
+            <Text style={s.manageBtnText}>Update Profile</Text>
           </TouchableOpacity>
         )}
 
         <View style={{ gap: 6 }}>
           <TouchableOpacity style={s.sendFileBtn} onPress={() => setUploadOpen(true)} activeOpacity={0.85}>
             <Ionicons name="cloud-upload-outline" size={15} color="#3A3131" />
-            <Text style={s.sendFileText}>Send File</Text>
+            <Text style={s.sendFileText}>Upload File</Text>
           </TouchableOpacity>
           <TouchableOpacity style={s.requestBtn} onPress={() => setRequestOpen(true)} activeOpacity={0.85}>
             <Ionicons name="clipboard-outline" size={14} color="#E8B923" />
@@ -830,6 +859,14 @@ export function ClientDocumentsScreen({
             }
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => load(true)} tintColor={Colors.primary} />}
             ListEmptyComponent={<Text style={s.empty}>Nothing filed under {shownService} for this client.</Text>}
+            ListFooterComponent={
+              <View style={s.addFolderRow}>
+                <TouchableOpacity style={s.addFolderBtn} onPress={() => setNewFolderOpen(true)} activeOpacity={0.85}>
+                  <Ionicons name="add" size={15} color="#F0E9DC" />
+                  <Text style={s.addFolderText}>Add New Folder</Text>
+                </TouchableOpacity>
+              </View>
+            }
           />
         )
       )}
@@ -838,6 +875,27 @@ export function ClientDocumentsScreen({
 
       {/* Modals */}
       {viewerUrl && <DocViewerModal url={viewerUrl} onClose={() => setViewerUrl(null)} />}
+
+      <RenameModal
+        visible={newFolderOpen}
+        title="New Folder"
+        confirmLabel="Create"
+        note="A folder of this client's own, shown on every service tab."
+        current=""
+        onConfirm={async name => {
+          setNewFolderOpen(false);
+          // The folder has to hang off one of the real tables; the catch-all
+          // of the service being looked at is the least surprising home.
+          const parent =
+            shownService === 'BK'  ? 'bk_final_pnl' :
+            shownService === 'CFO' ? 'cfo_additional_docs' :
+            'tax_additional_docs';  // TAX, and YER until yer_ tables exist
+          const row = await createSubfolder(parent, name, user?.email ?? null, client.email);
+          // The usual failure is a folder they already have by that name.
+          if (row) setSubfolders(prev => [...prev, row]);
+        }}
+        onCancel={() => setNewFolderOpen(false)}
+      />
 
       <RenameModal
         visible={!!renameSub}
@@ -1015,15 +1073,31 @@ const s = StyleSheet.create({
   },
   acctStatusText: { fontSize: 11, fontWeight: '800', letterSpacing: 0.6 },
   manageBtn: {
-    width: 36,
+    flexDirection: 'row',
+    gap: 6,
     height: 36,
+    paddingHorizontal: 14,
     borderRadius: 11,
     alignItems: 'center',
     justifyContent: 'center',
     alignSelf: 'center',
-    backgroundColor: 'rgba(255,255,255,0.10)',
+    backgroundColor: '#17120F',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.25)',
     flexShrink: 0,
   },
+  manageBtnText: { color: '#FFFFFF', fontSize: 12, fontWeight: '700' },
+  addFolderRow: { alignItems: 'flex-end', marginTop: 14 },
+  addFolderBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: '#7A6A5F',
+    borderRadius: 18,
+    paddingHorizontal: 16,
+    paddingVertical: 9,
+  },
+  addFolderText: { color: '#F0E9DC', fontSize: 13, fontWeight: '800' },
 
   sectionLabel: {
     color: Colors.textMuted,
