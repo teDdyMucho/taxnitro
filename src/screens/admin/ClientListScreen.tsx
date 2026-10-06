@@ -19,6 +19,19 @@ import {
   BankAccount, normalizeBankAccounts,
 } from '../../db/requirements';
 import { ClientManageModal } from '../../components/ClientManageModal';
+import { joinName } from '../../lib/personName';
+import {
+  PROGRESS_COLOR, PROGRESS_LABEL, effectiveProgress, type WorkProgress,
+} from '../../lib/serviceProgress';
+
+/**
+ * How far along a label is, for sorting. Not Started first — what needs
+ * picking up is what someone sorting by progress is looking for — then In
+ * Progress, then done (Completed for TAX and YER, Current for BK and CFO).
+ */
+const PROGRESS_RANK: Record<WorkProgress, number> = {
+  not_started: 0, in_progress: 1, completed: 2, current: 2,
+};
 import {
   BankAccountsField, cleanBankAccounts, hasIncompleteBankAccount,
 } from '../../components/BankAccountsField';
@@ -129,7 +142,11 @@ function AddClientModal({
   onDone: () => void;
 }) {
   const sheet = useSheetStyles('md');
-  const [fullName, setFullName]     = useState('');
+  // First and last name — Camaree, app notes 6a. full_name is written as the
+  // two joined, so every screen that shows it carries on unchanged.
+  const [firstName, setFirstName]   = useState('');
+  const [lastName, setLastName]     = useState('');
+  const fullName = joinName(firstName, lastName);
   const [companyName, setCompanyName] = useState('');
   const [email, setEmail]           = useState('');
   const [password, setPassword]     = useState('');
@@ -149,7 +166,7 @@ function AddClientModal({
   };
 
   const reset = () => {
-    setFullName(''); setCompanyName(''); setEmail(''); setPassword(''); setPlan('Free');
+    setFirstName(''); setLastName(''); setCompanyName(''); setEmail(''); setPassword(''); setPlan('Free');
     setServices(['BK']); setHasQbo(false); setBankAccounts([]);
     setStep('form'); setErrorMsg(''); setShowPass(false);
   };
@@ -216,6 +233,11 @@ function AddClientModal({
             id: userId,
             email: email.trim(),
             full_name: fullName.trim(),
+            // Sent only when filled in, as company_name is below, so creating a
+            // client still works on a database that has not yet run
+            // profiles_first_last_name.sql.
+            ...(firstName.trim() ? { first_name: firstName.trim() } : {}),
+            ...(lastName.trim() ? { last_name: lastName.trim() } : {}),
             // Only sent when filled in, so creating a TAX-only client still
             // works on a database that has not run the company migration.
             ...(companyName.trim() ? { company_name: companyName.trim() } : {}),
@@ -289,12 +311,20 @@ function AddClientModal({
 
               {/* Fields scroll; the title and action buttons stay pinned. */}
               <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ gap: 16 }}>
-              {/* Full Name */}
-              <View style={ac.fieldGroup}>
-                <Text style={ac.label}>Full Name</Text>
-                <View style={ac.inputRow}>
-                  <Ionicons name="person-outline" size={16} color={Colors.textMuted} />
-                  <TextInput style={[ac.input, { outlineWidth: 0 } as any]} placeholder="e.g. Jane Smith" placeholderTextColor={Colors.textMuted} value={fullName} onChangeText={setFullName} />
+              {/* First and last name, side by side — the list sorts by the last */}
+              <View style={{ flexDirection: 'row', gap: 10 }}>
+                <View style={[ac.fieldGroup, { flex: 1 }]}>
+                  <Text style={ac.label}>First Name</Text>
+                  <View style={ac.inputRow}>
+                    <Ionicons name="person-outline" size={16} color={Colors.textMuted} />
+                    <TextInput style={[ac.input, { outlineWidth: 0 } as any]} placeholder="e.g. Jane" placeholderTextColor={Colors.textMuted} value={firstName} onChangeText={setFirstName} />
+                  </View>
+                </View>
+                <View style={[ac.fieldGroup, { flex: 1 }]}>
+                  <Text style={ac.label}>Last Name</Text>
+                  <View style={ac.inputRow}>
+                    <TextInput style={[ac.input, { outlineWidth: 0 } as any]} placeholder="e.g. Smith" placeholderTextColor={Colors.textMuted} value={lastName} onChangeText={setLastName} />
+                  </View>
                 </View>
               </View>
 
@@ -859,6 +889,8 @@ export function ClientListScreen({ onSelectClient }: Props) {
   const [query, setQuery]           = useState('');
   // Which service the list is narrowed to, or null for all of them.
   const [svcFilter, setSvcFilter]   = useState<ClientService | null>(null);
+  // Camaree, app notes 3c: "Allow for sorting by progress label."
+  const [sortBy, setSortBy]         = useState<'name' | 'progress'>('name');
   // The counts above the list double as a filter on where the subscription
   // stands.
   type StatKey = 'all' | AccountStatus;
@@ -906,7 +938,19 @@ export function ClientListScreen({ onSelectClient }: Props) {
   // rest of the app assumes too.
   // What a card sorts under: the company where there is one, the person
   // otherwise — the spec has BK, CFO and YER clients filed by business.
-  const sortName = (c: Profile) => (c.company_name?.trim() || c.full_name || '').toLowerCase();
+  // Camaree, app notes 6a: "sorting should go by Last Name (if entered)". The
+  // last name where there is one; otherwise what it sorted by before — the
+  // company, then the person's full name.
+  const sortName = (c: Profile) =>
+    (c.last_name?.trim() || c.company_name?.trim() || c.full_name || '').toLowerCase();
+
+  /** The furthest-behind label among the services in view, as a rank. */
+  const progressRank = (c: Profile) => {
+    const inView = svcFilter
+      ? [svcFilter]
+      : ((c.services?.length ? c.services : ['BK']) as ClientService[]);
+    return Math.min(...inView.map(svc => PROGRESS_RANK[effectiveProgress(c.service_progress, svc)]));
+  };
 
   const filtered = clients
     .filter(c =>
@@ -919,7 +963,13 @@ export function ClientListScreen({ onSelectClient }: Props) {
     .filter(c => matchesStat(c, statFilter))
     // Alphabetical, as the spec asks. getAllClients orders by personal name,
     // which is the wrong key for a business client.
-    .sort((a, b) => sortName(a).localeCompare(sortName(b)));
+    //
+    // By progress, a label belongs to a service, so it is read against one:
+    // the service being filtered on, or with no filter the client's least
+    // advanced service — the one still needing work. Name breaks the ties.
+    .sort((a, b) =>
+      (sortBy === 'progress' ? progressRank(a) - progressRank(b) : 0)
+      || sortName(a).localeCompare(sortName(b)));
 
   const activeCount = clients.filter(c => statusOf(c) === 'active').length;
   const pausedCount = clients.filter(c => statusOf(c) === 'paused').length;
@@ -955,13 +1005,21 @@ export function ClientListScreen({ onSelectClient }: Props) {
           )}
 
           <View style={s.metaRow}>
-            {(item.services?.length ? item.services : ['BK'] as ClientService[]).map(svc => (
-              <View key={svc} style={[s.svcTag, { backgroundColor: SERVICE_FILTER_COLORS[svc].bg }]}>
-                {/* The colour pair travels together — dark text on YER's dark
-                    brown block would vanish. */}
-                <Text style={[s.svcTagText, { color: SERVICE_FILTER_COLORS[svc].text }]}>{svc}</Text>
-              </View>
-            ))}
+            {(item.services?.length ? item.services : ['BK'] as ClientService[]).map(svc => {
+              // Each service carries its work label beside it, with a dot in
+              // the label's colour, so a list sorted by progress shows why.
+              const st = effectiveProgress(item.service_progress, svc);
+              return (
+                <View key={svc} style={[s.svcTag, s.svcTagRow, { backgroundColor: SERVICE_FILTER_COLORS[svc].bg }]}>
+                  <View style={[s.progDot, { backgroundColor: PROGRESS_COLOR[st] }]} />
+                  {/* The colour pair travels together — dark text on YER's dark
+                      brown block would vanish. */}
+                  <Text style={[s.svcTagText, { color: SERVICE_FILTER_COLORS[svc].text }]}>
+                    {svc} · {PROGRESS_LABEL[st]}
+                  </Text>
+                </View>
+              );
+            })}
             {(() => {
               const st = statusOf(item);
               const look = STATUS_LOOK[st];
@@ -1068,11 +1126,28 @@ export function ClientListScreen({ onSelectClient }: Props) {
 
       {/* ── Section label ── */}
       {!loading && filtered.length > 0 && (
-        <Text style={s.sectionLabel}>
-          {query || svcFilter || statFilter !== 'all'
-            ? `${filtered.length} result${filtered.length !== 1 ? 's' : ''}`
-            : 'All Clients'}
-        </Text>
+        <View style={s.sectionRow}>
+          <Text style={s.sectionLabel}>
+            {query || svcFilter || statFilter !== 'all'
+              ? `${filtered.length} result${filtered.length !== 1 ? 's' : ''}`
+              : 'All Clients'}
+          </Text>
+          {/* Sort — by name, or by where the work stands */}
+          <View style={s.sortToggle}>
+            {(['name', 'progress'] as const).map(k => (
+              <TouchableOpacity
+                key={k}
+                onPress={() => setSortBy(k)}
+                style={[s.sortBtn, sortBy === k && s.sortBtnOn]}
+                activeOpacity={0.8}
+              >
+                <Text style={[s.sortBtnText, sortBy === k && s.sortBtnTextOn]}>
+                  {k === 'name' ? 'Name' : 'Progress'}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
       )}
 
       {/* ── Service filter down the side, clients beside it ── */}
@@ -1339,6 +1414,17 @@ const s = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 2,
   },
+  svcTagRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  progDot: { width: 6, height: 6, borderRadius: 3 },
+  sectionRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  sortToggle: { flexDirection: 'row', gap: 4, marginRight: 16 },
+  sortBtn: {
+    paddingHorizontal: 10, paddingVertical: 4, borderRadius: 7,
+    borderWidth: 1, borderColor: Colors.border, backgroundColor: Colors.bgCard,
+  },
+  sortBtnOn: { backgroundColor: 'rgba(232,185,35,0.15)', borderColor: 'rgba(232,185,35,0.6)' },
+  sortBtnText: { color: Colors.textMuted, fontSize: 11, fontWeight: '700' },
+  sortBtnTextOn: { color: Colors.textPrimary },
   svcTagText: {
     color: '#1C1713',
     fontSize: 9,

@@ -12,6 +12,11 @@ import { useSheetStyles } from '../../hooks/useSheetStyles';
 import { useResponsive } from '../../hooks/useResponsive';
 import { supabase } from '../../lib/supabase';
 import { FOLDER_TABLES } from '../../db/documents';
+import {
+  PROGRESS_COLOR, PROGRESS_LABEL, effectiveProgress, normalizeServiceProgress,
+  isMonthlyService, type WorkProgress,
+} from '../../lib/serviceProgress';
+import type { ClientService } from '../../context/AuthContext';
 
 // ─── Folder metadata (FTG brand palette only) ───────────────────────────────
 const FOLDER_META: Record<string, { label: string; color: string; icon: string }> = {
@@ -53,6 +58,13 @@ const CATEGORIES: { key: CategoryKey; title: string; color: string; icon: string
   { key: 'CFO', title: 'CFO Advisory',             color: '#B5905B', icon: 'trending-up-outline', match: t => t.startsWith('cfo_') },
 ];
 
+/** A zero for every label under every service, to count into. */
+function emptyProgressCounts(): Record<CategoryKey, Record<WorkProgress, number>> {
+  const zero = (): Record<WorkProgress, number> =>
+    ({ not_started: 0, in_progress: 0, completed: 0, current: 0 });
+  return { TAX: zero(), YER: zero(), BK: zero(), CFO: zero() };
+}
+
 // Bar colours for the chart. Kept apart from CATEGORIES because those colours
 // also tint icons and pills elsewhere on the screen, where a pale beige would
 // read as disabled.
@@ -84,14 +96,16 @@ interface Stats {
   // How many clients hold each service. One client can hold several, so these
   // do not add up to totalClients.
   clientsByService: Record<CategoryKey, number>;
+  // Camaree, app notes 4: "For each service TAX, YER, BK & CFO, show the
+  // totals for the different Work Progress labels so that we can determine
+  // what's happening at a glance." Counted from each client's label for the
+  // service, read through effectiveProgress so BK and CFO's Current has
+  // already lapsed to Not Started when the month it was set in is over.
+  progressCounts: Record<CategoryKey, Record<WorkProgress, number>>;
   totalDocs:     number;
   newDocs:       number;
   docsThisWeek:  number;
   folderCounts:  { table: string; count: number }[];
-  // Every document's table, date and owner, and nothing else — the progress
-  // cards count from this. Counting from recentUploads capped the totals at
-  // its 60-row slice, which quietly wrong-footed busy months.
-  docMeta:       { table: string; created_at: string; email: string }[];
   // Which services each client is assigned (keyed by lower-cased email), and
   // their display name. The progress cards count by assignment, and the
   // upload rows are labelled by client, as the spec asks — not by address.
@@ -143,32 +157,6 @@ function PulsingDot() {
 
 // ─── Main screen ─────────────────────────────────────────────────────────────
 type RecentDoc = Stats['recentUploads'][number];
-type TimePeriod = 'today' | 'week' | 'month' | 'year';
-
-const PERIOD_OPTIONS: { key: TimePeriod; label: string }[] = [
-  { key: 'today', label: 'Today' },
-  { key: 'week',  label: 'This Week' },
-  { key: 'month', label: 'This Month' },
-  { key: 'year',  label: 'This Year' },
-];
-
-function getPeriodStart(period: TimePeriod): string {
-  const now = new Date();
-  if (period === 'today') {
-    now.setHours(0, 0, 0, 0);
-  } else if (period === 'week') {
-    const day = now.getDay();
-    now.setDate(now.getDate() - day);
-    now.setHours(0, 0, 0, 0);
-  } else if (period === 'month') {
-    now.setDate(1);
-    now.setHours(0, 0, 0, 0);
-  } else {
-    now.setMonth(0, 1);
-    now.setHours(0, 0, 0, 0);
-  }
-  return now.toISOString();
-}
 
 export function AdminDashboardScreen({ onViewAllDocuments }: { onViewAllDocuments?: () => void }) {
   const { user, isLoading: authLoading } = useAuth();
@@ -178,12 +166,10 @@ export function AdminDashboardScreen({ onViewAllDocuments }: { onViewAllDocument
   const mountedRef = useRef(true);
   useEffect(() => () => { mountedRef.current = false; }, []);
 
-  const [stats, setStats]           = useState<Stats>({ totalClients: 0, totalStaff: 0, clientsByService: { TAX: 0, YER: 0, BK: 0, CFO: 0 }, svcByEmail: {}, nameByEmail: {}, pendingFtg: 0, forReview: 0, totalDocs: 0, newDocs: 0, docsThisWeek: 0, folderCounts: [], docMeta: [], recentUploads: [] });
+  const [stats, setStats]           = useState<Stats>({ totalClients: 0, totalStaff: 0, clientsByService: { TAX: 0, YER: 0, BK: 0, CFO: 0 }, progressCounts: emptyProgressCounts(), svcByEmail: {}, nameByEmail: {}, pendingFtg: 0, forReview: 0, totalDocs: 0, newDocs: 0, docsThisWeek: 0, folderCounts: [], recentUploads: [] });
   const [loading, setLoading]       = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [menuDoc, setMenuDoc]       = useState<RecentDoc | null>(null);
-  const [period, setPeriod]         = useState<TimePeriod>('month');
-  const [periodOpen, setPeriodOpen] = useState(false);
   // Which page each upload column is showing. Both sides page independently,
   // so a long client list does not drag the internal one along with it.
   const [uploadPage, setUploadPage] = useState<Record<string, number>>({});
@@ -211,7 +197,17 @@ export function AdminDashboardScreen({ onViewAllDocuments }: { onViewAllDocument
       const allDocs = tableResults.flatMap((r, i) => (r.data ?? []).map(d => ({ ...d, document_type: FOLDER_TABLES[i] })));
       // Clients per service. A client on both BK and CFO counts in both, so
       // these figures deliberately sum to more than the client total.
-      const clientRows = (clientRes.data ?? []) as { services?: string[] | null; email?: string | null; full_name?: string | null; company_name?: string | null }[];
+      const clientRows = (clientRes.data ?? []) as { services?: string[] | null; email?: string | null; full_name?: string | null; company_name?: string | null; service_progress?: unknown }[];
+
+      // Each client counted once per service they take, under the label that
+      // service carries today.
+      const progressCounts = emptyProgressCounts();
+      clientRows.forEach(c => {
+        const sp = normalizeServiceProgress(c.service_progress);
+        ((c.services ?? ['BK']) as ClientService[]).forEach(svc => {
+          if (svc in progressCounts) progressCounts[svc as CategoryKey][effectiveProgress(sp, svc)] += 1;
+        });
+      });
       const clientsPerService = (svc: string) =>
         clientRows.filter(c => (c.services ?? ['BK']).includes(svc)).length;
 
@@ -239,6 +235,7 @@ export function AdminDashboardScreen({ onViewAllDocuments }: { onViewAllDocument
           BK:  clientsPerService('BK'),
           CFO: clientsPerService('CFO'),
         },
+        progressCounts,
         svcByEmail,
         nameByEmail,
         pendingFtg: pendingDocs.filter(d => !isInternalRole(d.uploaded_by_role)).length,
@@ -247,7 +244,6 @@ export function AdminDashboardScreen({ onViewAllDocuments }: { onViewAllDocument
         newDocs:       allDocs.filter(d => d.status === 'new').length,
         docsThisWeek:  allDocs.filter(d => d.created_at >= weekAgo).length,
         folderCounts:  FOLDER_TABLES.map((table, i) => ({ table, count: tableResults[i].data?.length ?? 0 })),
-        docMeta:       allDocs.map(d => ({ table: d.document_type ?? '', created_at: d.created_at, email: (d.email ?? '').toLowerCase() })),
         // Enough to page through on both sides of the split, not so many that
         // the whole list is held in memory for a dashboard panel.
         recentUploads: [...allDocs].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).slice(0, 60) as any,
@@ -258,25 +254,25 @@ export function AdminDashboardScreen({ onViewAllDocuments }: { onViewAllDocument
 
   useEffect(() => { if (!authLoading && user?.id) load(); }, [authLoading, user?.id]);
 
-  const periodStart = useMemo(() => getPeriodStart(period), [period]);
 
-  // The four progress cards, counted by assignment as the spec asks:
-  //   TOTAL   — clients assigned to the category.
-  //   STARTED — of those, how many have at least one document in that
-  //             category's folders within the chosen period.
-  // "Started" is not stored anywhere, so this is its observable reading. YER
-  // has no folder tables yet, so its started count sits at 0 until they exist.
+  // The four progress cards. Each counts the service's clients under the work
+  // label staff have given them — Not Started, In Progress, and Completed
+  // (TAX, YER) or Current (BK, CFO).
+  //
+  // These used to show "STARTED x / TOTAL y", where started meant only that a
+  // client had uploaded something in the period: "Started" was not stored
+  // anywhere, so a document was taken as a stand-in for it. That is what
+  // Camaree meant by "some of the UI is there, but function is not". The labels
+  // are a standing state, not a count over a period, so the period picker does
+  // not move these.
   const progressByCategory = useMemo(() =>
     CATEGORIES.map(cat => {
-      const started = new Set<string>();
-      stats.docMeta.forEach(d => {
-        if (!d.email || d.created_at < periodStart) return;
-        if (!cat.match(d.table)) return;
-        if ((stats.svcByEmail[d.email] ?? []).includes(cat.key)) started.add(d.email);
-      });
-      return { ...cat, started: started.size, total: stats.clientsByService[cat.key] ?? 0 };
+      const counts = stats.progressCounts[cat.key];
+      const done: WorkProgress = isMonthlyService(cat.key as ClientService) ? 'current' : 'completed';
+      const rows: WorkProgress[] = ['not_started', 'in_progress', done];
+      return { ...cat, rows: rows.map(k => ({ key: k, count: counts[k] })), total: stats.clientsByService[cat.key] ?? 0 };
     }),
-  [stats, periodStart]);
+  [stats]);
 
   // The two snapshot tiles the spec names: client files waiting on FTG, and
   // FTG deliverables waiting on a client.
@@ -360,31 +356,25 @@ export function AdminDashboardScreen({ onViewAllDocuments }: { onViewAllDocument
           }
         >
 
-          {/* ── OVERVIEW, with the period the figures cover ──
-              The picker sits here rather than below, because the cards that
-              follow are what it changes. */}
+          {/*
+            ── OVERVIEW ──
+            There was a period picker here (Today / This Week / This Month /
+            This Year). It only ever fed the old "started" counts, and the work
+            labels below are where things stand now, not a count over a period —
+            so it had nothing left to change, and a control that changes nothing
+            reads as broken.
+          */}
           <View style={s.sectionHeaderRow}>
             <Text style={s.sectionLabel}>OVERVIEW</Text>
-            <TouchableOpacity style={s.sectionAction} onPress={() => setPeriodOpen(true)}>
-              <Ionicons name="calendar-outline" size={13} color="#E8B923" />
-              <Text style={[s.sectionActionText, { color: '#E8B923' }]}>
-                {PERIOD_OPTIONS.find(p => p.key === period)?.label}
-              </Text>
-              <Ionicons name="chevron-down" size={12} color="#E8B923" />
-            </TouchableOpacity>
           </View>
 
-          {/* ── One row: a progress card per category, then two tiles ──
-              Per the spec: counts by client assignment. The big figure is
-              how many of the category's clients have started in the chosen
-              period; the denominator, how many it has in all. */}
+          {/* ── One row: a work-progress card per service, then two tiles ── */}
           <View style={s.progressRow}>
             {progressByCategory.map(group => (
               <View key={group.key} style={s.progressCard}>
                 <View style={s.progressHead}>
-                  <Text style={s.progressHeadText}>
-                    {PERIOD_OPTIONS.find(p => p.key === period)?.label.toUpperCase()}
-                  </Text>
+                  {/* A standing state, not a period's count — so it says so. */}
+                  <Text style={s.progressHeadText}>WORK PROGRESS</Text>
                   <View style={[s.progressHeadIcon, { backgroundColor: group.color + '20' }]}>
                     <Ionicons name={group.icon as any} size={11} color={group.color} />
                   </View>
@@ -392,17 +382,19 @@ export function AdminDashboardScreen({ onViewAllDocuments }: { onViewAllDocument
 
                 <Text style={s.progressTitle} numberOfLines={2}>{group.key} CLIENT PROGRESS</Text>
 
-                {/* The figure is near-black and the denominator carries the
-                    category's colour, so the eye lands on the count first. */}
-                <View style={s.progressFigure}>
-                  <View>
-                    <Text style={s.progressStartedLabel}>STARTED</Text>
-                    <Text style={s.progressValue}>{group.started}</Text>
-                  </View>
-                  <View>
-                    <Text style={[s.progressOf, { color: group.color }]}>/{group.total}</Text>
-                    <Text style={s.progressOfLabel}>TOTAL</Text>
-                  </View>
+                {/* One line per label, the dot in the label's colour, and the
+                    service's client total underneath. */}
+                <View style={s.progressList}>
+                  {group.rows.map(r => (
+                    <View key={r.key} style={s.progressLine}>
+                      <View style={[s.progressDot, { backgroundColor: PROGRESS_COLOR[r.key] }]} />
+                      <Text style={s.progressLineLabel}>{PROGRESS_LABEL[r.key]}</Text>
+                      <Text style={s.progressLineValue}>{r.count}</Text>
+                    </View>
+                  ))}
+                  <Text style={[s.progressOfLabel, { color: group.color }]}>
+                    {group.total} client{group.total !== 1 ? 's' : ''}
+                  </Text>
                 </View>
               </View>
             ))}
@@ -419,25 +411,6 @@ export function AdminDashboardScreen({ onViewAllDocuments }: { onViewAllDocument
           </View>
 
 
-          {/* Period picker modal */}
-          <Modal visible={periodOpen} transparent animationType="fade" onRequestClose={() => setPeriodOpen(false)}>
-            <Pressable style={{ flex: 1 }} onPress={() => setPeriodOpen(false)}>
-              <View style={s.periodDropdown}>
-                {PERIOD_OPTIONS.map(opt => (
-                  <TouchableOpacity
-                    key={opt.key}
-                    style={[s.periodOption, period === opt.key && s.periodOptionActive]}
-                    onPress={() => { setPeriod(opt.key); setPeriodOpen(false); }}
-                  >
-                    <Text style={[s.periodOptionText, period === opt.key && { color: '#E8B923', fontWeight: '700' }]}>
-                      {opt.label}
-                    </Text>
-                    {period === opt.key && <Ionicons name="checkmark" size={14} color="#E8B923" />}
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </Pressable>
-          </Modal>
 
 
           {/* ── RECENT UPLOADS — a centred heading over the two columns ── */}
@@ -1093,36 +1066,18 @@ const s = StyleSheet.create({
     letterSpacing: 0.4,
     lineHeight: 13,
   },
-  // Big figure, with the denominator smaller beside it — as the mock reads.
-  progressFigure: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    gap: 3,
-  },
-  progressValue: {
-    color: '#1C1713',
-    fontSize: 44,
-    fontWeight: '800',
-    letterSpacing: -2,
-    lineHeight: 46,
-  },
-  progressStartedLabel: {
-    color: '#A8998A',
-    fontSize: 7,
-    fontWeight: '700',
-    letterSpacing: 0.5,
-  },
-  progressOf: {
-    fontSize: 20,
-    fontWeight: '700',
-    lineHeight: 24,
-  },
   progressOfLabel: {
     color: '#A8998A',
     fontSize: 7,
     fontWeight: '700',
     letterSpacing: 0.5,
   },
+  // The three work labels, one line each.
+  progressList: { gap: 5, marginTop: 4 },
+  progressLine: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  progressDot:  { width: 7, height: 7, borderRadius: 4 },
+  progressLineLabel: { flex: 1, color: '#6B5E52', fontSize: 11, fontWeight: '600' },
+  progressLineValue: { color: '#1C1713', fontSize: 18, fontWeight: '800', letterSpacing: -0.5 },
 
   // ── Recent uploads, two columns ───────────────────────
   uploadsHeader: {
@@ -1453,38 +1408,4 @@ const s = StyleSheet.create({
     fontWeight: '500',
   },
 
-  // Period picker dropdown
-  periodDropdown: {
-    position: 'absolute',
-    top: 180,
-    right: 20,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: '#E8E0D0',
-    shadowColor: '#3A3131',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.12,
-    shadowRadius: 20,
-    elevation: 10,
-    minWidth: 160,
-    overflow: 'hidden',
-  },
-  periodOption: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 13,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F2EDE3',
-  },
-  periodOptionActive: {
-    backgroundColor: '#FEF9E7',
-  },
-  periodOptionText: {
-    fontSize: 14,
-    color: '#1C1713',
-    fontWeight: '500',
-  },
 });

@@ -1,5 +1,6 @@
 import { supabase } from '../lib/supabase';
 import { BankAccount, normalizeBankAccounts } from './requirements';
+import { normalizeServiceProgress, type ServiceProgress } from '../lib/serviceProgress';
 
 export type UserRole = 'client' | 'staff' | 'admin';
 export type ClientService = 'BK' | 'TAX' | 'CFO' | 'YER';
@@ -27,7 +28,14 @@ export const statusOf = (p: { account_status?: AccountStatus; is_active?: boolea
 
 export interface Profile {
   id: string;
+  /** "First Last" — what every screen shows. Written from the two below where they are set. */
   full_name: string;
+  /**
+   * Separate first and last name — Camaree, app notes 6a. Null on clients
+   * entered before they existed; the list sorts by last_name where it is set.
+   */
+  first_name?: string | null;
+  last_name?: string | null;
   /**
    * The business the account is for. TAX clients are people, so theirs is
    * usually empty; BK, CFO and YER clients are businesses, and the clients
@@ -49,6 +57,13 @@ export interface Profile {
   services: ClientService[];      // which categories/requirements the client sees
   has_qbo_access: boolean;        // true → hide "Prior Month Bookkeeping / QBO Access"
   bank_accounts: BankAccount[];   // one required Bank Statements slot per account
+  /**
+   * Where FTG's own work stands, one label per service — set by staff in the
+   * Update Profile tray, read by the client list and the dashboard. Read it
+   * through effectiveProgress(), never directly: BK and CFO's "Current" lapses
+   * to Not Started when the month it was set in ends.
+   */
+  service_progress: ServiceProgress;
   created_at: string;
   updated_at: string;
 }
@@ -60,6 +75,7 @@ export function normalizeProfile(p: any): Profile {
     services: Array.isArray(p?.services) && p.services.length > 0 ? p.services : ['BK'],
     has_qbo_access: p?.has_qbo_access ?? false,
     bank_accounts: normalizeBankAccounts(p?.bank_accounts),
+    service_progress: normalizeServiceProgress(p?.service_progress),
   } as Profile;
 }
 
@@ -117,7 +133,7 @@ export async function removeBankAccounts(userId: string, ids: string[]): Promise
 
 export async function updateClientProfile(
   userId: string,
-  updates: Partial<Pick<Profile, 'full_name' | 'company_name' | 'plan' | 'is_active' | 'account_status' | 'services' | 'has_qbo_access' | 'bank_accounts'>>,
+  updates: Partial<Pick<Profile, 'full_name' | 'first_name' | 'last_name' | 'company_name' | 'plan' | 'is_active' | 'account_status' | 'services' | 'has_qbo_access' | 'bank_accounts' | 'service_progress'>>,
 ): Promise<boolean> {
   const { error } = await supabase.from('profiles').update(updates).eq('id', userId);
   if (error) { console.error('updateClientProfile:', error.message); return false; }

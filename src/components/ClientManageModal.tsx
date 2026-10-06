@@ -13,6 +13,11 @@ import {
 } from '../db/profiles';
 import { normalizeBankAccounts, BankAccount } from '../db/requirements';
 import { dashboardForClient } from '../lib/clientDashboards';
+import { joinName, splitName } from '../lib/personName';
+import {
+  PROGRESS_COLOR, PROGRESS_LABEL, effectiveProgress, progressOptions, withProgress,
+  isMonthlyService, type ServiceProgress,
+} from '../lib/serviceProgress';
 import {
   BankAccountsField, cleanBankAccounts, hasIncompleteBankAccount,
 } from './BankAccountsField';
@@ -102,10 +107,23 @@ export function ClientManageModal({
   onOpenCfo?: () => void;
 }) {
   const sheet = useSheetStyles('md');
-  const [name, setName]           = useState(client.full_name ?? '');
+  // First and last name — Camaree, app notes 6a. A client entered before these
+  // existed has only a full name, so the form offers a split of it for the
+  // person editing to check. It is in the boxes, in front of them, before it is
+  // ever saved.
+  const initialName = (client.first_name || client.last_name)
+    ? { first: client.first_name ?? '', last: client.last_name ?? '' }
+    : splitName(client.full_name);
+  const [first, setFirst]         = useState(initialName.first);
+  const [last, setLast]           = useState(initialName.last);
+  // What every screen shows, kept as "First Last".
+  const name = joinName(first, last) || client.full_name || '';
   const [company, setCompany]     = useState(client.company_name ?? '');
   const [plan, setPlan]           = useState(client.plan ?? 'Free');
   const [status, setStatus] = useState<AccountStatus>(statusOf(client));
+  // Where FTG's work stands per service. Held whole, so a service switched off
+  // and back on in the same edit keeps the label it had.
+  const [progress, setProgress]   = useState<ServiceProgress>(client.service_progress ?? {});
   const [services, setServices]   = useState<ClientService[]>(
     Array.isArray(client.services) && client.services.length > 0 ? client.services : ['BK']
   );
@@ -142,16 +160,30 @@ export function ClientManageModal({
     // is_active is sent alongside the status so the two agree even where the
     // database trigger that syncs them has not been applied yet.
     const isActive = status === 'active';
+    // The newer columns are sent only when they have changed, so editing
+    // anything else still saves on a database that has not yet run
+    // profiles_first_last_name.sql or profiles_service_progress.sql — the same
+    // care the Add Client form takes with company_name.
+    const nameChanged =
+      first.trim() !== (client.first_name ?? '') || last.trim() !== (client.last_name ?? '');
+    const progressChanged =
+      JSON.stringify(progress) !== JSON.stringify(client.service_progress ?? {});
     const ok = await updateClientProfile(client.id, {
       full_name: name, company_name: company.trim() || null, plan,
       is_active: isActive, account_status: status,
       services, has_qbo_access: hasQbo,
       bank_accounts: banks,
+      ...(nameChanged ? { first_name: first.trim() || null, last_name: last.trim() || null } : {}),
+      ...(progressChanged ? { service_progress: progress } : {}),
     });
     setSaving(false);
     if (ok) {
       showToast('Client updated successfully');
-      onSave({ ...client, full_name: name, company_name: company.trim() || null, plan, is_active: isActive, account_status: status, services, has_qbo_access: hasQbo, bank_accounts: banks });
+      onSave({
+        ...client, full_name: name, first_name: first.trim() || null, last_name: last.trim() || null,
+        company_name: company.trim() || null, plan, is_active: isActive, account_status: status,
+        services, has_qbo_access: hasQbo, bank_accounts: banks, service_progress: progress,
+      });
     } else {
       showToast('Failed to update client');
     }
@@ -213,18 +245,32 @@ export function ClientManageModal({
           </View>
 
           <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ gap: 18 }}>
-            {/* Full Name */}
-            <View style={mm.field}>
-              <Text style={mm.label}>Full Name</Text>
-              <View style={mm.inputWrap}>
-                <Ionicons name="person-outline" size={15} color={Colors.textMuted} />
-                <TextInput
-                  style={[mm.input, { outlineWidth: 0 } as any]}
-                  value={name}
-                  onChangeText={setName}
-                  placeholder="Full name..."
-                  placeholderTextColor={Colors.textMuted}
-                />
+            {/* First and last name, side by side — the list sorts by the last */}
+            <View style={mm.nameRow}>
+              <View style={[mm.field, { flex: 1 }]}>
+                <Text style={mm.label}>First Name</Text>
+                <View style={mm.inputWrap}>
+                  <Ionicons name="person-outline" size={15} color={Colors.textMuted} />
+                  <TextInput
+                    style={[mm.input, { outlineWidth: 0 } as any]}
+                    value={first}
+                    onChangeText={setFirst}
+                    placeholder="First name"
+                    placeholderTextColor={Colors.textMuted}
+                  />
+                </View>
+              </View>
+              <View style={[mm.field, { flex: 1 }]}>
+                <Text style={mm.label}>Last Name</Text>
+                <View style={mm.inputWrap}>
+                  <TextInput
+                    style={[mm.input, { outlineWidth: 0 } as any]}
+                    value={last}
+                    onChangeText={setLast}
+                    placeholder="Last name"
+                    placeholderTextColor={Colors.textMuted}
+                  />
+                </View>
               </View>
             </View>
 
@@ -287,6 +333,52 @@ export function ClientManageModal({
                 })}
               </View>
             </View>
+
+            {/*
+              Work Progress — Camaree, app notes 3b. One row per service the
+              client takes, three labels each. TAX and YER finish once
+              (Completed); BK and CFO are caught up month by month (Current),
+              and Current lapses to Not Started on the 1st, which the note under
+              those rows says so nobody is surprised by it.
+            */}
+            {services.length > 0 && (
+              <View style={mm.field}>
+                <Text style={mm.label}>Work Progress</Text>
+                {ALL_SERVICES.filter(svc => services.includes(svc)).map(svc => {
+                  const on = effectiveProgress(progress, svc);
+                  return (
+                    <View key={svc} style={mm.progRow}>
+                      <Text style={mm.progSvc}>{SERVICE_LABEL[svc]}</Text>
+                      <View style={mm.progOpts}>
+                        {progressOptions(svc).map(opt => {
+                          const isOn = on === opt;
+                          return (
+                            <TouchableOpacity
+                              key={opt}
+                              style={[mm.progBtn, isOn && {
+                                backgroundColor: PROGRESS_COLOR[opt] + '22',
+                                borderColor: PROGRESS_COLOR[opt],
+                              }]}
+                              onPress={() => setProgress(prev => withProgress(prev, svc, opt))}
+                              activeOpacity={0.75}
+                            >
+                              <Text style={[mm.progText, isOn && { color: Colors.textPrimary, fontWeight: '700' }]}>
+                                {PROGRESS_LABEL[opt]}
+                              </Text>
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </View>
+                    </View>
+                  );
+                })}
+                {services.some(isMonthlyService) && (
+                  <Text style={mm.qboHint}>
+                    BK and CFO go back to Not Started on the 1st of each month.
+                  </Text>
+                )}
+              </View>
+            )}
 
             {/* Bank accounts — one required "Bank Statements" slot per account */}
             <BankAccountsField value={bankAccounts} onChange={setBankAccounts} />
@@ -512,6 +604,16 @@ const mm = StyleSheet.create({
   },
   svcBtnActive: { backgroundColor: 'rgba(232,185,35,0.12)', borderColor: 'rgba(232,185,35,0.5)' },
   svcText: { color: Colors.textMuted, fontSize: 12, fontWeight: '600' },
+  progRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 6 },
+  nameRow: { flexDirection: 'row', gap: 10 },
+  progSvc: { width: 40, color: Colors.textPrimary, fontSize: 12, fontWeight: '800', letterSpacing: 0.4 },
+  progOpts: { flex: 1, flexDirection: 'row', gap: 6 },
+  progBtn: {
+    flex: 1, alignItems: 'center', justifyContent: 'center',
+    paddingVertical: 9, borderRadius: 9, backgroundColor: Colors.bgMid,
+    borderWidth: 1, borderColor: Colors.border,
+  },
+  progText: { color: Colors.textMuted, fontSize: 11, fontWeight: '600' },
   qboHint: { color: Colors.textMuted, fontSize: 11, lineHeight: 15, marginTop: 2 },
   toggleRow: { flexDirection: 'row', gap: 10 },
   toggleBtn: {
