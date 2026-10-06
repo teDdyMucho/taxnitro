@@ -251,7 +251,7 @@ export function ClientManageModal({
           <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ gap: 18 }}>
             {/* First and last name, side by side — the list sorts by the last */}
             <View style={[mm.nameRow, isPhone && mm.stack]}>
-              <View style={[mm.field, { flex: 1 }]}>
+              <View style={[mm.field, !isPhone && { flex: 1 }]}>
                 <Text style={mm.label}>First Name</Text>
                 <View style={mm.inputWrap}>
                   <Ionicons name="person-outline" size={15} color={Colors.textMuted} />
@@ -264,7 +264,7 @@ export function ClientManageModal({
                   />
                 </View>
               </View>
-              <View style={[mm.field, { flex: 1 }]}>
+              <View style={[mm.field, !isPhone && { flex: 1 }]}>
                 <Text style={mm.label}>Last Name</Text>
                 <View style={mm.inputWrap}>
                   <TextInput
@@ -353,7 +353,7 @@ export function ClientManageModal({
                   return (
                     <View key={svc} style={[mm.progRow, isPhone && mm.progRowPhone]}>
                       <Text style={mm.progSvc}>{SERVICE_LABEL[svc]}</Text>
-                      <View style={mm.progOpts}>
+                      <View style={isPhone ? mm.progOptsPhone : mm.progOpts}>
                         {progressOptions(svc).map(opt => {
                           const isOn = on === opt;
                           return (
@@ -616,6 +616,9 @@ const mm = StyleSheet.create({
   progRowPhone: { flexDirection: 'column', alignItems: 'stretch', gap: 6 },
   progSvc: { width: 40, color: Colors.textPrimary, fontSize: 12, fontWeight: '800', letterSpacing: 0.4 },
   progOpts: { flex: 1, flexDirection: 'row', gap: 6 },
+  // Phone: the buttons sit under the service name, so this is in a column —
+  // where a flex would start it at zero height. Full width, no flex.
+  progOptsPhone: { flexDirection: 'row', gap: 6 },
   progBtn: {
     flex: 1, alignItems: 'center', justifyContent: 'center',
     paddingVertical: 9, borderRadius: 9, backgroundColor: Colors.bgMid,

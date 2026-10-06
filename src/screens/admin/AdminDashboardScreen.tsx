@@ -431,12 +431,12 @@ export function AdminDashboardScreen({ onViewAllDocuments }: { onViewAllDocument
           </View>
 
           {/* ── The chart, then the two upload columns beside it ── */}
-          <View style={[s.uploadCols, isPhone && s.uploadColsPhone]}>
+          <View style={isPhone ? s.uploadColsPhone : s.uploadCols}>
 
             {/* Clients per service. Bars are drawn to the tallest one. */}
-            <View style={[s.chartCard, isPhone && s.chartCardPhone]}>
+            <View style={isPhone ? s.chartCardPhone : s.chartCard}>
               <Text style={s.chartTitle}>CLIENTS BY SERVICE</Text>
-              <View style={s.chartPlot}>
+              <View style={isPhone ? s.chartPlotPhone : s.chartPlot}>
                 {CATEGORIES.map(cat => {
                   const value = stats.clientsByService[cat.key] ?? 0;
                   const tallest = Math.max(1, ...Object.values(stats.clientsByService));
@@ -500,7 +500,7 @@ export function AdminDashboardScreen({ onViewAllDocuments }: { onViewAllDocument
                   setUploadPage(p => ({ ...p, [col.title]: Math.min(pageCount - 1, Math.max(0, safePage + by)) }));
 
                 return (
-                <View key={col.title} style={[s.uploadCol, isPhone && s.uploadColPhone]}>
+                <View key={col.title} style={isPhone ? s.uploadColPhone : s.uploadCol}>
                   <Text style={s.uploadColTitle}>{col.title}</Text>
 
                   {col.rows.length === 0 ? (
@@ -1192,14 +1192,39 @@ const s = StyleSheet.create({
     letterSpacing: 0.4,
   },
 
-  // Phone: the chart, then Sorted, then Unsorted, one under another. Side by
-  // side at phone width each was a third of the screen — dates read "Sep 1, 20",
-  // tags "Month", and the pager's Next was cut off.
-  uploadColsPhone: { flexDirection: 'column' },
-  // The chart's height comes from the columns beside it on a wide screen;
-  // stacked, it has none of its own, so it is given one.
-  chartCardPhone: { flex: 0, height: 240 },
-  uploadColPhone: { flex: 0 },
+  // ── Phone: the chart, then Sorted, then Unsorted, one under another ──
+  //
+  // These are whole styles, used INSTEAD of the desktop ones, not laid over
+  // them. The first attempt layered `flex: 0` over the desktop `flex`, and on
+  // the web flex: 0 is CSS `0 1 0%` — a starting height of nothing. The chart
+  // collapsed to its padding with its numbers spilling under it, and both
+  // upload columns collapsed to zero and drew on top of each other, which is
+  // why the SORTED and UNSORTED headings landed on the same line. None of
+  // these carries a flex at all; each is as tall as what is in it.
+  uploadColsPhone: { flexDirection: 'column', gap: 16 },
+  chartCardPhone: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    borderWidth: 2,
+    borderColor: '#1C1713',
+    shadowColor: '#3A3131',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.20,
+    shadowRadius: 16,
+    elevation: 6,
+    padding: 14,
+    gap: 12,
+  },
+  // A fixed height for the bars to fill. The desktop plot's 330 minimum is
+  // more than a phone needs, and it was what overflowed the 240 tried before.
+  chartPlotPhone: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'space-around',
+    height: 200,
+    gap: 10,
+  },
+  uploadColPhone: { gap: 8 },
   uploadCols: {
     flexDirection: 'row',
     gap: 12,

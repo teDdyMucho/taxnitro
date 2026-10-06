@@ -316,14 +316,14 @@ function AddClientModal({
               <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ gap: 16 }}>
               {/* First and last name, side by side — the list sorts by the last */}
               <View style={{ flexDirection: namesStack ? 'column' : 'row', gap: namesStack ? 16 : 10 }}>
-                <View style={[ac.fieldGroup, { flex: 1 }]}>
+                <View style={[ac.fieldGroup, !namesStack && { flex: 1 }]}>
                   <Text style={ac.label}>First Name</Text>
                   <View style={ac.inputRow}>
                     <Ionicons name="person-outline" size={16} color={Colors.textMuted} />
                     <TextInput style={[ac.input, { outlineWidth: 0 } as any]} placeholder="e.g. Jane" placeholderTextColor={Colors.textMuted} value={firstName} onChangeText={setFirstName} />
                   </View>
                 </View>
-                <View style={[ac.fieldGroup, { flex: 1 }]}>
+                <View style={[ac.fieldGroup, !namesStack && { flex: 1 }]}>
                   <Text style={ac.label}>Last Name</Text>
                   <View style={ac.inputRow}>
                     <TextInput style={[ac.input, { outlineWidth: 0 } as any]} placeholder="e.g. Smith" placeholderTextColor={Colors.textMuted} value={lastName} onChangeText={setLastName} />
