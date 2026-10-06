@@ -37,6 +37,7 @@ import {
 } from '../../components/DownloadSelectionBar';
 import { listSubfoldersForClient, createSubfolder, renameSubfolder, deleteSubfolder, descendantIds, subfolderPath, Subfolder } from '../../db/subfolders';
 import { dashboardForClient } from '../../lib/clientDashboards';
+import { useResponsive } from '../../hooks/useResponsive';
 import { ClientDetailsPanel } from '../../components/ClientDetailsPanel';
 import { AdminUploadModal } from '../../components/AdminUploadModal';
 import { ClientQuestionnairePanel } from '../../components/ClientQuestionnairePanel';
@@ -322,6 +323,12 @@ function serviceOfFolderKey(key: string): ClientService | null {
 export function ClientDocumentsScreen({
   client, onBack, onOpenDashboard, openFolderKey = null, onFolderChange, onClientChange,
 }: Props) {
+  // Phone: the header's buttons drop to a second line, and the folders go three
+  // to a row. One header row of back, avatar, name, status, Update Profile and a
+  // column of buttons pushed the buttons off the screen and squeezed the
+  // client's name out; six folders to a row left each about 55px.
+  const { isPhone, isTablet } = useResponsive();
+  const folderCols = isPhone ? 3 : isTablet ? 4 : 6;
   // Built per client from their own workbook, so most clients have none.
   const clientDashboard = dashboardForClient(client);
   const { user } = useAuth();
@@ -590,7 +597,7 @@ export function ClientDocumentsScreen({
       <TouchableOpacity style={s.fTile} onPress={() => setActiveFolderKey(item.key)} activeOpacity={0.75}>
         {/* A drawn folder rather than an icon in a box, as the design has it:
             a tab across the top left, and the body below it. */}
-        <View style={s.folderArt}>
+        <View style={[s.folderArt, isPhone && s.folderArtPhone]}>
           <View style={s.folderTab} />
           <View style={s.folderBody} />
           {unread > 0 && (
@@ -638,6 +645,24 @@ export function ClientDocumentsScreen({
     const marked = dl.selected.has(item.id);
     // While marking, the whole row is the checkbox — the per-row actions would
     // only get in the way.
+    // On a phone the buttons go under the name and the status beside the date.
+    // In one line with the name they left it about 12px.
+    const actions = !dl.selecting && (
+      <View style={[s.docActions, isPhone && s.docActionsPhone]}>
+        <TouchableOpacity style={s.actionBtn} onPress={() => handleView(item)}>
+          <Ionicons name="eye-outline" size={16} color={Colors.primary} />
+        </TouchableOpacity>
+        <TouchableOpacity style={s.actionBtn} onPress={() => dl.downloadSingle(item)}>
+          <Ionicons name="download-outline" size={16} color="#B5905B" />
+        </TouchableOpacity>
+        <TouchableOpacity style={s.actionBtn} onPress={() => setRenameDoc(item)}>
+          <Ionicons name="pencil-outline" size={16} color={Colors.textMuted} />
+        </TouchableOpacity>
+        <TouchableOpacity style={s.actionBtn} onPress={() => setDeleteDoc(item)}>
+          <Ionicons name="trash-outline" size={16} color={Colors.error} />
+        </TouchableOpacity>
+      </View>
+    );
     return (
       <TouchableOpacity
         style={[s.docRow, dl.selecting && marked && s.docRowMarked]}
@@ -655,27 +680,19 @@ export function ClientDocumentsScreen({
 
         <View style={{ flex: 1 }}>
           <Text style={s.docName} numberOfLines={1}>{item.displayName}</Text>
-          <Text style={[s.docMeta, { marginTop: 4 }]}>{fmtDate(item.created_at)}</Text>
+          {isPhone ? (
+            <View style={s.docSubPhone}>
+              <Text style={s.docMeta}>{fmtDate(item.created_at)}</Text>
+              <StatusBadge status={item.status} size="sm" />
+            </View>
+          ) : (
+            <Text style={[s.docMeta, { marginTop: 4 }]}>{fmtDate(item.created_at)}</Text>
+          )}
+          {isPhone && actions}
         </View>
 
-        <StatusBadge status={item.status} />
-
-        {!dl.selecting && (
-          <View style={s.docActions}>
-            <TouchableOpacity style={s.actionBtn} onPress={() => handleView(item)}>
-              <Ionicons name="eye-outline" size={16} color={Colors.primary} />
-            </TouchableOpacity>
-            <TouchableOpacity style={s.actionBtn} onPress={() => dl.downloadSingle(item)}>
-              <Ionicons name="download-outline" size={16} color="#B5905B" />
-            </TouchableOpacity>
-            <TouchableOpacity style={s.actionBtn} onPress={() => setRenameDoc(item)}>
-              <Ionicons name="pencil-outline" size={16} color={Colors.textMuted} />
-            </TouchableOpacity>
-            <TouchableOpacity style={s.actionBtn} onPress={() => setDeleteDoc(item)}>
-              <Ionicons name="trash-outline" size={16} color={Colors.error} />
-            </TouchableOpacity>
-          </View>
-        )}
+        {!isPhone && <StatusBadge status={item.status} />}
+        {!isPhone && actions}
       </TouchableOpacity>
     );
   };
@@ -685,7 +702,7 @@ export function ClientDocumentsScreen({
   return (
     <View style={[s.root, { paddingTop: insets.top }]}>
       {/* Header */}
-      <LinearGradient colors={['#3A3131', '#4A3E3E', '#3A3131']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={s.header}>
+      <LinearGradient colors={['#3A3131', '#4A3E3E', '#3A3131']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[s.header, isPhone && s.headerPhone]}>
         <View style={s.headerOverlay} pointerEvents="none" />
         <View style={s.decorCircle1} pointerEvents="none" />
         <View style={s.decorCircle2} pointerEvents="none" />
@@ -743,8 +760,10 @@ export function ClientDocumentsScreen({
           );
         })()}
 
-        {/* The manage tray, where their status and services are set. */}
-        {!openFolder && (
+        {/* The manage tray, where their status and services are set. On a
+            phone it joins the buttons on the line below instead — beside the
+            name it left the name no room at all. */}
+        {!openFolder && !isPhone && (
           <TouchableOpacity
             style={s.manageBtn}
             onPress={() => setManageOpen(true)}
@@ -756,17 +775,31 @@ export function ClientDocumentsScreen({
           </TouchableOpacity>
         )}
 
-        <View style={{ gap: 6 }}>
-          <TouchableOpacity style={s.sendFileBtn} onPress={() => setUploadOpen(true)} activeOpacity={0.85}>
+        {/* Phone: the buttons take a line of their own, side by side and
+            wrapping, instead of a column at the end of a row that has run
+            out of room. */}
+        <View style={isPhone ? s.headerActionsPhone : { gap: 6 }}>
+          {!openFolder && isPhone && (
+            <TouchableOpacity
+              style={[s.manageBtn, s.headerBtnPhone]}
+              onPress={() => setManageOpen(true)}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              activeOpacity={0.75}
+            >
+              <Ionicons name="settings-outline" size={15} color="#FFFFFF" />
+              <Text style={s.manageBtnText}>Update Profile</Text>
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity style={[s.sendFileBtn, isPhone && s.headerBtnPhone]} onPress={() => setUploadOpen(true)} activeOpacity={0.85}>
             <Ionicons name="cloud-upload-outline" size={15} color="#3A3131" />
             <Text style={s.sendFileText}>Upload File</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={s.requestBtn} onPress={() => setRequestOpen(true)} activeOpacity={0.85}>
+          <TouchableOpacity style={[s.requestBtn, isPhone && s.headerBtnPhone]} onPress={() => setRequestOpen(true)} activeOpacity={0.85}>
             <Ionicons name="clipboard-outline" size={14} color="#E8B923" />
             <Text style={s.requestText}>Request Doc</Text>
           </TouchableOpacity>
           {clientDashboard && onOpenDashboard && (
-            <TouchableOpacity style={s.requestBtn} onPress={onOpenDashboard} activeOpacity={0.85}>
+            <TouchableOpacity style={[s.requestBtn, isPhone && s.headerBtnPhone]} onPress={onOpenDashboard} activeOpacity={0.85}>
               <Ionicons name="stats-chart-outline" size={14} color="#E8B923" />
               <Text style={s.requestText}>Dashboard</Text>
             </TouchableOpacity>
@@ -830,7 +863,10 @@ export function ClientDocumentsScreen({
             data={visibleFolders}
             keyExtractor={f => f.key}
             renderItem={renderFolderCard}
-            numColumns={6}
+            // A FlatList cannot change its column count in place, so a new
+            // count is a new list.
+            key={`folder-cols-${folderCols}`}
+            numColumns={folderCols}
             columnWrapperStyle={s.fGridRow}
             contentContainerStyle={{ padding: 16, paddingBottom: 32 }}
             ListHeaderComponent={
@@ -988,6 +1024,15 @@ const s = StyleSheet.create({
   headerOverlay: { ...StyleSheet.absoluteFillObject, opacity: 0.04 },
   decorCircle1: { position: 'absolute', width: 200, height: 200, borderRadius: 100, backgroundColor: 'rgba(232,185,35,0.06)', top: -60, right: -40 } as any,
   decorCircle2: { position: 'absolute', width: 120, height: 120, borderRadius: 60, backgroundColor: 'rgba(232,185,35,0.05)', bottom: -30, left: 60 } as any,
+  // Phone: lets the actions fall to a second line.
+  headerPhone: { flexWrap: 'wrap', rowGap: 12 },
+  headerActionsPhone: { width: '100%', flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  // Each button grows to share its line, all at one height, so a line of two
+  // and a line of one both look intended.
+  headerBtnPhone: { flexGrow: 1, height: 36, justifyContent: 'center' },
+  // 96 wide fits three to a row on most phones; on the narrowest it would not,
+  // so it takes the tile's width there, up to 96.
+  folderArtPhone: { width: '100%', maxWidth: 96 },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1048,6 +1093,9 @@ const s = StyleSheet.create({
   docName: { color: Colors.textPrimary, fontSize: 14, fontWeight: '600' },
   docMeta: { color: Colors.textMuted, fontSize: 11 },
   docActions: { flexDirection: 'row', gap: 4 },
+  // Phone: the status beside the date, the buttons on a line under them.
+  docSubPhone: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginTop: 4 },
+  docActionsPhone: { marginTop: 8 },
   actionBtn: {
     width: 32,
     height: 32,
