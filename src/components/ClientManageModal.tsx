@@ -318,13 +318,13 @@ export function ClientManageModal({
             {/* Client Type (services) */}
             <View style={mm.field}>
               <Text style={mm.label}>Client Type</Text>
-              <View style={mm.planRow}>
+              <View style={isPhone ? mm.svcRowPhone : mm.planRow}>
                 {ALL_SERVICES.map(svc => {
                   const isOn = services.includes(svc);
                   return (
                     <TouchableOpacity
                       key={svc}
-                      style={[mm.svcBtn, isOn && mm.svcBtnActive]}
+                      style={[isPhone ? mm.svcBtnPhone : mm.svcBtn, isOn && mm.svcBtnActive]}
                       onPress={() => toggleService(svc)}
                       activeOpacity={0.75}
                     >
@@ -352,7 +352,7 @@ export function ClientManageModal({
                   const on = effectiveProgress(progress, svc);
                   return (
                     <View key={svc} style={[mm.progRow, isPhone && mm.progRowPhone]}>
-                      <Text style={mm.progSvc}>{SERVICE_LABEL[svc]}</Text>
+                      <Text style={isPhone ? mm.progSvcPhone : mm.progSvc}>{SERVICE_LABEL[svc]}</Text>
                       <View style={isPhone ? mm.progOptsPhone : mm.progOpts}>
                         {progressOptions(svc).map(opt => {
                           const isOn = on === opt;
@@ -606,6 +606,14 @@ const mm = StyleSheet.create({
     paddingVertical: 12, borderRadius: 10, backgroundColor: Colors.bgMid,
     borderWidth: 1, borderColor: Colors.border,
   },
+  // Phone: two to a line. Four to a line left each about 76px, and Bookkeeping
+  // with its checkbox needs about 98.
+  svcRowPhone: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  svcBtnPhone: {
+    flexGrow: 1, flexBasis: '40%', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7,
+    paddingVertical: 12, borderRadius: 10, backgroundColor: Colors.bgMid,
+    borderWidth: 1, borderColor: Colors.border,
+  },
   svcBtnActive: { backgroundColor: 'rgba(232,185,35,0.12)', borderColor: 'rgba(232,185,35,0.5)' },
   svcText: { color: Colors.textMuted, fontSize: 12, fontWeight: '600' },
   progRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 6 },
@@ -614,7 +622,10 @@ const mm = StyleSheet.create({
   stack: { flexDirection: 'column', gap: 0 },
   // Phone: the service name above its three buttons, which get the full width.
   progRowPhone: { flexDirection: 'column', alignItems: 'stretch', gap: 6 },
-  progSvc: { width: 40, color: Colors.textPrimary, fontSize: 12, fontWeight: '800', letterSpacing: 0.4 },
+  // Wide enough for Bookkeeping, the longest. At 40 it broke letter by letter.
+  progSvc: { width: 92, color: Colors.textPrimary, fontSize: 12, fontWeight: '800', letterSpacing: 0.4 },
+  // Phone: above its buttons, so it has the whole line.
+  progSvcPhone: { color: Colors.textPrimary, fontSize: 12, fontWeight: '800', letterSpacing: 0.4 },
   progOpts: { flex: 1, flexDirection: 'row', gap: 6 },
   // Phone: the buttons sit under the service name, so this is in a column —
   // where a flex would start it at zero height. Full width, no flex.
