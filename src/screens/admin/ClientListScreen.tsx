@@ -20,6 +20,7 @@ import {
 } from '../../db/requirements';
 import { ClientManageModal } from '../../components/ClientManageModal';
 import { joinName } from '../../lib/personName';
+import { useResponsive } from '../../hooks/useResponsive';
 import {
   PROGRESS_COLOR, PROGRESS_LABEL, effectiveProgress, type WorkProgress,
 } from '../../lib/serviceProgress';
@@ -144,6 +145,8 @@ function AddClientModal({
   const sheet = useSheetStyles('md');
   // First and last name — Camaree, app notes 6a. full_name is written as the
   // two joined, so every screen that shows it carries on unchanged.
+  // Phone: the two name boxes stack rather than share one cramped line.
+  const { isPhone: namesStack } = useResponsive();
   const [firstName, setFirstName]   = useState('');
   const [lastName, setLastName]     = useState('');
   const fullName = joinName(firstName, lastName);
@@ -312,7 +315,7 @@ function AddClientModal({
               {/* Fields scroll; the title and action buttons stay pinned. */}
               <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ gap: 16 }}>
               {/* First and last name, side by side — the list sorts by the last */}
-              <View style={{ flexDirection: 'row', gap: 10 }}>
+              <View style={{ flexDirection: namesStack ? 'column' : 'row', gap: namesStack ? 16 : 10 }}>
                 <View style={[ac.fieldGroup, { flex: 1 }]}>
                   <Text style={ac.label}>First Name</Text>
                   <View style={ac.inputRow}>

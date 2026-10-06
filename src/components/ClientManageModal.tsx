@@ -14,6 +14,7 @@ import {
 import { normalizeBankAccounts, BankAccount } from '../db/requirements';
 import { dashboardForClient } from '../lib/clientDashboards';
 import { joinName, splitName } from '../lib/personName';
+import { useResponsive } from '../hooks/useResponsive';
 import {
   PROGRESS_COLOR, PROGRESS_LABEL, effectiveProgress, progressOptions, withProgress,
   isMonthlyService, type ServiceProgress,
@@ -107,6 +108,9 @@ export function ClientManageModal({
   onOpenCfo?: () => void;
 }) {
   const sheet = useSheetStyles('md');
+  // On a phone the side-by-side rows below stack: two name boxes and a row of
+  // three progress buttons do not fit beside their labels at phone width.
+  const { isPhone } = useResponsive();
   // First and last name — Camaree, app notes 6a. A client entered before these
   // existed has only a full name, so the form offers a split of it for the
   // person editing to check. It is in the boxes, in front of them, before it is
@@ -246,7 +250,7 @@ export function ClientManageModal({
 
           <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ gap: 18 }}>
             {/* First and last name, side by side — the list sorts by the last */}
-            <View style={mm.nameRow}>
+            <View style={[mm.nameRow, isPhone && mm.stack]}>
               <View style={[mm.field, { flex: 1 }]}>
                 <Text style={mm.label}>First Name</Text>
                 <View style={mm.inputWrap}>
@@ -347,7 +351,7 @@ export function ClientManageModal({
                 {ALL_SERVICES.filter(svc => services.includes(svc)).map(svc => {
                   const on = effectiveProgress(progress, svc);
                   return (
-                    <View key={svc} style={mm.progRow}>
+                    <View key={svc} style={[mm.progRow, isPhone && mm.progRowPhone]}>
                       <Text style={mm.progSvc}>{SERVICE_LABEL[svc]}</Text>
                       <View style={mm.progOpts}>
                         {progressOptions(svc).map(opt => {
@@ -606,6 +610,10 @@ const mm = StyleSheet.create({
   svcText: { color: Colors.textMuted, fontSize: 12, fontWeight: '600' },
   progRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 6 },
   nameRow: { flexDirection: 'row', gap: 10 },
+  // Phone: one above the other, full width.
+  stack: { flexDirection: 'column', gap: 0 },
+  // Phone: the service name above its three buttons, which get the full width.
+  progRowPhone: { flexDirection: 'column', alignItems: 'stretch', gap: 6 },
   progSvc: { width: 40, color: Colors.textPrimary, fontSize: 12, fontWeight: '800', letterSpacing: 0.4 },
   progOpts: { flex: 1, flexDirection: 'row', gap: 6 },
   progBtn: {

@@ -160,6 +160,9 @@ type RecentDoc = Stats['recentUploads'][number];
 
 export function AdminDashboardScreen({ onViewAllDocuments }: { onViewAllDocuments?: () => void }) {
   const { user, isLoading: authLoading } = useAuth();
+  // On a phone the cards stack, one per line; at a fixed 285 they sat narrow
+  // with the rest of the line empty beside them.
+  const { isPhone } = useResponsive();
   const isAdmin    = user?.role === 'admin';
   const sheet      = useSheetStyles('sm');
   const insets     = useSafeAreaInsets();
@@ -371,7 +374,7 @@ export function AdminDashboardScreen({ onViewAllDocuments }: { onViewAllDocument
           {/* ── One row: a work-progress card per service, then two tiles ── */}
           <View style={s.progressRow}>
             {progressByCategory.map(group => (
-              <View key={group.key} style={s.progressCard}>
+              <View key={group.key} style={[s.progressCard, isPhone && s.progressCardPhone]}>
                 <View style={s.progressHead}>
                   {/* A standing state, not a period's count — so it says so. */}
                   <Text style={s.progressHeadText}>WORK PROGRESS</Text>
@@ -380,10 +383,15 @@ export function AdminDashboardScreen({ onViewAllDocuments }: { onViewAllDocument
                   </View>
                 </View>
 
-                <Text style={s.progressTitle} numberOfLines={2}>{group.key} CLIENT PROGRESS</Text>
+                {/* The service and how many clients take it, on one line. */}
+                <View style={s.progressTitleRow}>
+                  <Text style={s.progressTitle} numberOfLines={1}>{group.key} CLIENT PROGRESS</Text>
+                  <Text style={[s.progressTotal, { color: group.color }]}>
+                    {group.total} client{group.total !== 1 ? 's' : ''}
+                  </Text>
+                </View>
 
-                {/* One line per label, the dot in the label's colour, and the
-                    service's client total underneath. */}
+                {/* One line per label, the dot in the label's colour. */}
                 <View style={s.progressList}>
                   {group.rows.map(r => (
                     <View key={r.key} style={s.progressLine}>
@@ -392,17 +400,14 @@ export function AdminDashboardScreen({ onViewAllDocuments }: { onViewAllDocument
                       <Text style={s.progressLineValue}>{r.count}</Text>
                     </View>
                   ))}
-                  <Text style={[s.progressOfLabel, { color: group.color }]}>
-                    {group.total} client{group.total !== 1 ? 's' : ''}
-                  </Text>
                 </View>
               </View>
             ))}
 
             {/* Narrow tiles — a figure and what it counts, nothing else */}
-            <View style={s.sideCol}>
+            <View style={[s.sideCol, isPhone && s.sideColPhone]}>
               {sideCards.map(tile => (
-                <View key={tile.label} style={s.sideCard}>
+                <View key={tile.label} style={[s.sideCard, isPhone && { width: '100%' }]}>
                   <Text style={s.sideValue}>{tile.value}</Text>
                   <Text style={s.sideLabel}>{tile.label}</Text>
                 </View>
@@ -804,7 +809,6 @@ const s = StyleSheet.create({
   // The tiles stack to the same height as a card beside them.
   sideCol: {
     gap: 8,
-    height: 132,
     justifyContent: 'space-between',
   },
   sideCard: {
@@ -1014,7 +1018,9 @@ const s = StyleSheet.create({
   progressRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    alignItems: 'flex-start',
+    // Stretch, so the four cards and the tiles beside them share one height —
+    // the tallest card's — instead of each being pinned to a fixed one.
+    alignItems: 'stretch',
     justifyContent: 'space-between',
     gap: 16,
     marginBottom: 12,
@@ -1023,9 +1029,11 @@ const s = StyleSheet.create({
   // sitting high and space left under it, rather than a letterbox strip.
   // Roughly square, as the mock draws them. A fixed width rather than a share
   // of the row, or three cards stretch into letterbox strips on a wide screen.
+  // No fixed height. It was 132, sized for the one big figure this card used
+  // to show; three label lines do not fit in that, and the last line and the
+  // total spilled out under the border.
   progressCard: {
     width: 285,
-    height: 132,
     backgroundColor: '#FFFFFF',
     borderRadius: 14,
     borderWidth: 2,
@@ -1073,11 +1081,15 @@ const s = StyleSheet.create({
     letterSpacing: 0.5,
   },
   // The three work labels, one line each.
-  progressList: { gap: 5, marginTop: 4 },
+  progressCardPhone: { width: '100%' },
+  sideColPhone: { width: '100%' },
+  progressTitleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
+  progressTotal: { fontSize: 10, fontWeight: '800', letterSpacing: 0.3 },
+  progressList: { gap: 6, marginTop: 2 },
   progressLine: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   progressDot:  { width: 7, height: 7, borderRadius: 4 },
   progressLineLabel: { flex: 1, color: '#6B5E52', fontSize: 11, fontWeight: '600' },
-  progressLineValue: { color: '#1C1713', fontSize: 18, fontWeight: '800', letterSpacing: -0.5 },
+  progressLineValue: { color: '#1C1713', fontSize: 17, fontWeight: '800', letterSpacing: -0.5, minWidth: 24, textAlign: 'right' },
 
   // ── Recent uploads, two columns ───────────────────────
   uploadsHeader: {
