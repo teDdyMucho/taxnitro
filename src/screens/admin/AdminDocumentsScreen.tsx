@@ -625,7 +625,10 @@ export function AdminDocumentsScreen() {
     ];
   }, [documents, query, period, clientExact]);
 
-  const { isPhone } = useResponsive();
+  const { isPhone, isTablet } = useResponsive();
+  // Client cards per row. Four fixed made each card a quarter of a phone —
+  // too narrow for a name, with the service badge clipped to one letter.
+  const cardCols = isPhone ? 2 : isTablet ? 3 : 4;
 
   const dl = useDownloadSelection<Document>(
     useCallback((d: Document) => ({ url: d.document_url, name: d.name }), []),
@@ -1061,9 +1064,12 @@ export function AdminDocumentsScreen() {
           </View>
 
           <FlatList
+            // A FlatList cannot change its column count in place, so a new
+            // count is a new list.
+            key={`client-cols-${cardCols}`}
             data={clientCards}
             keyExtractor={c => c.email}
-            numColumns={4}
+            numColumns={cardCols}
             columnWrapperStyle={s.clientGridRow}
             contentContainerStyle={s.clientList}
             renderItem={({ item }) => {
@@ -1071,7 +1077,7 @@ export function AdminDocumentsScreen() {
               const services = (p?.services?.length ? p.services : ['BK']) as ClientService[];
               return (
                 <TouchableOpacity
-                  style={s.clientCard}
+                  style={[s.clientCard, { flexBasis: cardCols === 4 ? '23%' : cardCols === 3 ? '31%' : '48%' }]}
                   // Show everything of theirs, not just what is pending —
                   // the count on the card is of all their unsorted files.
                   onPress={() => { setQuery(item.email); setClientExact(true); setFilter('all'); setView('list'); }}

@@ -431,10 +431,10 @@ export function AdminDashboardScreen({ onViewAllDocuments }: { onViewAllDocument
           </View>
 
           {/* ── The chart, then the two upload columns beside it ── */}
-          <View style={s.uploadCols}>
+          <View style={[s.uploadCols, isPhone && s.uploadColsPhone]}>
 
             {/* Clients per service. Bars are drawn to the tallest one. */}
-            <View style={s.chartCard}>
+            <View style={[s.chartCard, isPhone && s.chartCardPhone]}>
               <Text style={s.chartTitle}>CLIENTS BY SERVICE</Text>
               <View style={s.chartPlot}>
                 {CATEGORIES.map(cat => {
@@ -500,7 +500,7 @@ export function AdminDashboardScreen({ onViewAllDocuments }: { onViewAllDocument
                   setUploadPage(p => ({ ...p, [col.title]: Math.min(pageCount - 1, Math.max(0, safePage + by)) }));
 
                 return (
-                <View key={col.title} style={s.uploadCol}>
+                <View key={col.title} style={[s.uploadCol, isPhone && s.uploadColPhone]}>
                   <Text style={s.uploadColTitle}>{col.title}</Text>
 
                   {col.rows.length === 0 ? (
@@ -1192,6 +1192,14 @@ const s = StyleSheet.create({
     letterSpacing: 0.4,
   },
 
+  // Phone: the chart, then Sorted, then Unsorted, one under another. Side by
+  // side at phone width each was a third of the screen — dates read "Sep 1, 20",
+  // tags "Month", and the pager's Next was cut off.
+  uploadColsPhone: { flexDirection: 'column' },
+  // The chart's height comes from the columns beside it on a wide screen;
+  // stacked, it has none of its own, so it is given one.
+  chartCardPhone: { flex: 0, height: 240 },
+  uploadColPhone: { flex: 0 },
   uploadCols: {
     flexDirection: 'row',
     gap: 12,

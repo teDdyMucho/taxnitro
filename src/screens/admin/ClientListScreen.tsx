@@ -885,6 +885,11 @@ interface Props {
 
 export function ClientListScreen({ onSelectClient }: Props) {
   const insets = useSafeAreaInsets();
+  // Phone: the service rail runs across the top instead of down the side, and
+  // the cards go one to a line. A 170px rail beside four columns left each
+  // card about 40px — an avatar and nothing else.
+  const { isPhone, isTablet } = useResponsive();
+  const listCols = isPhone ? 1 : isTablet ? 2 : 4;
   const mountedRef = useRef(true);
   useEffect(() => () => { mountedRef.current = false; }, []);
 
@@ -990,7 +995,7 @@ export function ClientListScreen({ onSelectClient }: Props) {
     return (
       // The card goes straight to their folders — that is what staff open a
       // client for. The month's progress is behind the icon beside it.
-      <TouchableOpacity style={s.card} onPress={() => onSelectClient(item)} activeOpacity={0.85}>
+      <TouchableOpacity style={[s.card, isPhone && s.cardPhone]} onPress={() => onSelectClient(item)} activeOpacity={0.85}>
         {item.avatar_url ? (
           <Image source={{ uri: item.avatar_url }} style={s.avatar} />
         ) : (
@@ -1154,8 +1159,8 @@ export function ClientListScreen({ onSelectClient }: Props) {
       )}
 
       {/* ── Service filter down the side, clients beside it ── */}
-      <View style={s.body}>
-        <View style={s.svcRail}>
+      <View style={[s.body, isPhone && s.bodyPhone]}>
+        <View style={[s.svcRail, isPhone && s.svcRailPhone]}>
           {ALL_SERVICES.map(svc => {
             const on = svcFilter === svc;
             const c  = SERVICE_FILTER_COLORS[svc];
@@ -1165,7 +1170,7 @@ export function ClientListScreen({ onSelectClient }: Props) {
                 // Tapping the service already showing clears it, so there is
                 // always a way back to the full list.
                 onPress={() => setSvcFilter(on ? null : svc)}
-                style={[s.svcBtn, { backgroundColor: c.bg }, on && s.svcBtnOn]}
+                style={[s.svcBtn, isPhone && s.svcBtnPhone, { backgroundColor: c.bg }, on && s.svcBtnOn]}
                 activeOpacity={0.85}
               >
                 <Text style={[s.svcBtnText, { color: c.text }]}>{svc}</Text>
@@ -1184,8 +1189,11 @@ export function ClientListScreen({ onSelectClient }: Props) {
           data={filtered}
           keyExtractor={i => i.id}
           renderItem={renderItem}
-          numColumns={4}
-          columnWrapperStyle={s.gridRow}
+          // A FlatList cannot change its column count in place, so a new
+          // count is a new list. One column has no rows to wrap.
+          key={`clients-cols-${listCols}`}
+          numColumns={listCols}
+          columnWrapperStyle={listCols > 1 ? s.gridRow : undefined}
           style={{ flex: 1 }}
           contentContainerStyle={s.listContent}
           refreshControl={
@@ -1378,6 +1386,12 @@ const s = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
   },
+  bodyPhone: { flexDirection: 'column' },
+  // The rail as a row of four across the top.
+  svcRailPhone: { width: 'auto', flexDirection: 'row', paddingHorizontal: 16, paddingTop: 4, paddingBottom: 10, gap: 8 },
+  svcBtnPhone: { flex: 1, height: 40 },
+  // Full width, with space between lines rather than between columns.
+  cardPhone: { maxWidth: '100%', marginBottom: 10 },
   svcRail: {
     width: 170,
     gap: 10,
