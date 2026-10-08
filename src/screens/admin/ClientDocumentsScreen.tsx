@@ -353,6 +353,10 @@ export function ClientDocumentsScreen({
   const [activeFolderKey, setActiveFolder] = useState<string | null>(openFolderKey);
   // Which service tab is showing, when the client is on more than one.
   const [activeService, setActiveService] = useState<ClientService | null>(null);
+  // CFO has two tabs (Camaree, app notes 8): CFO, the overview a CFO client
+  // opens on, and CFO DOCS, their folders. True while CFO DOCS is showing.
+  const [cfoDocs, setCfoDocs] = useState(
+    () => !!openFolderKey && serviceOfFolderKey(openFolderKey) === 'CFO');
   // The manage tray, opened by the gear in the header. It sits on this screen
   // rather than sending you back to the clients list to change a setting.
   const [manageOpen, setManageOpen] = useState(false);
@@ -367,6 +371,7 @@ export function ClientDocumentsScreen({
     if (key) {
       const svc = serviceOfFolderKey(key);
       if (svc) setActiveService(svc);
+      if (svc === 'CFO') setCfoDocs(true);
     }
   }, [onFolderChange]);
   // Staff can file a document into a subfolder from the upload or the file
@@ -561,6 +566,16 @@ export function ClientDocumentsScreen({
   const chosen = activeService
     ?? (activeFolderKey ? serviceOfFolderKey(activeFolderKey) : null);
   const shownService = (chosen && serviceTabs.includes(chosen)) ? chosen : defaultService;
+
+  // CFO splits in two while they take it. An archived CFO tab is only its
+  // folders, like the other archived tabs.
+  const tabs = serviceTabs.flatMap<{ svc: ClientService; label: string; docs: boolean | null }>(svc =>
+    svc === 'CFO' && taken.includes('CFO')
+      ? [{ svc, label: 'CFO', docs: false }, { svc, label: 'CFO DOCS', docs: true }]
+      : [{ svc, label: svc, docs: null }]);
+  const cfoOverview = shownService === 'CFO' && taken.includes('CFO') && !cfoDocs;
+  // The CFO Suite is their financial reports, which only some clients have.
+  const suiteReady = !!(clientDashboard && onOpenDashboard);
 
   const visibleFolders = useMemo(() => {
     return folders.filter(f => {
@@ -810,17 +825,17 @@ export function ClientDocumentsScreen({
       {/* Service tabs, sitting on the header like file dividers. Shown even
           for a single service, because the tab also labels what is below it. */}
       {!openFolder && (
-        <View style={s.tabBar}>
-          {serviceTabs.map(svc => {
-            const on = shownService === svc;
+        <View style={[s.tabBar, isPhone && s.tabBarPhone]}>
+          {tabs.map(({ svc, label, docs }) => {
+            const on = shownService === svc && (docs === null || docs === cfoDocs);
             return (
               <TouchableOpacity
-                key={svc}
-                onPress={() => setActiveService(svc)}
-                style={[s.tab, on ? s.tabOn : s.tabOff]}
+                key={label}
+                onPress={() => { setActiveService(svc); if (docs !== null) setCfoDocs(docs); }}
+                style={[s.tab, isPhone && s.tabPhone, on ? s.tabOn : s.tabOff]}
                 activeOpacity={0.85}
               >
-                <Text style={[s.tabText, on ? s.tabTextOn : s.tabTextOff]}>{svc}</Text>
+                <Text style={[s.tabText, on ? s.tabTextOn : s.tabTextOff]}>{label}</Text>
                 {isArchived(svc) && (
                   <Text style={[s.tabNote, on ? s.tabTextOn : s.tabTextOff]}>archived</Text>
                 )}
@@ -857,6 +872,51 @@ export function ClientDocumentsScreen({
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => load(true)} tintColor={Colors.primary} />}
             ListEmptyComponent={<Text style={s.empty}>This folder is empty.</Text>}
           />
+        ) : cfoOverview ? (
+          /* CFO — what a CFO client opens on: what we know about the business,
+             then the way into their folders or into the CFO Suite, their
+             financial reports. */
+          <ScrollView
+            contentContainerStyle={{ padding: 16, paddingBottom: 32 }}
+            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => load(true)} tintColor={Colors.primary} />}
+          >
+            <ClientDetailsPanel clientEmail={client.email} clientName={client.full_name} />
+            <ClientQuestionnairePanel
+              clientEmail={client.email}
+              accounts={normalizeBankAccounts(client.bank_accounts)}
+            />
+            <View style={isPhone ? s.entryRowPhone : s.entryRow}>
+              <TouchableOpacity
+                style={isPhone ? s.entryCardPhone : s.entryCard}
+                onPress={() => setCfoDocs(true)}
+                activeOpacity={0.85}
+              >
+                <View style={s.entryArt}>
+                  <Ionicons name="folder-open" size={40} color="#3A3131" />
+                </View>
+                <View style={s.entryBody}>
+                  <View style={s.entryPill}><Text style={s.entryPillText}>CFO DOCUMENTS</Text></View>
+                  <Text style={s.entryHint}>Their CFO folders and files.</Text>
+                </View>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[isPhone ? s.entryCardPhone : s.entryCard, !suiteReady && s.entryCardOff]}
+                onPress={onOpenDashboard}
+                disabled={!suiteReady}
+                activeOpacity={0.85}
+              >
+                <View style={s.entryArt}>
+                  <Ionicons name="calculator" size={38} color="#3A3131" />
+                </View>
+                <View style={s.entryBody}>
+                  <View style={s.entryPill}><Text style={s.entryPillText}>ENTER CFO SUITE</Text></View>
+                  <Text style={s.entryHint}>
+                    {suiteReady ? 'Their financial reports.' : 'No financial reports set up for them yet.'}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            </View>
+          </ScrollView>
         ) : (
           /* Level 1 — a folder per document type the client uploaded under */
           <FlatList
@@ -1184,6 +1244,40 @@ const s = StyleSheet.create({
   tabNote: { fontSize: 9, fontWeight: '700', letterSpacing: 0.4, opacity: 0.75, marginTop: 1 },
   tabTextOn:  { color: Colors.textPrimary },
   tabTextOff: { color: '#3A3131' },
+  // Phone: tighter, so a client on several services keeps every tab on screen.
+  // At 40 a side and 110 a tab, three already ran off a 375px phone.
+  tabBarPhone: { paddingHorizontal: 12 },
+  tabPhone: { minWidth: 0, paddingHorizontal: 12 },
+
+  // ── CFO overview: the way into CFO DOCS or the CFO Suite ──
+  entryRow: { flexDirection: 'row', gap: 16, marginTop: 6 },
+  // Phone: one above the other, with no flex — in a column a flex would start
+  // them at zero height.
+  entryRowPhone: { gap: 12, marginTop: 6 },
+  entryCard: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', gap: 18,
+    backgroundColor: '#FFFBF2', borderRadius: 16, borderWidth: 1, borderColor: Colors.border,
+    paddingVertical: 24, paddingHorizontal: 24,
+    shadowColor: '#3A3131', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.08, shadowRadius: 12, elevation: 3,
+  },
+  entryCardPhone: {
+    flexDirection: 'row', alignItems: 'center', gap: 16,
+    backgroundColor: '#FFFBF2', borderRadius: 16, borderWidth: 1, borderColor: Colors.border,
+    paddingVertical: 18, paddingHorizontal: 18,
+    shadowColor: '#3A3131', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.08, shadowRadius: 12, elevation: 3,
+  },
+  entryCardOff: { opacity: 0.55 },
+  entryArt: {
+    width: 72, height: 72, borderRadius: 18, backgroundColor: '#F5ECD7',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  entryBody: { flex: 1, gap: 8, alignItems: 'flex-start' },
+  entryPill: {
+    backgroundColor: '#E8B923', borderRadius: 999, paddingHorizontal: 18, paddingVertical: 9,
+    shadowColor: '#B5905B', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 2,
+  },
+  entryPillText: { color: '#3A3131', fontSize: 13, fontWeight: '800', letterSpacing: 0.6 },
+  entryHint: { color: Colors.textMuted, fontSize: 12 },
 
   // ── Folder tiles ──────────────────────────────────────
   // A multi-column FlatList cannot take an ItemSeparatorComponent, so the row
