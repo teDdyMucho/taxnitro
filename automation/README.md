@@ -84,3 +84,28 @@ worth fixing before it runs unattended.
 
 `--dry-run` writes nothing. Drop it to update the modules in place. It prints
 what it did, and what it refused, as JSON.
+
+---
+
+# Upload emails
+
+Camaree, app notes 9: when FTG makes an Internal Upload the client gets an
+email, and when a client uploads FTG gets one at accounting@financetherapygroup.com.
+
+    an upload batch finishes in the app      (src/lib/uploadEmail.ts)
+      → POST .../webhook/ftg-upload-email    one call per batch, not per file
+      → client uploaded  → email to accounting@, with the file list
+      → FTG uploaded     → find the client's profile → email to that client
+
+The webhook is open to anyone, so the flow decides where mail goes, not the
+request. FTG's email only ever goes to accounting@. The client's goes only to
+an address found on a client profile, and holds nothing from the request but a
+number — no file names — so nobody can use it to send their own words as FTG.
+
+**Set up:** import `automation/n8n/ftg-upload-email.json`, connect
+
+  - **Microsoft Outlook** — signed in as accounting@financetherapygroup.com
+  - **Supabase** — the service role key, as the documents flow uses
+
+and activate it. Until it is active the app's calls fail quietly and uploads
+carry on as before.

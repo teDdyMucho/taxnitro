@@ -18,6 +18,7 @@ import {
   serviceLabel, monthOf,
 } from '../db/requirements';
 import { supabase } from '../lib/supabase';
+import { emailAboutUploads } from '../lib/uploadEmail';
 import { folderLabel } from '../lib/folderCatalog';
 
 // ── What a client may upload ─────────────────────────────────────────────────
@@ -461,6 +462,16 @@ export function ClientUploadModal({
       setUploadedCount(uploaded.length);
       setDone(true);
       uploaded.forEach(({ doc }) => onUploaded?.(doc));
+
+      // FTG hears about it by email, at accounting@ (app notes 9). Not
+      // awaited — it is n8n's to send, and must not hold this open.
+      void emailAboutUploads({
+        event: 'client_upload',
+        clientEmail: user.email,
+        clientName: user.name ?? null,
+        uploadedBy: user.email ?? null,
+        files: uploaded.map(({ doc, folder }) => ({ name: doc.name, table: folder })),
+      });
 
       if (failed.length > 0) {
         Alert.alert(

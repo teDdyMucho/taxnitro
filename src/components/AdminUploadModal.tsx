@@ -13,6 +13,7 @@ import { uploadDocumentToStorage, createDocumentRecord, Document } from '../db/d
 import { isStaffLabelFolder, staffLabelsForFolder, monthOf } from '../db/requirements';
 import { PeriodPicker, shortMonthLabel } from './PeriodPicker';
 import { getAllClients, Profile } from '../db/profiles';
+import { emailAboutUploads } from '../lib/uploadEmail';
 import {
   listSubfolders, createSubfolder, moveDocumentToSubfolder, Subfolder,
   subfolderPath,
@@ -375,6 +376,16 @@ export function AdminUploadModal({ visible, onClose, onUploaded, fixedClient }: 
       setUploadedCount(uploaded.length);
       setDone(true);
       uploaded.forEach(d => onUploaded?.(d));
+
+      // An Internal Upload: the client hears about it by email (app notes 9).
+      // Not awaited — it is n8n's to send, and must not hold this open.
+      void emailAboutUploads({
+        event: 'internal_upload',
+        clientEmail: client.email,
+        clientName: client.full_name,
+        uploadedBy: user?.email ?? null,
+        files: uploaded.map(d => ({ name: d.name, table: d.document_type })),
+      });
 
       if (failed.length > 0) {
         Alert.alert('Some files failed', `${uploaded.length} uploaded. Could not send: ${failed.join(', ')}`);

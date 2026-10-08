@@ -1,0 +1,155 @@
+{
+  "name": "FTG upload emails",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ftg-upload-email",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "upload-finished",
+      "name": "Upload finished",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [-560, 300],
+      "webhookId": "5f0c2b8e-3f43-4c39-9a52-6a1c7e2d9b41",
+      "notes": "The app calls this once per upload batch (src/lib/uploadEmail.ts). Open to anyone, so nothing after this trusts it with where an email goes."
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "version": 2 },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.body.event }}",
+                    "rightValue": "client_upload",
+                    "operator": { "type": "string", "operation": "equals" }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "client uploaded"
+            },
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "version": 2 },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.body.event }}",
+                    "rightValue": "internal_upload",
+                    "operator": { "type": "string", "operation": "equals" }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "FTG uploaded"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "who-uploaded",
+      "name": "Who uploaded?",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [-320, 300]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "toRecipients": "accounting@financetherapygroup.com",
+        "subject": "={{ String($json.body.client_name || $json.body.client_email).replace(/[<>&\"]/g, '') }} uploaded {{ $json.body.count == 1 ? 'a file' : (parseInt($json.body.count) || 'some') + ' files' }}",
+        "bodyContent": "=<p><b>{{ String($json.body.client_name || 'A client').replace(/[<>&\"]/g, '') }}</b> ({{ String($json.body.client_email).replace(/[<>&\"]/g, '') }}) uploaded {{ $json.body.count == 1 ? 'a file' : (parseInt($json.body.count) || 'some') + ' files' }} to the FTG portal.</p>\n<ul>{{ $json.body.file_list_html }}</ul>\n<p><a href=\"https://financetherapygroup.netlify.app\">Open the portal</a></p>",
+        "additionalFields": {
+          "bodyContentType": "html"
+        }
+      },
+      "id": "email-ftg",
+      "name": "Email FTG",
+      "type": "n8n-nodes-base.microsoftOutlook",
+      "typeVersion": 2,
+      "position": [-60, 180],
+      "credentials": {
+        "microsoftOutlookOAuth2Api": { "id": "REPLACE", "name": "Outlook (accounting@financetherapygroup.com)" }
+      },
+      "notes": "Always to accounting@, whatever the request says. The file list is escaped by the app before it is sent."
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "profiles",
+        "limit": 1,
+        "filterType": "manual",
+        "matchType": "allFilters",
+        "filters": {
+          "conditions": [
+            { "keyName": "email", "condition": "eq", "keyValue": "={{ $json.body.client_email }}" },
+            { "keyName": "role", "condition": "eq", "keyValue": "client" }
+          ]
+        }
+      },
+      "id": "find-client",
+      "name": "Find the client",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [-60, 420],
+      "credentials": {
+        "supabaseApi": { "id": "REPLACE", "name": "Supabase (service role)" }
+      },
+      "notes": "Only an address on a client profile is emailed. No match, no email — the flow stops here."
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "toRecipients": "={{ $json.email }}",
+        "subject": "New documents in your Finance Therapy Group portal",
+        "bodyContent": "=<p>Hi {{ $json.first_name || String($json.full_name || '').split(' ')[0] || 'there' }},</p>\n<p>We've added {{ $('Upload finished').item.json.body.count == 1 ? 'a new document' : (parseInt($('Upload finished').item.json.body.count) || 'some') + ' new documents' }} to your Finance Therapy Group portal.</p>\n<p><a href=\"https://financetherapygroup.netlify.app\">Sign in to view them</a></p>\n<p>Thank you,<br>Finance Therapy Group</p>",
+        "additionalFields": {
+          "bodyContentType": "html"
+        }
+      },
+      "id": "email-client",
+      "name": "Email the client",
+      "type": "n8n-nodes-base.microsoftOutlook",
+      "typeVersion": 2,
+      "position": [200, 420],
+      "credentials": {
+        "microsoftOutlookOAuth2Api": { "id": "REPLACE", "name": "Outlook (accounting@financetherapygroup.com)" }
+      },
+      "notes": "Built from their profile, not from the request: no file names, so the open webhook cannot put its own words in an email from FTG."
+    }
+  ],
+  "connections": {
+    "Upload finished": {
+      "main": [[{ "node": "Who uploaded?", "type": "main", "index": 0 }]]
+    },
+    "Who uploaded?": {
+      "main": [
+        [{ "node": "Email FTG", "type": "main", "index": 0 }],
+        [{ "node": "Find the client", "type": "main", "index": 0 }]
+      ]
+    },
+    "Find the client": {
+      "main": [[{ "node": "Email the client", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all"
+  },
+  "pinData": {},
+  "meta": {
+    "instanceId": "ftg-upload-email",
+    "description": "Camaree, app notes 9: email the client when FTG makes an Internal Upload, and email FTG (accounting@financetherapygroup.com) when a client uploads.\n\nThe app calls the webhook once per upload batch, so ten files make one email.\n\nBefore this runs:\n  • Microsoft Outlook credential — signed in as accounting@financetherapygroup.com\n  • Supabase credential — the service role key, as the documents flow uses\n  • Activate it. The production URL must be .../webhook/ftg-upload-email, which is what the app calls."
+  },
+  "tags": [{ "name": "FTG" }]
+}
