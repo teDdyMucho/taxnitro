@@ -34,18 +34,19 @@ type TabKey = 'dash' | 'roadmap' | 'findings' | 'tldr' | 'assum' | 'fsr' | 'fsa'
 
 interface TabDef { key: TabKey; label: string; staffOnly?: boolean }
 
+// Camaree's confirmed order: Dashboard, Profit & Loss, Balance, Financial
+// Roadmap, Assumptions, TLDR, FS-A, FS-R. Findings for Review was not in her
+// list; it stays beside TL;DR, the other internal note.
 const NAV: TabDef[] = [
   { key: 'dash', label: 'Dashboard' },
+  { key: 'pl', label: 'Profit & Loss' },
+  { key: 'bs', label: 'Balance Sheet' },
   { key: 'roadmap', label: 'Financial Roadmap' },
+  { key: 'assum', label: 'Assumptions' },
   { key: 'findings', label: 'Findings for Review', staffOnly: true },
   { key: 'tldr', label: 'TL;DR', staffOnly: true },
-  { key: 'assum', label: 'Assumptions' },
-];
-const STATEMENTS: TabDef[] = [
-  { key: 'fsr', label: 'FS-R' },
   { key: 'fsa', label: 'FS-A' },
-  { key: 'bs', label: 'Balance Sheet' },
-  { key: 'pl', label: 'Profit & Loss' },
+  { key: 'fsr', label: 'FS-R' },
 ];
 
 export interface ClientDashboardScreenProps {
@@ -111,7 +112,7 @@ export function ClientDashboardScreen({
       findings: (notes?.['Findings for Review']?.length ?? 0) > 0,
       tldr: (notes?.['TL;DR']?.length ?? 0) > 0,
     };
-    return [...NAV, ...STATEMENTS]
+    return NAV
       .filter(t => staffView || !t.staffOnly)
       .filter(t => has[t.key] !== false);
   }, [staffView, sheets, notes]);
@@ -175,9 +176,7 @@ export function ClientDashboardScreen({
       </View>
       <ScrollView showsVerticalScrollIndicator={false}>
         <Text style={s.navLabel}>Navigation</Text>
-        {tabs.filter(t => NAV.some(n => n.key === t.key)).map(navButton)}
-        <Text style={s.navLabel}>Statements</Text>
-        {STATEMENTS.map(navButton)}
+        {tabs.map(navButton)}
       </ScrollView>
       {onBack && (
         <Pressable onPress={onBack} style={s.back}>
