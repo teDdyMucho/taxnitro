@@ -24,6 +24,11 @@ export interface Question {
   followUp: FollowUp;
   /** Shown above the follow-up field. */
   prompt?: string;
+  /**
+   * A YES may also attach documents, without having to. For a text answer,
+   * a document alone is enough to finish it.
+   */
+  optionalFiles?: boolean;
 }
 
 export const QUESTIONS: Question[] = [
@@ -85,7 +90,8 @@ export const QUESTIONS: Question[] = [
     key: 'anything_else',
     text: "Is there anything else that may affect this month's bookkeeping?",
     followUp: 'long_text',
-    prompt: 'Please add the details.',
+    prompt: 'Please add the details. You can also upload a document.',
+    optionalFiles: true,
   },
 ];
 
@@ -143,7 +149,7 @@ export function isAnswerComplete(q: Question, a: Answer | undefined): boolean {
   switch (q.followUp) {
     case 'none':            return true;
     case 'short_text':
-    case 'long_text':       return !!a.text?.trim();
+    case 'long_text':       return !!a.text?.trim() || (!!q.optionalFiles && (a.files ?? []).length > 0);
     // A card that has been added but not filled in is not an answer.
     case 'bank_accounts':   return cleanBankAccounts(a.accounts ?? []).length > 0;
     case 'closed_accounts': return (a.closed ?? []).length > 0;

@@ -196,7 +196,7 @@ export function MonthlyQuestionnaireModal({
           )
         )}
 
-        {q.followUp === 'upload' && (
+        {(q.followUp === 'upload' || q.optionalFiles) && (
           <View style={{ gap: 8 }}>
             {(a.files ?? []).map(f => (
               <View key={f.url} style={s.file}>
@@ -221,11 +221,13 @@ export function MonthlyQuestionnaireModal({
                 : <>
                     <Ionicons name="cloud-upload-outline" size={16} color={Colors.primaryDeep} />
                     <Text style={s.uploadText}>
-                      {(a.files ?? []).length ? 'Add another file' : 'Choose files'}
+                      {(a.files ?? []).length
+                        ? 'Add another file'
+                        : q.optionalFiles ? 'Upload a document (optional)' : 'Choose files'}
                     </Text>
                   </>}
             </TouchableOpacity>
-            {(a.files ?? []).length === 0 && (
+            {q.followUp === 'upload' && (a.files ?? []).length === 0 && (
               <Text style={s.note}>
                 A document is needed here. If you have nothing to upload, change your
                 answer to No — or save and come back when you have it.
