@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -26,13 +26,15 @@ import { dashboardForClient } from '../lib/clientDashboards';
 import { loadLastPlace, saveLastPlace } from '../lib/lastPlace';
 import { getProfile } from '../db/profiles';
 import { FinancialReportsScreen } from '../screens/admin/FinancialReportsScreen';
+import { TeamOneReviewScreen } from '../screens/admin/TeamOneReviewScreen';
+import { countTeamOneItems, ESCALATION_EMAIL, type TeamOneStatus } from '../db/teamOne';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 // 'Reports' used to open Clyde's own report generator (public/financial-report.html).
 // It now opens our own client dashboards instead; the old page and its
 // ReportsScreen are still in the repo, unreferenced.
-type AdminTab = 'Dashboard' | 'Documents' | 'Clients' | 'Staff' | 'Workflow' | 'Reports' | 'Profile';
+type AdminTab = 'Dashboard' | 'Documents' | 'Clients' | 'TeamOne' | 'Staff' | 'Workflow' | 'Reports' | 'Profile';
 
 interface NavItem {
   name: AdminTab;
@@ -44,10 +46,15 @@ interface NavItem {
 
 // ── Nav config ────────────────────────────────────────────────────────────────
 
+/** All Team One has: its clients, its updates, and its own profile. */
+const TEAM_ONE_TABS: AdminTab[] = ['Clients', 'TeamOne', 'Profile'];
+
 const NAV_ITEMS: NavItem[] = [
   { name: 'Dashboard', label: 'Dashboard', active: 'grid',          inactive: 'grid-outline' },
   { name: 'Documents', label: 'Documents', active: 'documents',     inactive: 'documents-outline' },
   { name: 'Clients',   label: 'Clients',   active: 'people',        inactive: 'people-outline' },
+  // What Team One has sent, waiting on staff. Team One itself sees it as My Updates.
+  { name: 'TeamOne',   label: 'Team One',  active: 'briefcase',     inactive: 'briefcase-outline' },
   { name: 'Staff',     label: 'Staff',     active: 'shield',        inactive: 'shield-outline', adminOnly: true },
   { name: 'Workflow',  label: 'Workflow',  active: 'git-branch',    inactive: 'git-branch-outline' },
   { name: 'Reports',   label: 'Financial Reports', active: 'analytics', inactive: 'analytics-outline' },
@@ -75,8 +82,11 @@ export function AdminNavigator({ onLogout }: { onLogout: () => void }) {
 
   const isDesktop = width >= 1024;
   const isAdmin   = user?.role === 'admin';
+  // Team One sees its assigned clients and its own profile, nothing else. The
+  // database keeps it to those clients; this only keeps the rest off screen.
+  const isTeamOne = user?.role === 'team_one';
 
-  const [activeTab, setActiveTab]           = useState<AdminTab>('Dashboard');
+  const [activeTab, setActiveTab]           = useState<AdminTab>(isTeamOne ? 'Clients' : 'Dashboard');
   const [selectedClient, setSelectedClient] = useState<Profile | null>(null);
   // Set from the client's own page; cleared on the way back, which is what puts
   // that client back on screen.
@@ -109,7 +119,25 @@ export function AdminNavigator({ onLogout }: { onLogout: () => void }) {
   }, [user?.id, selectedClient?.id, clientFolderKey]);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
 
-  const visibleItems = NAV_ITEMS.filter(i => !i.adminOnly || isAdmin);
+  const visibleItems = NAV_ITEMS
+    .filter(i => isTeamOne ? TEAM_ONE_TABS.includes(i.name) : (!i.adminOnly || isAdmin))
+    .map(i => (isTeamOne && i.name === 'TeamOne' ? { ...i, label: 'My Updates' } : i));
+
+  // The count on the Team One item is the alert Camaree asked for. Staff see
+  // what waits on them; Daja and admins also what has been escalated; Team One
+  // sees what was sent back to it.
+  const [teamOneCount, setTeamOneCount] = useState(0);
+  const isDaja = (user?.email ?? '').toLowerCase() === ESCALATION_EMAIL;
+  const refreshTeamOneCount = useCallback(async () => {
+    const statuses: TeamOneStatus[] = isTeamOne ? ['denied', 'revise']
+      : (isDaja || isAdmin) ? ['pending', 'escalated'] : ['pending'];
+    setTeamOneCount(await countTeamOneItems(statuses));
+  }, [isTeamOne, isDaja, isAdmin]);
+  useEffect(() => {
+    refreshTeamOneCount();
+    const t = setInterval(refreshTeamOneCount, 60_000);
+    return () => clearInterval(t);
+  }, [refreshTeamOneCount, activeTab]);
 
   // Switching tabs used to forget which client was open, so going to Documents
   // and back to Clients meant searching for them again. The tab changes; where
@@ -142,13 +170,15 @@ export function AdminNavigator({ onLogout }: { onLogout: () => void }) {
           openFolderKey={clientFolderKey}
           onFolderChange={setClientFolderKey}
           onBack={() => { setSelectedClient(null); setClientFolderKey(null); }}
-          onOpenDashboard={() => setShowDashboard(true)}
+          onOpenDashboard={isTeamOne ? undefined : () => setShowDashboard(true)}
           // The tray edits the client in place, so keep our copy in step.
           onClientChange={setSelectedClient}
         />
       );
     }
-    switch (activeTab) {
+    // A tab Team One does not have — from a saved place, say — shows its clients.
+    const tab: AdminTab = isTeamOne && !TEAM_ONE_TABS.includes(activeTab) ? 'Clients' : activeTab;
+    switch (tab) {
       case 'Dashboard': return <AdminDashboardScreen onViewAllDocuments={() => setActiveTab('Documents')} />;
       case 'Documents': return <AdminDocumentsScreen />;
       case 'Clients':
@@ -163,6 +193,7 @@ export function AdminNavigator({ onLogout }: { onLogout: () => void }) {
             }}
           />
         );
+      case 'TeamOne':   return <TeamOneReviewScreen mode={isTeamOne ? 'team' : 'staff'} onChanged={refreshTeamOneCount} />;
       case 'Staff':     return <StaffManagementScreen />;
       case 'Workflow':  return <WorkflowDashboardScreen />;
       case 'Reports':   return <FinancialReportsScreen />;
@@ -219,6 +250,10 @@ export function AdminNavigator({ onLogout }: { onLogout: () => void }) {
                   <Text style={[desk.navLabel, isActive && desk.navLabelActive]}>
                     {item.label}
                   </Text>
+
+                  {item.name === 'TeamOne' && teamOneCount > 0 && (
+                    <View style={desk.badge}><Text style={desk.badgeText}>{teamOneCount}</Text></View>
+                  )}
 
                   {/* Active dot (right side) */}
                   {isActive && <View style={desk.navDot} />}
@@ -326,6 +361,9 @@ export function AdminNavigator({ onLogout }: { onLogout: () => void }) {
                     size={22}
                     color={isActive ? '#E8B923' : '#A89880'}
                   />
+                  {item.name === 'TeamOne' && teamOneCount > 0 && (
+                    <View style={mob.badge}><Text style={mob.badgeText}>{teamOneCount > 99 ? '99+' : teamOneCount}</Text></View>
+                  )}
                 </View>
 
                 {/* Label */}
@@ -432,6 +470,8 @@ const desk = StyleSheet.create({
 
   /* Active dot on right */
   navDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#E8B923' },
+  badge: { minWidth: 20, height: 20, paddingHorizontal: 6, borderRadius: 10, backgroundColor: '#DC2626', alignItems: 'center', justifyContent: 'center' },
+  badgeText: { color: '#FFFFFF', fontSize: 11, fontWeight: '800' },
 
   /* User card */
   userCard: {
@@ -502,6 +542,11 @@ const mob = StyleSheet.create({
     borderRadius: 10,
   },
   tabIconWrapActive: { backgroundColor: 'rgba(232,185,35,0.15)' },
+  badge: {
+    position: 'absolute', top: -4, right: -6, minWidth: 16, height: 16, paddingHorizontal: 4,
+    borderRadius: 8, backgroundColor: '#DC2626', alignItems: 'center', justifyContent: 'center',
+  },
+  badgeText: { color: '#FFFFFF', fontSize: 9, fontWeight: '800' },
 
   /* Label */
   tabLabel:       { fontSize: 10, fontWeight: '600', color: '#A89880' },

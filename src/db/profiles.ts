@@ -2,7 +2,7 @@ import { supabase } from '../lib/supabase';
 import { BankAccount, normalizeBankAccounts } from './requirements';
 import { normalizeServiceProgress, type ServiceProgress } from '../lib/serviceProgress';
 
-export type UserRole = 'client' | 'staff' | 'admin';
+export type UserRole = 'client' | 'staff' | 'admin' | 'team_one';
 export type ClientService = 'BK' | 'TAX' | 'CFO' | 'YER';
 
 /**
@@ -182,7 +182,7 @@ export async function getAllStaff(): Promise<Profile[]> {
   const { data, error } = await supabase
     .from('profiles')
     .select('*')
-    .in('role', ['staff', 'admin'])
+    .in('role', ['staff', 'admin', 'team_one'])
     .order('full_name', { ascending: true });
   if (error) { console.error('getAllStaff:', error.message); return []; }
   return (data ?? []) as Profile[];

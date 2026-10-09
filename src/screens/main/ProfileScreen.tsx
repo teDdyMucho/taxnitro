@@ -404,7 +404,7 @@ export function ProfileScreen({ onLogout, onOpenDashboard }: Props) {
     if (!user?.id) return;
     setLoading(true);
 
-    const isAdminOrStaff = user.role === 'admin' || user.role === 'staff';
+    const isAdminOrStaff = user.role === 'admin' || user.role === 'staff' || user.role === 'team_one';
 
     if (isAdminOrStaff) {
       const [profileRes, ...tableResults] = await Promise.all([

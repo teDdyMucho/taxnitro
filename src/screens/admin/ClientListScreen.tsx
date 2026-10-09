@@ -917,7 +917,10 @@ export function ClientListScreen({ onSelectClient }: Props) {
     setTimeout(() => setToastVisible(false), 2600);
   };
 
-  const { isLoading: authLoading } = useAuth();
+  const { isLoading: authLoading, user } = useAuth();
+  // Team One sees its assigned clients (the database decides which) but none of
+  // the staff controls: no adding clients, no manage tray, no upload checklist.
+  const isTeamOne = user?.role === 'team_one';
 
   const load = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
@@ -1042,7 +1045,7 @@ export function ClientListScreen({ onSelectClient }: Props) {
 
         {/* This month's required uploads, and the manage tray. The card
             itself opens their folders. */}
-        <View style={s.rowActions}>
+        {!isTeamOne && <View style={s.rowActions}>
           <TouchableOpacity
             style={s.docBtn}
             onPress={() => setProgressClient(item)}
@@ -1059,7 +1062,7 @@ export function ClientListScreen({ onSelectClient }: Props) {
           >
             <Ionicons name="settings-outline" size={15} color={Colors.textMuted} />
           </TouchableOpacity>
-        </View>
+        </View>}
       </TouchableOpacity>
     );
   };
@@ -1077,13 +1080,15 @@ export function ClientListScreen({ onSelectClient }: Props) {
             {clients.length} account{clients.length !== 1 ? 's' : ''}
           </Text>
         </View>
-        <TouchableOpacity
-          style={s.addBtn}
-          onPress={() => setAddOpen(true)}
-          activeOpacity={0.85}
-        >
-          <Text style={s.addBtnText}>＋ Add Client</Text>
-        </TouchableOpacity>
+        {!isTeamOne && (
+          <TouchableOpacity
+            style={s.addBtn}
+            onPress={() => setAddOpen(true)}
+            activeOpacity={0.85}
+          >
+            <Text style={s.addBtnText}>＋ Add Client</Text>
+          </TouchableOpacity>
+        )}
       </LinearGradient>
 
       {/* ── Stats row, which is also the status filter ── */}

@@ -38,6 +38,8 @@ import {
 import { listSubfoldersForClient, createSubfolder, renameSubfolder, deleteSubfolder, descendantIds, subfolderPath, Subfolder } from '../../db/subfolders';
 import { dashboardForClient } from '../../lib/clientDashboards';
 import { useResponsive } from '../../hooks/useResponsive';
+import { getTeamOneServices } from '../../db/teamOne';
+import { TeamOneUpdateModal } from '../../components/TeamOneUpdateModal';
 import { ClientDetailsPanel } from '../../components/ClientDetailsPanel';
 import { AdminUploadModal } from '../../components/AdminUploadModal';
 import { ClientQuestionnairePanel } from '../../components/ClientQuestionnairePanel';
@@ -332,6 +334,20 @@ export function ClientDocumentsScreen({
   // Built per client from their own workbook, so most clients have none.
   const clientDashboard = dashboardForClient(client);
   const { user } = useAuth();
+  // Team One: only the services it is assigned for this client, and none of the
+  // staff controls. The database already keeps every other folder from it; this
+  // keeps the empty tabs and the buttons it cannot use off the screen.
+  const isTeamOne = user?.role === 'team_one';
+  const [teamOneSvcs, setTeamOneSvcs] = useState<ClientService[]>([]);
+  useEffect(() => {
+    if (!isTeamOne) return;
+    let live = true;
+    getTeamOneServices(client.email).then(list => { if (live) setTeamOneSvcs(list); });
+    return () => { live = false; };
+  }, [isTeamOne, client.email]);
+  // Team One's report on this client: dates, and for BK and CFO the query sheet,
+  // P&L and balance sheet, all waiting for staff to review.
+  const [updateOpen, setUpdateOpen] = useState(false);
   // Renaming a subfolder from where it is actually browsed. Only the staff-made
   // ones can be renamed — the folder categories are the system's, not a client's.
   const [renameSub, setRenameSub] = useState<Subfolder | null>(null);
@@ -548,8 +564,9 @@ export function ClientDocumentsScreen({
   // from this screen. It goes by itself once the folders are empty.
   const serviceTabs = useMemo<ClientService[]>(
     () => (['TAX', 'YER', 'BK', 'CFO'] as ClientService[])
-      .filter(svc => taken.includes(svc) || filedUnder[svc] > 0),
-    [taken, filedUnder]);
+      .filter(svc => taken.includes(svc) || filedUnder[svc] > 0)
+      .filter(svc => !isTeamOne || teamOneSvcs.includes(svc)),
+    [taken, filedUnder, isTeamOne, teamOneSvcs]);
 
   const isArchived = (svc: ClientService) => !taken.includes(svc);
 
@@ -570,10 +587,10 @@ export function ClientDocumentsScreen({
   // CFO splits in two while they take it. An archived CFO tab is only its
   // folders, like the other archived tabs.
   const tabs = serviceTabs.flatMap<{ svc: ClientService; label: string; docs: boolean | null }>(svc =>
-    svc === 'CFO' && taken.includes('CFO')
+    svc === 'CFO' && taken.includes('CFO') && !isTeamOne
       ? [{ svc, label: 'CFO', docs: false }, { svc, label: 'CFO DOCS', docs: true }]
       : [{ svc, label: svc, docs: null }]);
-  const cfoOverview = shownService === 'CFO' && taken.includes('CFO') && !cfoDocs;
+  const cfoOverview = shownService === 'CFO' && taken.includes('CFO') && !cfoDocs && !isTeamOne;
   // The CFO Suite is their financial reports, which only some clients have.
   const suiteReady = !!(clientDashboard && onOpenDashboard);
 
@@ -627,7 +644,7 @@ export function ClientDocumentsScreen({
 
         {/* Folder actions, shown under the name so the tile stays a tile. */}
         <View style={s.fTileActions}>
-          {isOwn && (
+          {isOwn && !isTeamOne && (
             <>
               <TouchableOpacity
                 onPress={() => { const sf = subOf(); if (sf) setRenameSub(sf); }}
@@ -670,12 +687,16 @@ export function ClientDocumentsScreen({
         <TouchableOpacity style={s.actionBtn} onPress={() => dl.downloadSingle(item)}>
           <Ionicons name="download-outline" size={16} color="#B5905B" />
         </TouchableOpacity>
-        <TouchableOpacity style={s.actionBtn} onPress={() => setRenameDoc(item)}>
-          <Ionicons name="pencil-outline" size={16} color={Colors.textMuted} />
-        </TouchableOpacity>
-        <TouchableOpacity style={s.actionBtn} onPress={() => setDeleteDoc(item)}>
-          <Ionicons name="trash-outline" size={16} color={Colors.error} />
-        </TouchableOpacity>
+        {!isTeamOne && (
+          <>
+            <TouchableOpacity style={s.actionBtn} onPress={() => setRenameDoc(item)}>
+              <Ionicons name="pencil-outline" size={16} color={Colors.textMuted} />
+            </TouchableOpacity>
+            <TouchableOpacity style={s.actionBtn} onPress={() => setDeleteDoc(item)}>
+              <Ionicons name="trash-outline" size={16} color={Colors.error} />
+            </TouchableOpacity>
+          </>
+        )}
       </View>
     );
     return (
@@ -778,7 +799,7 @@ export function ClientDocumentsScreen({
         {/* The manage tray, where their status and services are set. On a
             phone it joins the buttons on the line below instead — beside the
             name it left the name no room at all. */}
-        {!openFolder && !isPhone && (
+        {!openFolder && !isPhone && !isTeamOne && (
           <TouchableOpacity
             style={s.manageBtn}
             onPress={() => setManageOpen(true)}
@@ -794,7 +815,7 @@ export function ClientDocumentsScreen({
             wrapping, instead of a column at the end of a row that has run
             out of room. */}
         <View style={isPhone ? s.headerActionsPhone : { gap: 6 }}>
-          {!openFolder && isPhone && (
+          {!openFolder && isPhone && !isTeamOne && (
             <TouchableOpacity
               style={[s.manageBtn, s.headerBtnPhone]}
               onPress={() => setManageOpen(true)}
@@ -805,14 +826,24 @@ export function ClientDocumentsScreen({
               <Text style={s.manageBtnText}>Update Profile</Text>
             </TouchableOpacity>
           )}
-          <TouchableOpacity style={[s.sendFileBtn, isPhone && s.headerBtnPhone]} onPress={() => setUploadOpen(true)} activeOpacity={0.85}>
-            <Ionicons name="cloud-upload-outline" size={15} color="#3A3131" />
-            <Text style={s.sendFileText}>Upload File</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={[s.requestBtn, isPhone && s.headerBtnPhone]} onPress={() => setRequestOpen(true)} activeOpacity={0.85}>
-            <Ionicons name="clipboard-outline" size={14} color="#E8B923" />
-            <Text style={s.requestText}>Request Doc</Text>
-          </TouchableOpacity>
+          {isTeamOne && !openFolder && (
+            <TouchableOpacity style={[s.sendFileBtn, isPhone && s.headerBtnPhone]} onPress={() => setUpdateOpen(true)} activeOpacity={0.85}>
+              <Ionicons name="create-outline" size={15} color="#3A3131" />
+              <Text style={s.sendFileText}>Add Update</Text>
+            </TouchableOpacity>
+          )}
+          {!isTeamOne && (
+            <>
+              <TouchableOpacity style={[s.sendFileBtn, isPhone && s.headerBtnPhone]} onPress={() => setUploadOpen(true)} activeOpacity={0.85}>
+                <Ionicons name="cloud-upload-outline" size={15} color="#3A3131" />
+                <Text style={s.sendFileText}>Upload File</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[s.requestBtn, isPhone && s.headerBtnPhone]} onPress={() => setRequestOpen(true)} activeOpacity={0.85}>
+                <Ionicons name="clipboard-outline" size={14} color="#E8B923" />
+                <Text style={s.requestText}>Request Doc</Text>
+              </TouchableOpacity>
+            </>
+          )}
           {clientDashboard && onOpenDashboard && (
             <TouchableOpacity style={[s.requestBtn, isPhone && s.headerBtnPhone]} onPress={onOpenDashboard} activeOpacity={0.85}>
               <Ionicons name="stats-chart-outline" size={14} color="#E8B923" />
@@ -931,13 +962,17 @@ export function ClientDocumentsScreen({
             contentContainerStyle={{ padding: 16, paddingBottom: 32 }}
             ListHeaderComponent={
               <>
-                {/* What the team knows about this business, where the files are. */}
-                <ClientDetailsPanel clientEmail={client.email} clientName={client.full_name} />
-                {/* And what the client told us themselves, month by month. */}
-                <ClientQuestionnairePanel
-                  clientEmail={client.email}
-                  accounts={normalizeBankAccounts(client.bank_accounts)}
-                />
+                {/* What the team knows about this business, where the files are,
+                    and what the client told us month by month. Internal to FTG. */}
+                {!isTeamOne && (
+                  <>
+                    <ClientDetailsPanel clientEmail={client.email} clientName={client.full_name} />
+                    <ClientQuestionnairePanel
+                      clientEmail={client.email}
+                      accounts={normalizeBankAccounts(client.bank_accounts)}
+                    />
+                  </>
+                )}
                 {folders.length > 0 && (
                   <>
                     <Text style={s.sectionLabel}>Folders</Text>
@@ -955,14 +990,14 @@ export function ClientDocumentsScreen({
             }
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => load(true)} tintColor={Colors.primary} />}
             ListEmptyComponent={<Text style={s.empty}>Nothing filed under {shownService} for this client.</Text>}
-            ListFooterComponent={
+            ListFooterComponent={isTeamOne ? null : (
               <View style={s.addFolderRow}>
                 <TouchableOpacity style={s.addFolderBtn} onPress={() => setNewFolderOpen(true)} activeOpacity={0.85}>
                   <Ionicons name="add" size={15} color="#F0E9DC" />
                   <Text style={s.addFolderText}>Add New Folder</Text>
                 </TouchableOpacity>
               </View>
-            }
+            )}
           />
         )
       )}
@@ -1058,6 +1093,15 @@ export function ClientDocumentsScreen({
         onClose={() => setUploadOpen(false)}
         onUploaded={d => setDocuments(prev => [d, ...prev])}
       />
+
+      {isTeamOne && (
+        <TeamOneUpdateModal
+          visible={updateOpen}
+          client={client}
+          services={teamOneSvcs}
+          onClose={() => setUpdateOpen(false)}
+        />
+      )}
 
       <RequestDocModal
         client={client}

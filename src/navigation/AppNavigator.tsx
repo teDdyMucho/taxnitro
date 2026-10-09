@@ -524,8 +524,9 @@ export function AppNavigator() {
     );
   }
 
-  // Staff and admin get the admin portal
-  if (user?.role === 'staff' || user?.role === 'admin') {
+  // Staff and admin get the admin portal, and so does Team One — cut down to
+  // the clients assigned to it.
+  if (user?.role === 'staff' || user?.role === 'admin' || user?.role === 'team_one') {
     return <AdminNavigator onLogout={logout} />;
   }
 

@@ -4,7 +4,9 @@ import { supabase } from '../lib/supabase';
 import { BankAccount, normalizeBankAccounts } from '../db/requirements';
 import { useIdleLogout, IDLE_TIMEOUT_MS } from '../hooks/useIdleLogout';
 
-export type UserRole = 'client' | 'staff' | 'admin';
+// team_one: an outside team that sees only the clients assigned to it
+// (database/team_one_access.sql).
+export type UserRole = 'client' | 'staff' | 'admin' | 'team_one';
 export type ClientService = 'BK' | 'TAX' | 'CFO' | 'YER';
 
 export interface AuthUser {

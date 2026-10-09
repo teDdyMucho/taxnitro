@@ -105,7 +105,8 @@ export function ChatWidget() {
   const { width, height } = useWindowDimensions();
   const isNarrow = width < 480;
 
-  const isStaff = user?.role === 'staff' || user?.role === 'admin';
+  // Team One works on FTG's side, so it reports to the staff desk.
+  const isStaff = user?.role === 'staff' || user?.role === 'admin' || user?.role === 'team_one';
 
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState('');

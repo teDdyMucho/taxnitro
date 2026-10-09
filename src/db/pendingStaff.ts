@@ -7,7 +7,7 @@ import type { UserRole } from './profiles';
 
 export interface PendingStaff {
   email: string;
-  role: 'admin' | 'staff';
+  role: 'admin' | 'staff' | 'team_one';
   invited_by: string | null;
   invited_at: string;
 }
@@ -31,7 +31,7 @@ export async function listPendingStaff(): Promise<PendingStaff[]> {
  */
 export async function invitePendingStaff(
   email: string,
-  role: 'admin' | 'staff',
+  role: 'admin' | 'staff' | 'team_one',
   invitedBy: string | null,
 ): Promise<PendingStaff | null> {
   const e = key(email);

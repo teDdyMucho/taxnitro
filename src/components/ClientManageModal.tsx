@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView,
   Modal, Pressable, ActivityIndicator, Platform,
@@ -22,6 +22,8 @@ import {
 import {
   BankAccountsField, cleanBankAccounts, hasIncompleteBankAccount,
 } from './BankAccountsField';
+import { useAuth } from '../context/AuthContext';
+import { TEAM_ONE_SERVICES, getTeamOneServices, setTeamOneServices } from '../db/teamOne';
 
 // The tray for editing one client: their name, plan, services, bank accounts,
 // account status and password.
@@ -132,6 +134,23 @@ export function ClientManageModal({
     Array.isArray(client.services) && client.services.length > 0 ? client.services : ['BK']
   );
   const [hasQbo, setHasQbo]       = useState(client.has_qbo_access ?? false);
+  // Team One access — Camaree: staff "select and deselect Team One Access to
+  // different clients and their respective folders over time". Per service:
+  // ticking BK lets Team One see this client's BK folders and nothing else.
+  const { user: me } = useAuth();
+  const [teamOne, setTeamOne]             = useState<ClientService[]>([]);
+  const [teamOneSaved, setTeamOneSaved]   = useState<ClientService[]>([]);
+  useEffect(() => {
+    let live = true;
+    getTeamOneServices(client.email).then(list => {
+      if (!live) return;
+      setTeamOne(list);
+      setTeamOneSaved(list);
+    });
+    return () => { live = false; };
+  }, [client.email]);
+  const toggleTeamOne = (svc: ClientService) =>
+    setTeamOne(prev => (prev.includes(svc) ? prev.filter(s => s !== svc) : [...prev, svc]));
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>(
     normalizeBankAccounts(client.bank_accounts)
   );
@@ -180,9 +199,18 @@ export function ClientManageModal({
       ...(nameChanged ? { first_name: first.trim() || null, last_name: last.trim() || null } : {}),
       ...(progressChanged ? { service_progress: progress } : {}),
     });
+    // Written only when it changed, so editing a client on a database without
+    // team_one_access.sql still saves.
+    const teamOneChanged = [...teamOne].sort().join() !== [...teamOneSaved].sort().join();
+    const teamOneOk = !ok || !teamOneChanged
+      || await setTeamOneServices(client.email, teamOne, me?.email ?? null);
+    if (ok && teamOneChanged && teamOneOk) setTeamOneSaved(teamOne);
     setSaving(false);
+    if (ok && !teamOneOk) {
+      showToast('Client updated, but Team One access did not save');
+    }
     if (ok) {
-      showToast('Client updated successfully');
+      if (teamOneOk) showToast('Client updated successfully');
       onSave({
         ...client, full_name: name, first_name: first.trim() || null, last_name: last.trim() || null,
         company_name: company.trim() || null, plan, is_active: isActive, account_status: status,
@@ -383,6 +411,36 @@ export function ClientManageModal({
                 )}
               </View>
             )}
+
+            {/* Team One access. One choice per service this client takes, plus any
+                Team One still holds for a service they have since dropped, so it
+                can be taken back. */}
+            <View style={mm.field}>
+              <Text style={mm.label}>Team One Access</Text>
+              <View style={isPhone ? mm.svcRowPhone : mm.planRow}>
+                {TEAM_ONE_SERVICES.filter(svc => services.includes(svc) || teamOne.includes(svc)).map(svc => {
+                  const isOn = teamOne.includes(svc);
+                  return (
+                    <TouchableOpacity
+                      key={svc}
+                      style={[isPhone ? mm.svcBtnPhone : mm.svcBtn, isOn && mm.teamOneOn]}
+                      onPress={() => toggleTeamOne(svc)}
+                      activeOpacity={0.75}
+                    >
+                      <Ionicons name={isOn ? 'checkbox' : 'square-outline'} size={16} color={isOn ? '#334155' : Colors.textMuted} />
+                      <Text style={[mm.svcText, isOn && { color: Colors.textPrimary, fontWeight: '700' }]}>
+                        {SERVICE_LABEL[svc]}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+              <Text style={mm.qboHint}>
+                {teamOne.length
+                  ? 'Team One sees this client and only the folders ticked here.'
+                  : 'Not assigned to Team One. Tick a service to let Team One see its folders.'}
+              </Text>
+            </View>
 
             {/* Bank accounts — one required "Bank Statements" slot per account */}
             <BankAccountsField value={bankAccounts} onChange={setBankAccounts} />
@@ -615,6 +673,8 @@ const mm = StyleSheet.create({
     borderWidth: 1, borderColor: Colors.border,
   },
   svcBtnActive: { backgroundColor: 'rgba(232,185,35,0.12)', borderColor: 'rgba(232,185,35,0.5)' },
+  // Team One's own colour, so its access never reads as one of the services.
+  teamOneOn: { backgroundColor: '#EEF2F7', borderColor: '#64748B' },
   svcText: { color: Colors.textMuted, fontSize: 12, fontWeight: '600' },
   progRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 6 },
   nameRow: { flexDirection: 'row', gap: 10 },

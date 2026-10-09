@@ -33,7 +33,11 @@ function mkInitials(n: string) {
   return (n ?? '?').split(' ').map(x => x[0]).join('').toUpperCase().slice(0, 2);
 }
 
-const ROLE_CONFIG = {
+type StaffRole = 'admin' | 'staff' | 'team_one';
+
+const ROLE_CONFIG: Record<StaffRole, {
+  gradient: [string, string]; pillBg: string; pillBorder: string; pillText: string; label: string;
+}> = {
   admin: {
     gradient:   ['#E8B923', '#B5905B'] as [string, string],
     pillBg:     '#FEF9E7',
@@ -48,6 +52,18 @@ const ROLE_CONFIG = {
     pillText:   '#6B4A1A',
     label:      'Staff',
   },
+  // Camaree's "special user": sees only the clients staff assign to it.
+  team_one: {
+    gradient:   ['#64748B', '#334155'] as [string, string],
+    pillBg:     '#EEF2F7',
+    pillBorder: '#64748B',
+    pillText:   '#334155',
+    label:      'Team One',
+  },
+};
+
+const ROLE_ICON: Record<StaffRole, keyof typeof Ionicons.glyphMap> = {
+  admin: 'shield-checkmark', staff: 'person', team_one: 'briefcase',
 };
 
 // ── Toast ─────────────────────────────────────────────────────────────────────
@@ -99,7 +115,7 @@ function AddStaffModal({
 }) {
   const sheet = useSheetStyles('md');
   const [email, setEmail]           = useState('');
-  const [role, setRole]             = useState<'admin' | 'staff'>('staff');
+  const [role, setRole]             = useState<StaffRole>('staff');
   const [loading, setLoading]       = useState(false);
   // 'notfound' is not a dead end — it is the moment to offer an invite instead.
   const [result, setResult]         = useState<'success' | 'notfound' | 'invited' | null>(null);
@@ -286,7 +302,7 @@ function AddStaffModal({
                     <View style={im.inviteBox}>
                       <Ionicons name="mail-outline" size={14} color="#B5905B" />
                       <Text style={im.inviteText}>
-                        No account with that email yet. Invite them as {role} and the
+                        No account with that email yet. Invite them as {ROLE_CONFIG[role].label} and the
                         role is applied the moment they sign up.
                       </Text>
                     </View>
@@ -297,7 +313,7 @@ function AddStaffModal({
                 <View style={im.fieldGroup}>
                   <Text style={im.fieldLabel}>ASSIGN ROLE</Text>
                   <View style={im.roleRow}>
-                    {(['staff', 'admin'] as ('admin' | 'staff')[]).map(r => {
+                    {(['staff', 'admin', 'team_one'] as StaffRole[]).map(r => {
                       const rrc = ROLE_CONFIG[r];
                       const isActive = role === r;
                       return (
@@ -322,7 +338,7 @@ function AddStaffModal({
                               start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
                             >
                               <Ionicons
-                                name={r === 'admin' ? 'shield-checkmark' : 'person'}
+                                name={ROLE_ICON[r]}
                                 size={20}
                                 color="#FFFFFF"
                               />
@@ -331,7 +347,7 @@ function AddStaffModal({
                               {rrc.label}
                             </Text>
                             <Text style={im.roleCardDesc}>
-                              {r === 'admin' ? 'Full access' : 'Standard access'}
+                              {r === 'admin' ? 'Full access' : r === 'team_one' ? 'Assigned clients only' : 'Standard access'}
                             </Text>
                           </View>
                         </TouchableOpacity>
@@ -533,7 +549,7 @@ export function StaffManagementScreen() {
   const [toastVisible, setToastVisible] = useState(false);
 
   // Which role's page is showing.
-  const [tab, setTab] = useState<'admin' | 'staff'>('admin');
+  const [tab, setTab] = useState<StaffRole>('admin');
 
   const [deactivateTarget, setDeactivateTarget] = useState<Profile | null>(null);
   const [deactivating, setDeactivating]         = useState(false);
@@ -582,7 +598,9 @@ export function StaffManagementScreen() {
   useEffect(() => { if (!authLoading) { load(); loadInvites(); } }, [authLoading, loadInvites]);
 
   const confirmRole = async () => {
-    if (!roleTarget) return;
+    // Team One is not one press from admin. Moving them is done on purpose,
+    // through Add Member.
+    if (!roleTarget || roleTarget.role === 'team_one') return;
     const newRole: UserRole = roleTarget.role === 'admin' ? 'staff' : 'admin';
     setRolePending(true);
     const ok = await updateStaffRole(roleTarget.id, newRole);
@@ -650,17 +668,20 @@ export function StaffManagementScreen() {
 
   const adminCount  = staff.filter(s => s.role === 'admin').length;
   const staffCount  = staff.filter(s => s.role === 'staff').length;
+  const teamOneCount = staff.filter(s => s.role === 'team_one').length;
   const activeCount = staff.filter(s => s.is_active).length;
 
   // One page per role. Already name-sorted from the query.
   const visibleStaff = staff.filter(m =>
-    tab === 'admin' ? m.role === 'admin' : m.role !== 'admin'
+    tab === 'admin' ? m.role === 'admin'
+      : tab === 'team_one' ? m.role === 'team_one'
+      : m.role !== 'admin' && m.role !== 'team_one'
   );
   // An invite belongs on the page for the role it will become.
   const invitesForTab = invites.filter(i => i.role === tab);
 
   const renderItem = ({ item }: { item: Profile }) => {
-    const safeRole = (item.role === 'admin' ? 'admin' : 'staff') as 'admin' | 'staff';
+    const safeRole: StaffRole = item.role === 'admin' || item.role === 'team_one' ? item.role : 'staff';
     const rc = ROLE_CONFIG[safeRole];
     const isSelf = item.id === user?.id;
     // An admin can be moved back to staff — except yourself (you would lose
@@ -713,6 +734,11 @@ export function StaffManagementScreen() {
               <Ionicons name="shield-checkmark" size={11} color={rc.pillText} />
               <Text style={[s.rolePillText, { color: rc.pillText }]}>{rc.label}</Text>
             </TouchableOpacity>
+          ) : safeRole === 'team_one' ? (
+            <View style={[s.rolePill, { backgroundColor: rc.pillBg, borderColor: rc.pillBorder }]}>
+              <Ionicons name="briefcase" size={11} color={rc.pillText} />
+              <Text style={[s.rolePillText, { color: rc.pillText }]}>{rc.label}</Text>
+            </View>
           ) : (
             <TouchableOpacity
               style={[s.rolePill, { backgroundColor: rc.pillBg, borderColor: rc.pillBorder }]}
@@ -829,7 +855,7 @@ export function StaffManagementScreen() {
         <>
           <Text style={s.sectionLabel}>Team Members</Text>
           <View style={s.tabBar}>
-            {(['admin', 'staff'] as const).map(t => {
+            {(['admin', 'staff', 'team_one'] as const).map(t => {
               const on = tab === t;
               return (
                 <TouchableOpacity
@@ -839,16 +865,16 @@ export function StaffManagementScreen() {
                   activeOpacity={0.8}
                 >
                   <Ionicons
-                    name={t === 'admin' ? 'shield-checkmark' : 'person'}
+                    name={ROLE_ICON[t]}
                     size={13}
                     color={on ? '#B5905B' : '#A8998A'}
                   />
-                  <Text style={[s.tabText, on && s.tabTextOn]}>
-                    {t === 'admin' ? 'Admins' : 'Staff'}
+                  <Text style={[s.tabText, on && s.tabTextOn]} numberOfLines={1}>
+                    {t === 'admin' ? 'Admins' : t === 'team_one' ? 'Team One' : 'Staff'}
                   </Text>
                   <View style={[s.tabCount, on && s.tabCountOn]}>
                     <Text style={[s.tabCountText, on && s.tabCountTextOn]}>
-                      {t === 'admin' ? adminCount : staffCount}
+                      {t === 'admin' ? adminCount : t === 'team_one' ? teamOneCount : staffCount}
                     </Text>
                   </View>
                 </TouchableOpacity>
@@ -915,7 +941,7 @@ export function StaffManagementScreen() {
                 start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
               >
                 <Ionicons
-                  name={tab === 'admin' ? 'shield-outline' : 'person-outline'}
+                  name={tab === 'admin' ? 'shield-outline' : tab === 'team_one' ? 'briefcase-outline' : 'person-outline'}
                   size={34}
                   color="#94A3B8"
                 />
@@ -923,12 +949,14 @@ export function StaffManagementScreen() {
               {/* The empty text follows the tab — "no staff members" on the
                   Admins page would read as though the whole team were missing. */}
               <Text style={s.emptyTitle}>
-                {tab === 'admin' ? 'No admins yet' : 'No staff members yet'}
+                {tab === 'admin' ? 'No admins yet' : tab === 'team_one' ? 'No Team One logins yet' : 'No staff members yet'}
               </Text>
               <Text style={s.emptySub}>
                 {tab === 'admin'
                   ? 'Promote a team member from the Staff tab to give them admin access.'
-                  : 'Assign staff roles to existing users using the button above.'}
+                  : tab === 'team_one'
+                    ? 'Invite Team One with the button above. They see only the clients you assign them.'
+                    : 'Assign staff roles to existing users using the button above.'}
               </Text>
               <TouchableOpacity
                 style={s.emptyAction}
