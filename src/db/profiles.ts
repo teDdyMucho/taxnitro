@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase';
+import { deleteStaffAccount } from '../lib/adminUsers';
 import { BankAccount, normalizeBankAccounts } from './requirements';
 import { normalizeServiceProgress, type ServiceProgress } from '../lib/serviceProgress';
 
@@ -247,26 +248,12 @@ export async function countStaffReferences(userId: string): Promise<StaffReferen
  * still references them, so call countStaffReferences first.
  */
 export async function deleteStaffMember(userId: string): Promise<{ ok: boolean; error?: string }> {
-  const url = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
-  const key = process.env.EXPO_PUBLIC_SUPABASE_SERVICE_ROLE_KEY ?? '';
-  if (!url || !key) return { ok: false, error: 'Service role key not configured.' };
-
-  try {
-    const res = await fetch(`${url}/auth/v1/admin/users/${userId}`, {
-      method: 'DELETE',
-      headers: { apikey: key, Authorization: `Bearer ${key}` },
-    });
-    if (res.ok) return { ok: true };
-
-    const body = await res.text();
-    console.error('deleteStaffMember:', body);
-    // A foreign-key violation here means something still points at them.
-    if (/foreign key|violates/i.test(body)) {
-      return { ok: false, error: 'This member is still linked to workflow records and cannot be deleted.' };
-    }
-    return { ok: false, error: 'Could not delete this member.' };
-  } catch (e: any) {
-    console.error('deleteStaffMember:', e?.message ?? e);
-    return { ok: false, error: 'Network error. Please try again.' };
+  // Through the admin-users Edge Function, which checks the caller is an admin
+  // and holds the key that can delete a login.
+  const { error } = await deleteStaffAccount(userId);
+  if (error) {
+    console.error('deleteStaffMember:', error);
+    return { ok: false, error };
   }
+  return { ok: true };
 }

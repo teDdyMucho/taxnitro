@@ -24,6 +24,7 @@ import {
 } from './BankAccountsField';
 import { useAuth } from '../context/AuthContext';
 import { TEAM_ONE_SERVICES, getTeamOneServices, setTeamOneServices } from '../db/teamOne';
+import { setClientPassword } from '../lib/adminUsers';
 
 // The tray for editing one client: their name, plan, services, bank accounts,
 // account status and password.
@@ -66,10 +67,6 @@ const PLAN_COLORS: Record<string, { bg: string; text: string; border: string }> 
   Pro:        { bg: '#FEF3C7', text: '#B5905B',  border: '#FDE68A' },
   Enterprise: { bg: '#F5F3FF', text: '#7C3AED',  border: '#DDD6FE' },
 };
-
-// Inlined at bundle time by Metro — must be top-level, not inside a function.
-const SUPABASE_URL     = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
-const SERVICE_ROLE_KEY = process.env.EXPO_PUBLIC_SUPABASE_SERVICE_ROLE_KEY ?? '';
 
 function Toast({ message, visible }: { message: string; visible: boolean }) {
   if (!visible) return null;
@@ -225,17 +222,9 @@ export function ClientManageModal({
     if (newPassword.length < 8) return;
     setPwdSaving(true);
     try {
-      const res = await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${client.id}`, {
-        method: 'PUT',
-        headers: {
-          'apikey': SERVICE_ROLE_KEY,
-          'Authorization': `Bearer ${SERVICE_ROLE_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ password: newPassword }),
-      });
-      if (res.ok) { showToast('Password changed successfully'); setNewPassword(''); }
-      else showToast('Failed to change password');
+      const { error } = await setClientPassword(client.id, newPassword);
+      if (!error) { showToast('Password changed successfully'); setNewPassword(''); }
+      else showToast(error || 'Failed to change password');
     } catch { showToast('Failed to change password'); }
     finally { setPwdSaving(false); }
   };

@@ -19,6 +19,7 @@ import {
   BankAccount, normalizeBankAccounts,
 } from '../../db/requirements';
 import { ClientManageModal } from '../../components/ClientManageModal';
+import { createClientAccount } from '../../lib/adminUsers';
 import { joinName } from '../../lib/personName';
 import { useResponsive } from '../../hooks/useResponsive';
 import {
@@ -111,9 +112,6 @@ const toast = StyleSheet.create({
 // ── Add Client Modal ──────────────────────────────────────────────────────────
 
 
-// Inlined at bundle time by Metro — must be top-level, not inside a function
-const SUPABASE_URL         = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
-const SERVICE_ROLE_KEY     = process.env.EXPO_PUBLIC_SUPABASE_SERVICE_ROLE_KEY ?? '';
 
 function generateClientId(): string {
   return 'TN-' + Math.random().toString(16).slice(2, 10).toUpperCase();
@@ -193,70 +191,29 @@ function AddClientModal({
     setLoading(true);
     setErrorMsg('');
     try {
-      if (!SERVICE_ROLE_KEY || SERVICE_ROLE_KEY === 'your_service_role_key_here') {
-        setErrorMsg('Service role key not configured. Add EXPO_PUBLIC_SUPABASE_SERVICE_ROLE_KEY to your .env file.');
-        return;
-      }
-
-      // Use Supabase Admin API — bypasses email verification and signup restrictions
-      const res = await fetch(`${SUPABASE_URL}/auth/v1/admin/users`, {
-        method: 'POST',
-        headers: {
-          'apikey': SERVICE_ROLE_KEY,
-          'Authorization': `Bearer ${SERVICE_ROLE_KEY}`,
-          'Content-Type': 'application/json',
+      // Through the admin-users Edge Function, which makes the login confirmed
+      // (no verification email) and writes the profile as a client. The role is
+      // set there, not taken from here.
+      const { error } = await createClientAccount({
+        email: email.trim(),
+        password: password.trim(),
+        fullName: fullName.trim(),
+        profile: {
+          // Sent only when filled in, so creating a client still works on a
+          // database without those columns' migrations.
+          ...(firstName.trim() ? { first_name: firstName.trim() } : {}),
+          ...(lastName.trim() ? { last_name: lastName.trim() } : {}),
+          ...(companyName.trim() ? { company_name: companyName.trim() } : {}),
+          client_id: generateClientId(),
+          plan,
+          services,                    // BK / CFO / both — drives what they see
+          has_qbo_access: hasQbo,      // hides "Prior Month Bookkeeping / QBO Access" when true
+          bank_accounts: cleanBankAccounts(bankAccounts),  // one Bank Statements slot each
         },
-        body: JSON.stringify({
-          email:         email.trim(),
-          password:      password.trim(),
-          email_confirm: true,           // auto-confirm, no verification email
-          user_metadata: { full_name: fullName.trim() },
-        }),
       });
-
-      const json = await res.json();
-      if (!res.ok) {
-        setErrorMsg(json?.message ?? json?.msg ?? 'Failed to create account.');
+      if (error) {
+        setErrorMsg(error);
         return;
-      }
-
-      const userId = json?.id;
-
-      // Save profile using service role key (bypasses RLS)
-      if (userId) {
-        const profileRes = await fetch(`${SUPABASE_URL}/rest/v1/profiles?on_conflict=id`, {
-          method: 'POST',
-          headers: {
-            'apikey': SERVICE_ROLE_KEY,
-            'Authorization': `Bearer ${SERVICE_ROLE_KEY}`,
-            'Content-Type': 'application/json',
-            'Prefer': 'resolution=merge-duplicates,return=minimal',
-          },
-          body: JSON.stringify({
-            id: userId,
-            email: email.trim(),
-            full_name: fullName.trim(),
-            // Sent only when filled in, as company_name is below, so creating a
-            // client still works on a database that has not yet run
-            // profiles_first_last_name.sql.
-            ...(firstName.trim() ? { first_name: firstName.trim() } : {}),
-            ...(lastName.trim() ? { last_name: lastName.trim() } : {}),
-            // Only sent when filled in, so creating a TAX-only client still
-            // works on a database that has not run the company migration.
-            ...(companyName.trim() ? { company_name: companyName.trim() } : {}),
-            client_id: generateClientId(),
-            plan,
-            role: 'client',
-            is_active: true,
-            services,                    // BK / CFO / both — drives what they see
-            has_qbo_access: hasQbo,      // hides "Prior Month Bookkeeping / QBO Access" when true
-            bank_accounts: cleanBankAccounts(bankAccounts),  // one Bank Statements slot each
-          }),
-        });
-        if (!profileRes.ok) {
-          const profileErr = await profileRes.text();
-          console.error('Profile insert error:', profileErr);
-        }
       }
 
       setStep('success');
