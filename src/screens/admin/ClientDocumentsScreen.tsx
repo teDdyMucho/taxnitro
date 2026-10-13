@@ -35,7 +35,7 @@ import { createCustomRequest } from '../../db/customRequests';
 import {
   useDownloadSelection, DownloadSelectionBar, DownloadNotice, SelectCheckbox,
 } from '../../components/DownloadSelectionBar';
-import { listSubfoldersForClient, createSubfolder, renameSubfolder, deleteSubfolder, descendantIds, subfolderPath, Subfolder } from '../../db/subfolders';
+import { listSubfoldersForClient, createSubfolder, renameSubfolder, deleteSubfolder, nestSubfolder, descendantIds, subfolderPath, Subfolder } from '../../db/subfolders';
 import { dashboardForClient } from '../../lib/clientDashboards';
 import { useResponsive } from '../../hooks/useResponsive';
 import { getTeamOneServices } from '../../db/teamOne';
@@ -303,6 +303,89 @@ const rq = StyleSheet.create({
   input: { backgroundColor: Colors.white, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, color: Colors.textPrimary, fontSize: 14, borderWidth: 1, borderColor: Colors.border },
 });
 
+// ── Move a folder into another one ─────────────────────────────────────────────
+
+/**
+ * Belly Jane: "ma move ang isang folder para maging sub folder na siya". Any of
+ * this client's own folders can take it — not the folder itself or one inside
+ * it, and not the older shared folders, which belong to every client. A folder
+ * already inside another can also go back out to the main list.
+ */
+function MoveFolderSheet({ sub, subfolders, onClose, onMove }: {
+  sub: Subfolder;
+  subfolders: Subfolder[];
+  onClose: () => void;
+  /** Resolves to the reason it failed, or null when it moved. */
+  onMove: (into: string | null) => Promise<string | null>;
+}) {
+  const sheet = useSheetStyles('md');
+  const inside = new Set([sub.id, ...descendantIds(subfolders, sub.id)]);
+  const owner = (sub.owner_email ?? '').toLowerCase();
+  const targets = subfolders
+    .filter(x => !inside.has(x.id) && x.id !== sub.parent_subfolder_id
+      && owner !== '' && (x.owner_email ?? '').toLowerCase() === owner)
+    .map(x => ({
+      id: x.id,
+      label: subfolderPath(subfolders, x.id).map(f => f.name).join(' › ') || x.name,
+      where: folderTableLabel(x.parent_table),
+    }))
+    .sort((a, b) => a.label.localeCompare(b.label));
+  // undefined: nothing picked yet. null: back out to the main list.
+  const [pick, setPick] = useState<string | null | undefined>(undefined);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr]   = useState<string | null>(null);
+
+  const row = (id: string | null, label: string, where: string) => {
+    const on = pick === id;
+    return (
+      <TouchableOpacity key={id ?? 'top'} style={[su.folderRow, on && su.folderRowActive]} onPress={() => setPick(id)} activeOpacity={0.8}>
+        <Ionicons name={id ? 'folder' : 'arrow-up-circle-outline'} size={18} color={on ? Colors.primary : Colors.textMuted} />
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text style={[su.folderText, on && { color: Colors.textPrimary, fontWeight: '700' }]} numberOfLines={1}>{label}</Text>
+          <Text style={s.moveWhere} numberOfLines={1}>{where}</Text>
+        </View>
+      </TouchableOpacity>
+    );
+  };
+
+  return (
+    <Modal visible transparent animationType="slide" onRequestClose={busy ? undefined : onClose}>
+      <Pressable style={[su.overlay, sheet.overlay]} onPress={busy ? undefined : onClose}>
+        <Pressable style={[su.sheet, sheet.sheet]} onPress={() => {}}>
+          <View style={su.handle} />
+          <Text style={su.title}>Move “{sub.name}”</Text>
+          <Text style={su.sub}>Everything inside it moves with it.</Text>
+          <ScrollView style={{ maxHeight: 340 }}>
+            {sub.parent_subfolder_id ? row(null, 'Out to the main folder list', 'Not inside another folder') : null}
+            {targets.map(t => row(t.id, t.label, t.where))}
+            {targets.length === 0 && !sub.parent_subfolder_id && (
+              <Text style={su.sub}>There is no other folder of theirs to move it into. Make one first with Add New Folder.</Text>
+            )}
+          </ScrollView>
+          {err && <Text style={s.moveErr}>{err}</Text>}
+          <View style={su.row}>
+            <TouchableOpacity style={su.cancelBtn} onPress={onClose} disabled={busy}>
+              <Text style={su.cancelText}>Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[su.sendBtn, (pick === undefined || busy) && { opacity: 0.5 }]}
+              disabled={pick === undefined || busy}
+              onPress={async () => {
+                setBusy(true); setErr(null);
+                const reason = await onMove(pick ?? null);
+                setBusy(false);
+                if (reason) setErr(reason);
+              }}
+            >
+              {busy ? <ActivityIndicator color="#3A3131" size="small" /> : <Text style={su.sendText}>Move Here</Text>}
+            </TouchableOpacity>
+          </View>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
 // ── Main Screen ───────────────────────────────────────────────────────────────
 
 /**
@@ -354,6 +437,9 @@ export function ClientDocumentsScreen({
   // Duplicate folders were arriving from the standard set, and there was no way
   // to clear one from here — rename was the only thing a folder card offered.
   const [deleteSub, setDeleteSub] = useState<Subfolder | null>(null);
+  // Moving a folder into another, and making one inside the folder that is open.
+  const [moveSub, setMoveSub]         = useState<Subfolder | null>(null);
+  const [newFolderIn, setNewFolderIn] = useState<Subfolder | null>(null);
   // The "+ Add New Folder" button under the grid.
   const [newFolderOpen, setNewFolderOpen] = useState(false);
   const insets = useSafeAreaInsets();
@@ -534,6 +620,20 @@ export function ClientDocumentsScreen({
     return [...buckets.values()].sort((a, b) => a.order - b.order || a.title.localeCompare(b.title));
   }, [documents, clientItems, subfolders, client.services]);
 
+  // Folders inside folders. One moved into another, or made inside it, shows
+  // there — when that folder is opened — rather than out on the main list.
+  const subById = useMemo(() => new Map(subfolders.map(sf => [sf.id, sf])), [subfolders]);
+  const subOfKey = (key: string) => (key.startsWith('sub:') ? subById.get(key.slice(4)) : undefined);
+  const isNested = (key: string) => !!subOfKey(key)?.parent_subfolder_id;
+  const childrenOf = (id: string) => folders.filter(f => subOfKey(f.key)?.parent_subfolder_id === id);
+  /** A folder's documents, with those in every folder inside it. */
+  const docsUnder = (f: FolderBucket): DocRow[] => {
+    const sf = subOfKey(f.key);
+    if (!sf) return f.data;
+    const ids = new Set([sf.id, ...descendantIds(subfolders, sf.id)]);
+    return folders.filter(b => ids.has(subOfKey(b.key)?.id ?? '')).flatMap(b => b.data);
+  };
+
   // The services this client takes. An older record with none recorded is read
   // as BK, which is what the rest of the app does with it.
   const taken = useMemo<ClientService[]>(
@@ -596,11 +696,12 @@ export function ClientDocumentsScreen({
 
   const visibleFolders = useMemo(() => {
     return folders.filter(f => {
+      if (isNested(f.key)) return false;     // shown inside the folder it is in
       const svc = serviceOfFolderKey(f.key);
       // Staff-made folders carry no service, so they show under every tab.
       return svc === null || svc === shownService;
     });
-  }, [folders, shownService]);
+  }, [folders, shownService, subById]);
 
   const totalDocs   = documents.length;
   const openFolder  = folders.find(f => f.key === activeFolderKey) ?? null;
@@ -622,9 +723,15 @@ export function ClientDocumentsScreen({
   }, [loading, folders, activeFolderKey]);
 
   const renderFolderCard = ({ item }: { item: FolderBucket }) => {
-    const unread  = unreadIn(item.data);
+    // Counted with whatever is in the folders inside it, so nothing filed deeper
+    // goes unseen from the top.
+    const all     = docsUnder(item);
+    const unread  = unreadIn(all);
     const isOwn   = item.key.startsWith('sub:');
     const subOf   = () => subfolders.find(x => `sub:${x.id}` === item.key);
+    const kids    = isOwn ? subfolders.filter(x => x.parent_subfolder_id === item.key.slice(4)).length : 0;
+    // A folder's own name; the path is for the header, once it is open.
+    const name    = isOwn ? (subOf()?.name ?? item.title) : item.title;
     return (
       <TouchableOpacity style={s.fTile} onPress={() => setActiveFolderKey(item.key)} activeOpacity={0.75}>
         {/* A drawn folder rather than an icon in a box, as the design has it:
@@ -637,9 +744,10 @@ export function ClientDocumentsScreen({
           )}
         </View>
 
-        <Text style={s.fTileName} numberOfLines={2}>{item.title}</Text>
+        <Text style={s.fTileName} numberOfLines={2}>{name}</Text>
         <Text style={s.fTileMeta}>
-          {item.data.length} doc{item.data.length !== 1 ? 's' : ''}
+          {all.length} doc{all.length !== 1 ? 's' : ''}
+          {kids ? ` · ${kids} folder${kids !== 1 ? 's' : ''}` : ''}
         </Text>
 
         {/* Folder actions, shown under the name so the tile stays a tile. */}
@@ -653,6 +761,12 @@ export function ClientDocumentsScreen({
                 <Ionicons name="pencil-outline" size={13} color={Colors.textMuted} />
               </TouchableOpacity>
               <TouchableOpacity
+                onPress={() => { const sf = subOf(); if (sf) setMoveSub(sf); }}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Ionicons name="enter-outline" size={14} color={Colors.textMuted} />
+              </TouchableOpacity>
+              <TouchableOpacity
                 onPress={() => { const sf = subOf(); if (sf) setDeleteSub(sf); }}
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               >
@@ -661,7 +775,7 @@ export function ClientDocumentsScreen({
             </>
           )}
           <TouchableOpacity
-            onPress={() => dl.download(item.data, `${clientSlug} — ${item.title}`)}
+            onPress={() => dl.download(all, `${clientSlug} — ${item.title}`)}
             disabled={dl.busy}
             style={dl.busy ? { opacity: 0.5 } : undefined}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
@@ -745,7 +859,12 @@ export function ClientDocumentsScreen({
         {/* Back steps out of a folder first, then off the screen. */}
         <TouchableOpacity
           style={s.backBtn}
-          onPress={() => (openFolder ? setActiveFolderKey(null) : onBack())}
+          onPress={() => {
+            if (!openFolder) return onBack();
+            // Out of a folder inside a folder, to the one it is in.
+            const parent = subOfKey(openFolder.key)?.parent_subfolder_id;
+            setActiveFolderKey(parent ? `sub:${parent}` : null);
+          }}
         >
           <Ionicons name="arrow-back" size={20} color={Colors.textPrimary} />
         </TouchableOpacity>
@@ -890,6 +1009,36 @@ export function ClientDocumentsScreen({
             contentContainerStyle={{ padding: 16, paddingBottom: 32 }}
             ListHeaderComponent={
               <>
+                {/* The folders inside this one — Belly: a folder opened can
+                    have folders made in it, with the same move, delete and
+                    download. Not inside the older shared folders, whose
+                    children would show for every client. */}
+                {subOfKey(openFolder.key) && (() => {
+                  const here = subOfKey(openFolder.key)!;
+                  const kids = childrenOf(here.id);
+                  const rows: FolderBucket[][] = [];
+                  for (let i = 0; i < kids.length; i += folderCols) rows.push(kids.slice(i, i + folderCols));
+                  return (
+                    <>
+                      <View style={s.subHead}>
+                        <Text style={[s.sectionLabel, { marginBottom: 0 }]}>Folders</Text>
+                        {!isTeamOne && here.owner_email && (
+                          <TouchableOpacity style={s.addFolderBtn} onPress={() => setNewFolderIn(here)} activeOpacity={0.85}>
+                            <Ionicons name="add" size={15} color="#F0E9DC" />
+                            <Text style={s.addFolderText}>New Folder</Text>
+                          </TouchableOpacity>
+                        )}
+                      </View>
+                      {rows.length === 0 ? (
+                        <Text style={s.subEmpty}>No folders inside this one yet.</Text>
+                      ) : rows.map((r, i) => (
+                        <View key={i} style={[{ flexDirection: 'row' }, s.fGridRow]}>
+                          {r.map(k => <React.Fragment key={k.key}>{renderFolderCard({ item: k })}</React.Fragment>)}
+                        </View>
+                      ))}
+                    </>
+                  );
+                })()}
                 <Text style={s.sectionLabel}>Documents</Text>
                 <DownloadSelectionBar
                   selection={dl}
@@ -901,7 +1050,13 @@ export function ClientDocumentsScreen({
             }
             ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => load(true)} tintColor={Colors.primary} />}
-            ListEmptyComponent={<Text style={s.empty}>This folder is empty.</Text>}
+            ListEmptyComponent={
+              <Text style={s.empty}>
+                {subOfKey(openFolder.key) && childrenOf(subOfKey(openFolder.key)!.id).length
+                  ? 'No documents in this folder itself.'
+                  : 'This folder is empty.'}
+              </Text>
+            }
           />
         ) : cfoOverview ? (
           /* CFO — what a CFO client opens on: what we know about the business,
@@ -1027,6 +1182,43 @@ export function ClientDocumentsScreen({
         }}
         onCancel={() => setNewFolderOpen(false)}
       />
+
+      {/* A folder made inside the one that is open. Same client, same folder table,
+          so the database's rules for nesting hold. */}
+      <RenameModal
+        visible={!!newFolderIn}
+        title="New Folder"
+        confirmLabel="Create"
+        note={newFolderIn ? `Inside ${newFolderIn.name}.` : undefined}
+        current=""
+        onConfirm={async name => {
+          const parent = newFolderIn;
+          setNewFolderIn(null);
+          if (!parent) return;
+          const row = await createSubfolder(parent.parent_table, name, user?.email ?? null, parent.owner_email, parent.id);
+          if (row) setSubfolders(prev => [...prev, row]);
+          else Alert.alert('Could not make the folder', 'There may already be a folder with that name in here.');
+        }}
+        onCancel={() => setNewFolderIn(null)}
+      />
+
+      {moveSub && (
+        <MoveFolderSheet
+          sub={moveSub}
+          subfolders={subfolders}
+          onClose={() => setMoveSub(null)}
+          onMove={async into => {
+            const res = await nestSubfolder(moveSub.id, into);
+            if (!res.ok) return res.error;
+            setMoveSub(null);
+            // Its files may have changed folder table on the way, so both lists
+            // are read again rather than patched.
+            setSubfolders(await listSubfoldersForClient(client.email));
+            load(true);
+            return null;
+          }}
+        />
+      )}
 
       <RenameModal
         visible={!!renameSub}
@@ -1251,6 +1443,11 @@ const s = StyleSheet.create({
   },
   addFolderText: { color: '#F0E9DC', fontSize: 13, fontWeight: '800' },
 
+  // Inside a folder: the "Folders" heading with New Folder beside it.
+  subHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
+  subEmpty: { color: Colors.textMuted, fontSize: 12, marginBottom: 16 },
+  moveWhere: { color: Colors.textMuted, fontSize: 11, marginTop: 1 },
+  moveErr: { color: Colors.error, fontSize: 12, fontWeight: '600' },
   sectionLabel: {
     color: Colors.textMuted,
     fontSize: 11,

@@ -182,3 +182,25 @@ export async function moveSubfolderToFolder(
   }
   return { ok: true };
 }
+
+/**
+ * Put a subfolder inside another one — or, given null, take it back out to the
+ * top of the folder it is in. Belly Jane: "ma move ang isang folder para maging
+ * sub folder na siya".
+ *
+ * A database function (database/nest_subfolder.sql): if the target is in another
+ * folder, the subfolder and its files move there first, in the same transaction.
+ * Returns the reason on failure — a name already used inside the target is the
+ * usual one, and the message names it.
+ */
+export async function nestSubfolder(
+  subfolderId: string,
+  intoId: string | null,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const { error } = await supabase.rpc('nest_subfolder', { p_id: subfolderId, p_into: intoId });
+  if (error) {
+    console.error(`nestSubfolder [-> ${intoId ?? 'top'}]:`, error.message);
+    return { ok: false, error: error.message };
+  }
+  return { ok: true };
+}
