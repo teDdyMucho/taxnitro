@@ -8,12 +8,45 @@ import { useAuth } from '../context/AuthContext';
 import {
   listClientNotes, createClientNote, updateClientNote, deleteClientNote, ClientNote,
 } from '../db/clientNotes';
+import {
+  listSharedNotes, createSharedNote, updateSharedNote, deleteSharedNote,
+} from '../db/sharedNotes';
 
 // Business details — what the team knows about this client's business, written
 // down as it is learned so whoever opens their files next has the same picture.
 //
 // Internal to staff and admin. It sits above the folders because that is where
 // the context is needed: while looking at their files.
+//
+// With `shared`, the same panel holds the notes FTG leaves FOR the client, which
+// they read on their dashboard (src/db/sharedNotes.ts) — Camaree's "place on the
+// STAFF side for FTG to add comments that will be visible to clients".
+
+const NOTES = {
+  internal: { list: listClientNotes, create: createClientNote, update: updateClientNote, remove: deleteClientNote },
+  shared:   { list: listSharedNotes, create: createSharedNote, update: updateSharedNote, remove: deleteSharedNote },
+};
+
+const COPY = {
+  internal: {
+    title: 'Business details',
+    icon: 'information-circle-outline' as const,
+    subNone: 'What the team knows about this business',
+    subSome: (n: number) => `${n} note${n === 1 ? '' : 's'} · internal, the client never sees these`,
+    placeholder: (name: string) => `Something worth knowing about ${name}'s business…`,
+    empty: 'Nothing written down yet. Anything the team learns about how this business runs goes here, so the next person does not have to ask again.',
+    gone: 'It will be gone for everyone on the team. This cannot be undone.',
+  },
+  shared: {
+    title: 'Notes for the client',
+    icon: 'chatbubble-ellipses-outline' as const,
+    subNone: 'The client reads these on their dashboard',
+    subSome: (n: number) => `${n} note${n === 1 ? '' : 's'} · the client sees these`,
+    placeholder: (name: string) => `A note for ${name}…`,
+    empty: 'Nothing for the client yet. A note here shows on their dashboard, under What\'s Next, and they are told it is there.',
+    gone: 'It will be gone from the client\'s dashboard too. This cannot be undone.',
+  },
+};
 
 function whenLabel(iso: string): string {
   const d = new Date(iso);
@@ -21,8 +54,10 @@ function whenLabel(iso: string): string {
   return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
-function ConfirmDelete({ visible, onConfirm, onCancel }: {
+function ConfirmDelete({ visible, onConfirm, onCancel, gone }: {
   visible: boolean; onConfirm: () => void; onCancel: () => void;
+  /** What deleting it means, said in the dialog. */
+  gone: string;
 }) {
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
@@ -32,9 +67,7 @@ function ConfirmDelete({ visible, onConfirm, onCancel }: {
             <Ionicons name="trash-outline" size={26} color={Colors.error} />
           </View>
           <Text style={s.confirmTitle}>Delete this note?</Text>
-          <Text style={s.confirmSub}>
-            It will be gone for everyone on the team. This cannot be undone.
-          </Text>
+          <Text style={s.confirmSub}>{gone}</Text>
           <View style={s.confirmRow}>
             <TouchableOpacity style={s.confirmNo} onPress={onCancel} activeOpacity={0.85}>
               <Text style={s.confirmNoText}>No, keep it</Text>
@@ -49,13 +82,19 @@ function ConfirmDelete({ visible, onConfirm, onCancel }: {
   );
 }
 
-export function ClientDetailsPanel({ clientEmail, clientName }: {
+export function ClientDetailsPanel({ clientEmail, clientName, shared = false }: {
   clientEmail: string;
   clientName?: string;
+  /** Notes the client can read, rather than the team's own. */
+  shared?: boolean;
 }) {
   const { user } = useAuth();
+  const api = NOTES[shared ? 'shared' : 'internal'];
+  const copy = COPY[shared ? 'shared' : 'internal'];
   const [notes, setNotes] = useState<ClientNote[] | null>(null);
-  const [open, setOpen] = useState(true);
+  // Business details open by default; notes for the client start folded, as
+  // a third open panel would push the folders down the page.
+  const [open, setOpen] = useState(!shared);
   const [draft, setDraft] = useState('');
   const [adding, setAdding] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -64,15 +103,15 @@ export function ClientDetailsPanel({ clientEmail, clientName }: {
   const [confirmId, setConfirmId] = useState<string | null>(null);
 
   const load = useCallback(() => {
-    listClientNotes(clientEmail).then(setNotes);
-  }, [clientEmail]);
+    api.list(clientEmail).then(setNotes);
+  }, [clientEmail, api]);
 
   useEffect(() => { load(); }, [load]);
 
   const add = async () => {
     if (!draft.trim() || busy) return;
     setBusy(true);
-    const row = await createClientNote(clientEmail, draft, {
+    const row = await api.create(clientEmail, draft, {
       email: user?.email, name: user?.name,
     });
     setBusy(false);
@@ -85,7 +124,7 @@ export function ClientDetailsPanel({ clientEmail, clientName }: {
   const saveEdit = async (id: string) => {
     if (!editDraft.trim() || busy) return;
     setBusy(true);
-    const row = await updateClientNote(id, editDraft);
+    const row = await api.update(id, editDraft);
     setBusy(false);
     if (!row) return;
     setNotes(n => (n ?? []).map(x => (x.id === id ? row : x)));
@@ -94,7 +133,7 @@ export function ClientDetailsPanel({ clientEmail, clientName }: {
 
   const remove = async (id: string) => {
     setConfirmId(null);
-    const ok = await deleteClientNote(id);
+    const ok = await api.remove(id);
     if (ok) setNotes(n => (n ?? []).filter(x => x.id !== id));
   };
 
@@ -104,14 +143,12 @@ export function ClientDetailsPanel({ clientEmail, clientName }: {
     <View style={s.panel}>
       <TouchableOpacity style={s.head} onPress={() => setOpen(o => !o)} activeOpacity={0.7}>
         <View style={s.headIcon}>
-          <Ionicons name="information-circle-outline" size={16} color={Colors.primaryDark} />
+          <Ionicons name={copy.icon} size={16} color={Colors.primaryDark} />
         </View>
         <View style={{ flex: 1, minWidth: 0 }}>
-          <Text style={s.headTitle}>Business details</Text>
+          <Text style={s.headTitle}>{copy.title}</Text>
           <Text style={s.headSub} numberOfLines={1}>
-            {count === 0
-              ? 'What the team knows about this business'
-              : `${count} note${count === 1 ? '' : 's'} · internal, the client never sees these`}
+            {count === 0 ? copy.subNone : copy.subSome(count)}
           </Text>
         </View>
         <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={18} color={Colors.textMuted} />
@@ -129,7 +166,7 @@ export function ClientDetailsPanel({ clientEmail, clientName }: {
                     style={s.input}
                     value={draft}
                     onChangeText={setDraft}
-                    placeholder={`Something worth knowing about ${clientName?.split(' ')[0] || 'this client'}'s business…`}
+                    placeholder={copy.placeholder(clientName?.split(' ')[0] || 'this client')}
                     placeholderTextColor={Colors.textMuted}
                     multiline
                     autoFocus
@@ -162,10 +199,7 @@ export function ClientDetailsPanel({ clientEmail, clientName }: {
               )}
 
               {count === 0 && !adding && (
-                <Text style={s.empty}>
-                  Nothing written down yet. Anything the team learns about how this
-                  business runs goes here, so the next person does not have to ask again.
-                </Text>
+                <Text style={s.empty}>{copy.empty}</Text>
               )}
 
               {(notes ?? []).map(note => (
@@ -224,6 +258,7 @@ export function ClientDetailsPanel({ clientEmail, clientName }: {
       )}
 
       <ConfirmDelete
+        gone={copy.gone}
         visible={confirmId != null}
         onCancel={() => setConfirmId(null)}
         onConfirm={() => confirmId && remove(confirmId)}

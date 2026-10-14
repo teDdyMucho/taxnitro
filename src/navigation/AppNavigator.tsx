@@ -112,7 +112,15 @@ function WebLayout({ onLogout }: { onLogout: () => void }) {
 
   const renderScreen = () => {
     switch (activeTab) {
-      case 'Dashboard':     return <DashboardScreen />;
+      case 'Dashboard':
+        return (
+          <DashboardScreen
+            onGo={goTab}
+            onUpload={startUpload}
+            onOpenQuestionnaire={() => setQuestionnaireOpen(true)}
+            questionnaireDone={questionnaireDone}
+          />
+        );
       case 'Documents':     return <DocumentsScreen />;
       case 'Notifications': return <NotificationsScreen />;
       case 'Profile':

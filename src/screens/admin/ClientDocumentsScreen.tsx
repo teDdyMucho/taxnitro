@@ -1067,6 +1067,8 @@ export function ClientDocumentsScreen({
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => load(true)} tintColor={Colors.primary} />}
           >
             <ClientDetailsPanel clientEmail={client.email} clientName={client.full_name} />
+            {/* What FTG tells the client — it shows on their dashboard. */}
+            <ClientDetailsPanel shared clientEmail={client.email} clientName={client.full_name} />
             <ClientQuestionnairePanel
               clientEmail={client.email}
               accounts={normalizeBankAccounts(client.bank_accounts)}
@@ -1122,6 +1124,8 @@ export function ClientDocumentsScreen({
                 {!isTeamOne && (
                   <>
                     <ClientDetailsPanel clientEmail={client.email} clientName={client.full_name} />
+                    {/* What FTG tells the client — it shows on their dashboard. */}
+                    <ClientDetailsPanel shared clientEmail={client.email} clientName={client.full_name} />
                     <ClientQuestionnairePanel
                       clientEmail={client.email}
                       accounts={normalizeBankAccounts(client.bank_accounts)}
