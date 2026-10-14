@@ -56,7 +56,10 @@ const NAV_ITEMS: NavItem[] = [
   // What Team One has sent, waiting on staff. Team One itself sees it as My Updates.
   { name: 'TeamOne',   label: 'Team One',  active: 'briefcase',     inactive: 'briefcase-outline' },
   { name: 'Staff',     label: 'Staff',     active: 'shield',        inactive: 'shield-outline', adminOnly: true },
-  { name: 'Workflow',  label: 'Workflow',  active: 'git-branch',    inactive: 'git-branch-outline' },
+  // Workflow is archived — Camaree, 15 Oct: "not needed in the menu navigation. The
+  // admin team will not use it, but since it's built already, let's keep it
+  // archived." The screen and its data stay; this line brings it back:
+  // { name: 'Workflow',  label: 'Workflow',  active: 'git-branch',    inactive: 'git-branch-outline' },
   { name: 'Reports',   label: 'Financial Reports', active: 'analytics', inactive: 'analytics-outline' },
   { name: 'Profile',   label: 'Profile',   active: 'person',        inactive: 'person-outline' },
 ];
