@@ -13,7 +13,6 @@ import {
   ActivityIndicator,
   Alert,
   Platform,
-  Dimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -59,8 +58,6 @@ const WEBHOOK_URL = 'https://primary-production-6722.up.railway.app/webhook/file
 import { supabase } from '../../lib/supabase';
 import { clientMoveDestinations, folderLabel, isStaffDeliveryFolder } from '../../lib/folderCatalog';
 
-const { width: SW } = Dimensions.get('window');
-
 // ── Folder structure ──────────────────────────────────────────────────────────
 
 interface SubFolder {
@@ -85,6 +82,14 @@ interface RootFolder {
   subFolders: SubFolder[];
 }
 
+// The client's own, not one service's: the pile nobody has filed yet — what they
+// sent as "Unsure", and what arrives from Tax Nitro. So it is under every
+// service, as it is on the staff side; under TAX alone, a bookkeeping client
+// could never see it.
+const UNSORTED: SubFolder = {
+  key: 'unsorted_uploads', label: 'Unsorted Uploads', icon: 'help-circle-outline', color: '#D64541', bg: 'rgba(214,69,65,0.15)',
+};
+
 const FOLDERS: RootFolder[] = [
   {
     key: 'TAX',
@@ -95,7 +100,7 @@ const FOLDERS: RootFolder[] = [
     darkColor: '#008C5A',
     gradient: ['#2C2320', '#3A3131', '#4A3E3E'],
     subFolders: [
-      { key: 'unsorted_uploads',       label: 'Unsorted Uploads',   icon: 'help-circle-outline',        color: '#D64541', bg: 'rgba(214,69,65,0.15)'  },
+      UNSORTED,
       { key: 'tax_identification',     label: 'Identification',     icon: 'card-outline',               color: '#B5905B', bg: 'rgba(181,144,91,0.15)' },
       { key: 'tax_irs_notices',        label: 'IRS Notices',        icon: 'mail-open-outline',          color: '#E8B923', bg: 'rgba(232,185,35,0.15)' },
       { key: 'tax_ip_pins',            label: 'IP Pins',            icon: 'key-outline',                color: '#B5905B', bg: 'rgba(181,144,91,0.15)' },
@@ -122,6 +127,7 @@ const FOLDERS: RootFolder[] = [
     darkColor: '#006644',
     gradient: ['#3A3131', '#4A3E3E', '#2C2320'],
     subFolders: [
+      UNSORTED,
       { key: 'bk_contracts',         label: 'BK Contracts',               icon: 'document-text-outline', color: '#E8B923', bg: 'rgba(232,185,35,0.15)'  },
       { key: 'bk_invoices',          label: 'BK Invoices',                icon: 'receipt-outline',       color: '#B5905B', bg: 'rgba(181,144,91,0.15)'  },
       { key: 'bk_bank_accounts',     label: 'Bank Accounts',              icon: 'card-outline',          color: '#E8B923', bg: 'rgba(232,185,35,0.15)'  },
@@ -145,6 +151,7 @@ const FOLDERS: RootFolder[] = [
     darkColor: '#8B6914',
     gradient: ['#2C2320', '#4A3E3E', '#3A3131'],
     subFolders: [
+      UNSORTED,
       { key: 'cfo_contracts',       label: 'CFO Contracts',      icon: 'document-text-outline', color: '#E8B923', bg: 'rgba(232,185,35,0.15)' },
       { key: 'cfo_invoices',        label: 'CFO Invoices',       icon: 'receipt-outline',       color: '#B5905B', bg: 'rgba(181,144,91,0.15)' },
       { key: 'cfo_additional_docs', label: 'Additional CFO Docs', icon: 'folder-outline',        color: '#E8B923', bg: 'rgba(232,185,35,0.15)' },
@@ -173,31 +180,86 @@ function periodOf(doc: Document): string { return doc.period || monthOf(doc.crea
 type FilterType = 'all' | 'new' | 'viewed';
 
 // ═════════════════════════════════════════════════════════════════════════════
-// LEVEL 1 — Root folder cards
+// LEVEL 1 — The folders: a tab for each service, and all of its folders at once
 // ═════════════════════════════════════════════════════════════════════════════
+//
+// Camaree: "make the documents link in their menu open up to a page with folders
+// similar to how their profile looks on the staff side … just need to have
+// service tabs and folders visible more readily. Currently it takes too long to
+// navigate to the folders themselves."
+//
+// It was a card for each service, then that service's folders as a list, then
+// for Monthly Reporting and Prior Years one list more. Now the services are tabs
+// on the header, as on the staff side, and the chosen one shows every folder as
+// a tile, the grouped ones under the group's name. Any folder is one tap away.
 
-function RootView({ folders, documents, loading, refreshing, onRefresh, onSelect, pb, pt }: {
-  folders: RootFolder[]; documents: Document[]; loading: boolean; refreshing: boolean;
-  onRefresh: () => void; onSelect: (r: RootFolder) => void;
+function FoldersView({ roots, active, onTab, documents, loading, refreshing, onRefresh, onOpen, pb, pt }: {
+  roots: RootFolder[]; active: RootFolder; onTab: (r: RootFolder) => void;
+  documents: Document[]; loading: boolean; refreshing: boolean; onRefresh: () => void;
+  /** Open a folder; `group` is the one it sits under, if any. */
+  onOpen: (sf: SubFolder, group: SubFolder | null) => void;
   pb: number; pt: number;
 }) {
-  const { isDesktop } = useResponsive();   // 3-column category grid on desktop
+  const { isPhone, isTablet } = useResponsive();
+  // As many across as the staff side shows.
+  const cols   = isPhone ? 3 : isTablet ? 4 : 6;
   const total  = documents.length;
   const unread = documents.filter(d => d.status !== 'viewed').length;
 
-  const stats = (root: RootFolder) => {
-    // Down through the groups, not just the folders on the face of the card.
-    // A group -- Monthly Reporting, Prior Years -- is not a table, so matching
-    // its key against a document's folder found nothing, and everything filed
-    // in Required Info, For Client Review, Final Statements, Previous Tax
-    // Returns or Transcripts went uncounted: a client whose only files were
-    // their four monthly uploads read "0 documents" with no new badge, while
-    // the screen one tap in counted them correctly.
-    const keys = (list: SubFolder[]): string[] =>
-      list.flatMap(sf => (sf.children ? keys(sf.children) : [sf.key]));
-    const leaves = keys(root.subFolders);
-    const docs = documents.filter(d => leaves.includes(d.document_type ?? ''));
-    return { total: docs.length, unread: docs.filter(d => d.status !== 'viewed').length };
+  const folderDl = useDownloadSelection<Document>(
+    useCallback((d: Document) => ({ url: d.document_url, name: displayName(d) }), []),
+  );
+
+  const tile = (sf: SubFolder, group: SubFolder | null) => {
+    const files = documents.filter(d => d.document_type === sf.key);
+    const fresh = files.filter(d => d.status !== 'viewed').length;
+    return (
+      <TouchableOpacity
+        key={sf.key}
+        style={s.fTile}
+        onPress={() => onOpen(sf, group)}
+        activeOpacity={0.75}
+        accessibilityRole="button"
+      >
+        {/* A drawn folder, as on the staff side: a tab on a body. */}
+        <View style={[s.folderArt, isPhone && s.folderArtPhone]}>
+          <View style={s.folderTab} />
+          <View style={s.folderBody} />
+          {fresh > 0 && (
+            <View style={s.fTileBadge}><Text style={s.fTileBadgeText}>{fresh}</Text></View>
+          )}
+        </View>
+        <Text style={s.fTileName} numberOfLines={2}>{sf.label}</Text>
+        <Text style={s.fTileMeta}>{files.length} doc{files.length !== 1 ? 's' : ''}</Text>
+        {/* The whole folder, without opening it. */}
+        {files.length > 0 && (
+          <TouchableOpacity
+            onPress={() => folderDl.download(files, sf.label)}
+            disabled={folderDl.busy}
+            style={[s.fTileDl, folderDl.busy && { opacity: 0.5 }]}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Ionicons name="download-outline" size={14} color="#B5905B" />
+          </TouchableOpacity>
+        )}
+      </TouchableOpacity>
+    );
+  };
+
+  // In rows, the last one filled out with blanks, so a folder on its own lines
+  // up under the ones above it rather than stretching across.
+  const grid = (list: SubFolder[], group: SubFolder | null) => {
+    const rows: (SubFolder | null)[][] = [];
+    for (let i = 0; i < list.length; i += cols) {
+      const row: (SubFolder | null)[] = list.slice(i, i + cols);
+      while (row.length < cols) row.push(null);
+      rows.push(row);
+    }
+    return rows.map((row, i) => (
+      <View key={i} style={s.fGridRow}>
+        {row.map((sf, j) => (sf ? tile(sf, group) : <View key={`blank${j}`} style={s.fTileBlank} />))}
+      </View>
+    ));
   };
 
   return (
@@ -218,206 +280,40 @@ function RootView({ folders, documents, loading, refreshing, onRefresh, onSelect
             {loading ? 'Loading…' : `${total} file${total !== 1 ? 's' : ''}${unread > 0 ? ` · ${unread} unread` : ''}`}
           </Text>
         </View>
-        <View style={s.headerBadge}>
-          <Ionicons name="folder" size={14} color="#2C2320" />
-          <Text style={s.headerBadgeText}>{folders.length} {folders.length === 1 ? 'Category' : 'Categories'}</Text>
-        </View>
       </LinearGradient>
 
-      <ScrollView
-        contentContainerStyle={[s.rootScroll, { paddingBottom: pb }]}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor='#E8B923' />}
-        showsVerticalScrollIndicator={false}
-      >
-        <Text style={s.sectionLabel}>Select a category</Text>
-
-          <View style={isDesktop ? s.catGridDesktop : undefined}>
-          {folders.map(root => {
-            const { total: rTotal, unread: rUnread } = stats(root);
-            return (
-              <TouchableOpacity key={root.key} onPress={() => onSelect(root)} activeOpacity={0.88} style={[s.rootCardWrap, isDesktop && s.rootCardWrapDesktop]}>
-                <LinearGradient colors={root.gradient} style={s.rootCard} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
-
-                  {/* Top row */}
-                  <View style={s.rootCardTop}>
-                    <View style={s.rootIconBox}>
-                      <Text style={s.rootIconText}>{root.label}</Text>
-                    </View>
-                    <View style={s.rootCardTopRight}>
-                      {rUnread > 0 && (
-                        <View style={s.rootUnreadBadge}>
-                          <Text style={s.rootUnreadText}>{rUnread} new</Text>
-                        </View>
-                      )}
-                      <View style={s.rootChevron}>
-                        <Ionicons name="arrow-forward" size={16} color="rgba(255,255,255,0.9)" />
-                      </View>
-                    </View>
-                  </View>
-
-                  {/* Title */}
-                  <Text style={s.rootCardTitle}>{root.description}</Text>
-
-                  {/* Divider */}
-                  <View style={s.rootDivider} />
-
-                  {/* Subfolder chips */}
-                  <View style={s.chipRow}>
-                    {root.subFolders.map(sf => (
-                      <View key={sf.key} style={s.chip}>
-                        <Ionicons name={sf.icon} size={11} color="rgba(255,255,255,0.7)" />
-                        <Text style={s.chipText} numberOfLines={1}>{sf.label}</Text>
-                      </View>
-                    ))}
-                  </View>
-
-                  {/* Stats row */}
-                  <View style={s.rootStatRow}>
-                    <View style={s.rootStatItem}>
-                      <Ionicons name="folder-open-outline" size={13} color="rgba(255,255,255,0.5)" />
-                      <Text style={s.rootStatText}>{root.subFolders.length} folders</Text>
-                    </View>
-                    <View style={s.rootStatDot} />
-                    <View style={s.rootStatItem}>
-                      <Ionicons name="document-outline" size={13} color="rgba(255,255,255,0.5)" />
-                      <Text style={s.rootStatText}>{rTotal} document{rTotal !== 1 ? 's' : ''}</Text>
-                    </View>
-                  </View>
-                </LinearGradient>
-              </TouchableOpacity>
-            );
-          })}
-          </View>
-
-          {/* Info card */}
-          <View style={s.infoCard}>
-            <Ionicons name="information-circle-outline" size={16} color={Colors.primary} />
-            <Text style={s.infoText}>
-              Documents are automatically synced. Tap any category to view your files.
-            </Text>
-          </View>
-      </ScrollView>
-    </View>
-  );
-}
-
-// ═════════════════════════════════════════════════════════════════════════════
-// LEVEL 2 — Subfolder list
-// ═════════════════════════════════════════════════════════════════════════════
-
-function SubFolderView({ root, folders, title, documents, refreshing, onRefresh, onBack, onSelect, pb, pt }: {
-  root: RootFolder; folders?: SubFolder[]; title?: string; documents: Document[]; refreshing: boolean;
-  onRefresh: () => void; onBack: () => void;
-  onSelect: (sf: SubFolder) => void; pb: number; pt: number;
-}) {
-  // `folders` lets us reuse this view for a nested group's children (3rd level).
-  const list = folders ?? root.subFolders;
-
-  // Count documents for a folder — a GROUP folder sums its children's docs.
-  const folderDl = useDownloadSelection<Document>(
-    useCallback((d: Document) => ({ url: d.document_url, name: displayName(d) }), []),
-  );
-
-  /** Every document in a folder — a group folder pulls in its children's too. */
-  const docsIn = (sf: SubFolder): Document[] =>
-    sf.children
-      ? sf.children.flatMap(c => documents.filter(d => d.document_type === c.key))
-      : documents.filter(d => d.document_type === sf.key);
-
-  const countFor = (sf: SubFolder): { total: number; unread: number } => {
-    if (sf.children) {
-      return sf.children.reduce((acc, c) => {
-        const cc = countFor(c);
-        return { total: acc.total + cc.total, unread: acc.unread + cc.unread };
-      }, { total: 0, unread: 0 });
-    }
-    const docs = documents.filter(d => d.document_type === sf.key);
-    return { total: docs.length, unread: docs.filter(d => d.status !== 'viewed').length };
-  };
-
-  const rootTotal = list.reduce((acc, sf) => acc + countFor(sf).total, 0);
-
-  return (
-    <View style={s.screen}>
-      {/* ── Header — FTG gradient ── */}
-      <LinearGradient colors={['#3A3131', '#4A3E3E', '#3A3131']} style={[s.subHeader, { paddingTop: pt }]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
-        <View style={s.subHeaderRow}>
-          <TouchableOpacity style={s.backBtn} onPress={onBack}>
-            <Ionicons name="chevron-back" size={20} color="rgba(255,255,255,0.9)" />
-          </TouchableOpacity>
-          <View style={s.subHeaderCenter}>
-            <View style={s.subRootBadge}>
-              <Text style={s.subRootBadgeText}>{root.label}</Text>
-            </View>
-            <Text style={s.subHeaderTitle}>{title ?? root.description}</Text>
-          </View>
-        </View>
-        <View style={s.subHeaderMeta}>
-          <View style={s.metaPill}>
-            <Ionicons name="folder-outline" size={11} color="rgba(255,255,255,0.6)" />
-            <Text style={s.metaPillText}>{list.length} folders</Text>
-          </View>
-          <View style={s.metaPill}>
-            <Ionicons name="document-outline" size={11} color="rgba(255,255,255,0.6)" />
-            <Text style={s.metaPillText}>{rootTotal} documents</Text>
-          </View>
-        </View>
-      </LinearGradient>
-
-      <ScrollView
-        contentContainerStyle={[s.subScroll, { paddingBottom: pb }]}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor='#E8B923' />}
-        showsVerticalScrollIndicator={false}
-      >
-        <Text style={s.sectionLabel}>Folders</Text>
-
-        {list.map((sf, idx) => {
-          const { total, unread } = countFor(sf);
-          const pct = rootTotal > 0 ? (total / rootTotal) * 100 : 0;
+      {/* The services, on the header like file dividers. Shown for a single
+          service too: the tab also says whose folders these are. */}
+      <View style={[s.tabBar, isPhone && s.tabBarPhone]}>
+        {roots.map(r => {
+          const on = r.key === active.key;
           return (
-            <TouchableOpacity key={sf.key} style={s.sfCard} onPress={() => onSelect(sf)} activeOpacity={0.8}>
-              {/* Left icon */}
-              <View style={[s.sfIconBox, { backgroundColor: 'rgba(232,185,35,0.12)' }]}>
-                <Ionicons name={sf.icon} size={24} color="#E8B923" />
-              </View>
-
-              {/* Center content */}
-              <View style={s.sfBody}>
-                <View style={s.sfTitleRow}>
-                  <Text style={s.sfName}>{sf.label}</Text>
-                  {unread > 0 && (
-                    <View style={[s.sfBadge, { backgroundColor: '#E8B923' }]}>
-                      <Text style={[s.sfBadgeText, { color: '#2C2320' }]}>{unread}</Text>
-                    </View>
-                  )}
-                </View>
-                <Text style={s.sfMeta}>
-                  {total} document{total !== 1 ? 's' : ''}
-                  {unread > 0 ? ` · ${unread} unread` : total === 0 ? ' · Empty' : ' · All viewed'}
-                </Text>
-                {/* Mini progress bar */}
-                <View style={s.miniBar}>
-                  <View style={[s.miniBarFill, { width: `${pct}%` as any, backgroundColor: '#E8B923' }]} />
-                </View>
-              </View>
-
-              {/* Take the whole folder without opening it. */}
-              {total > 0 && (
-                <TouchableOpacity
-                  style={[s.folderDlBtn, folderDl.busy && { opacity: 0.5 }]}
-                  onPress={() => folderDl.download(docsIn(sf), sf.label)}
-                  disabled={folderDl.busy}
-                  activeOpacity={0.75}
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                >
-                  <Ionicons name="download-outline" size={16} color="#B5905B" />
-                </TouchableOpacity>
-              )}
-
-              <Ionicons name="chevron-forward" size={17} color={Colors.textMuted} />
+            <TouchableOpacity
+              key={r.key}
+              onPress={() => onTab(r)}
+              style={[s.tab, isPhone && s.tabPhone, on ? s.tabOn : s.tabOff]}
+              activeOpacity={0.85}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: on }}
+            >
+              <Text style={[s.tabText, on ? s.tabTextOn : s.tabTextOff]}>{r.label}</Text>
             </TouchableOpacity>
           );
         })}
+      </View>
+
+      <ScrollView
+        contentContainerStyle={[s.foldersScroll, { paddingBottom: pb }]}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor='#E8B923' />}
+        showsVerticalScrollIndicator={false}
+      >
+        {grid(active.subFolders.filter(sf => !sf.children), null)}
+        {active.subFolders.filter(sf => !!sf.children).map(g => (
+          <View key={g.key}>
+            <Text style={s.groupLabel}>{g.label}</Text>
+            {grid(g.children!, g)}
+          </View>
+        ))}
       </ScrollView>
 
       <DownloadNotice message={folderDl.notice} />
@@ -1255,7 +1151,9 @@ function DetailRow({ icon, label, value, color }: {
 // Root screen (state machine)
 // ═════════════════════════════════════════════════════════════════════════════
 
-type Nav = 'root' | 'sub' | 'group' | 'docs';
+// The folders, or one folder's files. Places saved before the folders were one
+// page ('sub', 'group') come back as the folders of the same service.
+type Nav = 'root' | 'docs';
 
 /**
  * Where the reader last was. This screen is unmounted whenever another tab is
@@ -1298,7 +1196,7 @@ export function DocumentsScreen() {
       if (place?.client?.rootKey) {
         lastPlace = {
           userId: user.id,
-          nav: (place.client.nav as Nav) ?? 'root',
+          nav: place.client.nav === 'docs' ? 'docs' : 'root',
           rootKey: place.client.rootKey ?? null,
           groupKey: place.client.groupKey ?? null,
           subKey: place.client.subKey ?? null,
@@ -1426,38 +1324,27 @@ export function DocumentsScreen() {
     [documents, activeSub],
   );
 
-  // Only show the categories for the services this client has (BK / TAX / CFO),
-  // and within each, hide requirement sub-folders that don't apply (e.g. the QBO
-  // folder when we already have QBO access).
+  // Only the services this client has (BK / TAX / CFO).
   const visibleFolders = useMemo(() => {
     const svc = user?.services && user.services.length > 0 ? user.services : ['BK'];
     return FOLDERS.filter(f => svc.includes(f.service));
   }, [user?.services]);
+  // The tab shown: the one they were on, while they still have that service.
+  const shownRoot = (activeRoot && visibleFolders.includes(activeRoot)) ? activeRoot : visibleFolders[0];
+  const showDocs = nav === 'docs' && !!activeSub && !!activeRoot && visibleFolders.includes(activeRoot);
 
   return (
     <>
-      {nav === 'root' && (
-        <RootView folders={visibleFolders} documents={documents} loading={loading} refreshing={refreshing} onRefresh={onRefresh}
-          onSelect={r => { setActiveRoot(r); setActiveGroup(null); setNav('sub'); }} pb={pb} pt={pt} />
-      )}
-      {nav === 'sub' && !!activeRoot && (
-        <SubFolderView root={activeRoot} documents={documents} refreshing={refreshing} onRefresh={onRefresh}
-          onBack={() => setNav('root')}
-          onSelect={sf => {
-            if (sf.children) { setActiveGroup(sf); setNav('group'); }   // open nested group
-            else { setActiveGroup(null); setActiveSub(sf); setNav('docs'); }
-          }}
+      {!showDocs && (
+        <FoldersView roots={visibleFolders} active={shownRoot} onTab={setActiveRoot}
+          documents={documents} loading={loading} refreshing={refreshing} onRefresh={onRefresh}
+          onOpen={(sf, group) => { setActiveRoot(shownRoot); setActiveGroup(group); setActiveSub(sf); setNav('docs'); }}
           pb={pb} pt={pt} />
       )}
-      {nav === 'group' && !!activeRoot && !!activeGroup && (
-        <SubFolderView root={activeRoot} folders={activeGroup.children} title={activeGroup.label}
-          documents={documents} refreshing={refreshing} onRefresh={onRefresh}
-          onBack={() => setNav('sub')} onSelect={sf => { setActiveSub(sf); setNav('docs'); }} pb={pb} pt={pt} />
-      )}
-      {nav === 'docs' && !!activeSub && !!activeRoot && (
-        <DocListView sf={activeSub} root={activeRoot} rootColor={activeRoot.color} documents={subDocs}
+      {showDocs && (
+        <DocListView sf={activeSub!} root={activeRoot!} rootColor={activeRoot!.color} documents={subDocs}
           refreshing={refreshing} onRefresh={onRefresh}
-          onBack={() => setNav(activeGroup ? 'group' : 'sub')} onDocPress={setSelectedDoc}
+          onBack={() => setNav('root')} onDocPress={setSelectedDoc}
           onUploadDone={d => setDocuments(prev => prev.find(x => x.id === d.id) ? prev : [d, ...prev])}
           userId={user?.id ?? ''} userEmail={user?.email ?? ''} pb={pb} pt={pt} />
       )}
@@ -1536,65 +1423,51 @@ const s = StyleSheet.create({
   decorCircle2: { position: 'absolute', width: 120, height: 120, borderRadius: 60, backgroundColor: 'rgba(232,185,35,0.05)', bottom: -30, left: 60 } as any,
   pageTitle:  { color: '#FFFFFF', fontSize: 24, fontWeight: '800', letterSpacing: -0.5 },
   pageSub:    { color: 'rgba(255,255,255,0.55)', fontSize: 12, marginTop: 3 },
-  headerBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#E8B923', paddingHorizontal: 12, paddingVertical: 7, borderRadius: 20 },
-  headerBadgeText: { color: '#2C2320', fontSize: 12, fontWeight: '700' },
 
-  sectionLabel: { color: Colors.textMuted, fontSize: 11, fontWeight: '700', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 12, paddingHorizontal: 20, paddingTop: 20 },
+  // ── Service tabs, as on the staff side ──
+  // On the dark header and meeting the page below, so the chosen one reads as
+  // the front of a set of file dividers. Right-aligned, as the design has them.
+  tabBar:      { flexDirection: 'row', justifyContent: 'flex-end', gap: 4, backgroundColor: '#3A3131', paddingHorizontal: 40 },
+  tab:         { minWidth: 110, paddingVertical: 9, paddingHorizontal: 22, alignItems: 'center', borderTopLeftRadius: 12, borderTopRightRadius: 12 },
+  tabOn:       { backgroundColor: Colors.bgDeep },
+  tabOff:      { backgroundColor: '#C9A75C' },
+  tabText:     { fontSize: 13, fontWeight: '800', letterSpacing: 0.6 },
+  tabTextOn:   { color: Colors.textPrimary },
+  tabTextOff:  { color: '#3A3131' },
+  // Phone: tighter, so a client with several services keeps every tab on screen.
+  tabBarPhone: { paddingHorizontal: 12 },
+  tabPhone:    { minWidth: 0, paddingHorizontal: 18 },
 
-  // root cards
-  rootScroll:    { paddingBottom: 20 },
-  rootCardWrap:  { marginHorizontal: 16, marginBottom: 14, borderRadius: 22, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.35, shadowRadius: 12, elevation: 8 },
-  // Desktop: lay the category cards out as a 3-column grid.
-  catGridDesktop:      { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 8 },
-  rootCardWrapDesktop: { flexBasis: '31%', flexGrow: 1, marginHorizontal: 8 },
-  rootCard:      { padding: 22 },
-  rootCardTop:   { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 },
-  rootIconBox:   { width: 54, height: 54, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.15)', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)' },
-  rootIconText:  { color: Colors.white, fontSize: 16, fontWeight: '900', letterSpacing: 1 },
-  rootCardTopRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  rootUnreadBadge:  { backgroundColor: '#E8B923', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 },
-  rootUnreadText:   { color: '#2C2320', fontSize: 11, fontWeight: '700' },
-  rootChevron:   { width: 32, height: 32, borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.15)', alignItems: 'center', justifyContent: 'center' },
-  rootCardTitle: { color: Colors.white, fontSize: 17, fontWeight: '700', marginBottom: 16, opacity: 0.95 },
-  rootDivider:   { height: 1, backgroundColor: 'rgba(255,255,255,0.12)', marginBottom: 14 },
-  chipRow:       { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 16 },
-  chip:          { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: 'rgba(255,255,255,0.1)', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20, borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)' },
-  chipText:      { color: 'rgba(255,255,255,0.85)', fontSize: 11, fontWeight: '500', maxWidth: SW / 4 },
-  rootStatRow:   { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  rootStatItem:  { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  rootStatText:  { color: 'rgba(255,255,255,0.5)', fontSize: 12 },
-  rootStatDot:   { width: 3, height: 3, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.3)' },
+  // ── Folder tiles, as on the staff side ──
+  foldersScroll: { padding: 16 },
+  fGridRow:   { flexDirection: 'row', gap: 12, marginBottom: 14 },
+  fTile:      { flex: 1, maxWidth: 150, minWidth: 0, alignItems: 'center', paddingVertical: 10, gap: 4 },
+  fTileBlank: { flex: 1, maxWidth: 150, minWidth: 0 },
+  // The folder shape: a small tab sitting on a larger body.
+  folderArt:      { width: 96, height: 74, justifyContent: 'flex-end' },
+  folderArtPhone: { width: '100%', maxWidth: 96 },
+  folderTab:  {
+    position: 'absolute', top: 0, left: 0, width: 40, height: 14, backgroundColor: '#F6E4BE',
+    borderTopLeftRadius: 5, borderTopRightRadius: 5, borderWidth: 1, borderBottomWidth: 0, borderColor: '#D9B87A',
+  },
+  folderBody: { width: '100%', height: 62, backgroundColor: '#FDF1D9', borderRadius: 7, borderTopLeftRadius: 2, borderWidth: 1, borderColor: '#D9B87A' },
+  fTileBadge: {
+    position: 'absolute', top: 8, right: -4, minWidth: 20, height: 20, borderRadius: 10,
+    backgroundColor: '#E8B923', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 5,
+  },
+  fTileBadgeText: { color: '#3A3131', fontSize: 11, fontWeight: '800' },
+  fTileName: { color: Colors.textPrimary, fontSize: 13, fontWeight: '600', textAlign: 'center', marginTop: 4 },
+  fTileMeta: { color: Colors.textMuted, fontSize: 11 },
+  fTileDl:   { marginTop: 2, padding: 2 },
+  // A group's name over its folders: Monthly Reporting, Prior Years.
+  groupLabel: { color: Colors.textMuted, fontSize: 11, fontWeight: '700', letterSpacing: 1, textTransform: 'uppercase', marginTop: 6, marginBottom: 6 },
 
-  // info card
-  infoCard: { marginHorizontal: 16, marginTop: 4, flexDirection: 'row', alignItems: 'flex-start', gap: 10, backgroundColor: 'rgba(37,99,235,0.08)', borderRadius: 14, padding: 14, borderWidth: 1, borderColor: 'rgba(37,99,235,0.2)' },
-  infoText: { color: Colors.textMuted, fontSize: 12, flex: 1, lineHeight: 18 },
+
 
   // back btn
   backBtn: { width: 36, height: 36, borderRadius: 11, backgroundColor: 'rgba(255,255,255,0.12)', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)' },
 
-  // subfolder header
-  subHeader:     { paddingHorizontal: 16, paddingBottom: 16 },
-  subHeaderRow:  { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 14 },
-  subHeaderCenter: { flex: 1, gap: 4 },
-  subRootBadge:  { alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, backgroundColor: '#E8B923' },
-  subRootBadgeText: { color: '#2C2320', fontSize: 12, fontWeight: '800', letterSpacing: 0.5 },
-  subHeaderTitle: { color: '#FFFFFF', fontSize: 17, fontWeight: '700' },
-  subHeaderMeta: { flexDirection: 'row', gap: 10, marginTop: 2 },
-  metaPill:      { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  metaPillText:  { color: 'rgba(255,255,255,0.5)', fontSize: 11 },
 
-  // subfolder cards
-  subScroll: { paddingHorizontal: 16, paddingBottom: 20 },
-  sfCard:    { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFFFFF', borderRadius: 16, padding: 16, marginBottom: 10, borderWidth: 1, borderColor: '#E8E0D0', gap: 14, shadowColor: '#3A3131', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 2 },
-  sfIconBox: { width: 52, height: 52, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
-  sfBody:    { flex: 1 },
-  sfTitleRow:{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 },
-  sfName:    { color: '#1C1713', fontSize: 15, fontWeight: '700', flex: 1 },
-  sfBadge:   { minWidth: 20, height: 20, borderRadius: 10, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 5 },
-  sfBadgeText: { color: '#2C2320', fontSize: 10, fontWeight: '800' },
-  sfMeta:    { color: '#A8998A', fontSize: 12, marginBottom: 8 },
-  miniBar:   { height: 3, backgroundColor: '#F5F0E8', borderRadius: 2, overflow: 'hidden' },
-  miniBarFill: { height: '100%', borderRadius: 2 },
   /* Subfolder cards inside a folder — read-only for the client */
   subSectionLabel: {
     color: Colors.textMuted, fontSize: 11, fontWeight: '700',
@@ -1620,12 +1493,6 @@ const s = StyleSheet.create({
   },
   subCardBadgeText: { color: '#2C2320', fontSize: 10, fontWeight: '800' },
 
-  folderDlBtn: {
-    width: 34, height: 34, borderRadius: 10,
-    alignItems: 'center', justifyContent: 'center',
-    backgroundColor: 'rgba(232,185,35,0.12)',
-    borderWidth: 1, borderColor: 'rgba(232,185,35,0.35)',
-  },
   // Checkbox occupies the type-badge slot while marking, so rows don't shift.
   extBoxSlot: { width: 52, height: 52, alignItems: 'center', justifyContent: 'center' },
   docCardMarked: { backgroundColor: 'rgba(232,185,35,0.10)', borderColor: 'rgba(232,185,35,0.55)' },
