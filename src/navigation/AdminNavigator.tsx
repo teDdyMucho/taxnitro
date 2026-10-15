@@ -97,6 +97,9 @@ export function AdminNavigator({ onLogout }: { onLogout: () => void }) {
   // Which folder of theirs was open. Held here because the client's page is
   // unmounted when another tab is shown, and its own state goes with it.
   const [clientFolderKey, setClientFolderKey] = useState<string | null>(null);
+  // Where Back on a client's page goes, when they were opened from somewhere
+  // other than the client list — the dashboard's progress lists.
+  const [backTo, setBackTo] = useState<AdminTab | null>(null);
 
   // Signing out and back in is exactly when picking up where you left off
   // matters most, and React state does not survive it — so it is kept on the
@@ -149,6 +152,7 @@ export function AdminNavigator({ onLogout }: { onLogout: () => void }) {
   const handleTabPress = (name: AdminTab) => {
     setActiveTab(name);
     setShowDashboard(false);
+    setBackTo(null);
   };
 
   const renderScreen = () => {
@@ -172,7 +176,10 @@ export function AdminNavigator({ onLogout }: { onLogout: () => void }) {
           client={selectedClient}
           openFolderKey={clientFolderKey}
           onFolderChange={setClientFolderKey}
-          onBack={() => { setSelectedClient(null); setClientFolderKey(null); }}
+          onBack={() => {
+            setSelectedClient(null); setClientFolderKey(null);
+            if (backTo) { setActiveTab(backTo); setBackTo(null); }
+          }}
           onOpenDashboard={isTeamOne ? undefined : () => setShowDashboard(true)}
           // The tray edits the client in place, so keep our copy in step.
           onClientChange={setSelectedClient}
@@ -182,7 +189,19 @@ export function AdminNavigator({ onLogout }: { onLogout: () => void }) {
     // A tab Team One does not have — from a saved place, say — shows its clients.
     const tab: AdminTab = isTeamOne && !TEAM_ONE_TABS.includes(activeTab) ? 'Clients' : activeTab;
     switch (tab) {
-      case 'Dashboard': return <AdminDashboardScreen onViewAllDocuments={() => setActiveTab('Documents')} />;
+      case 'Dashboard':
+        return (
+          <AdminDashboardScreen
+            onViewAllDocuments={() => setActiveTab('Documents')}
+            onOpenClient={c => {
+              if (c.id !== selectedClient?.id) setClientFolderKey(null);
+              setSelectedClient(c);
+              setShowDashboard(false);
+              setActiveTab('Clients');
+              setBackTo('Dashboard');
+            }}
+          />
+        );
       case 'Documents': return <AdminDocumentsScreen />;
       case 'Clients':
         return (
@@ -193,6 +212,7 @@ export function AdminNavigator({ onLogout }: { onLogout: () => void }) {
               if (c.id !== selectedClient?.id) setClientFolderKey(null);
               setSelectedClient(c);
               setShowDashboard(section === 'cfo');
+              setBackTo(null);
             }}
           />
         );

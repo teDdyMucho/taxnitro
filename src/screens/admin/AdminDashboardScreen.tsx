@@ -12,8 +12,9 @@ import { useSheetStyles } from '../../hooks/useSheetStyles';
 import { useResponsive } from '../../hooks/useResponsive';
 import { supabase } from '../../lib/supabase';
 import { FOLDER_TABLES } from '../../db/documents';
+import { normalizeProfile, type Profile } from '../../db/profiles';
 import {
-  PROGRESS_COLOR, PROGRESS_LABEL, effectiveProgress, normalizeServiceProgress,
+  PROGRESS_COLOR, PROGRESS_LABEL, effectiveProgress,
   isMonthlyService, type WorkProgress,
 } from '../../lib/serviceProgress';
 import type { ClientService } from '../../context/AuthContext';
@@ -102,6 +103,10 @@ interface Stats {
   // service, read through effectiveProgress so BK and CFO's Current has
   // already lapsed to Not Started when the month it was set in is over.
   progressCounts: Record<CategoryKey, Record<WorkProgress, number>>;
+  // The clients themselves, so a figure on a progress card can open the list it
+  // counts — Daja: "if you click on 'in progress' for Tax, can it show the list
+  // of those clients and allow you to click into them".
+  clients:       Profile[];
   totalDocs:     number;
   newDocs:       number;
   docsThisWeek:  number;
@@ -123,6 +128,9 @@ interface Stats {
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 const fmtDate = (iso: string) =>
   new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+
+const initialsOf = (name: string) =>
+  name.split(/\s+/).filter(Boolean).map(w => w[0]).join('').toUpperCase().slice(0, 2) || '?';
 
 const fmtTime = (iso: string) =>
   new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
@@ -158,7 +166,11 @@ function PulsingDot() {
 // ─── Main screen ─────────────────────────────────────────────────────────────
 type RecentDoc = Stats['recentUploads'][number];
 
-export function AdminDashboardScreen({ onViewAllDocuments }: { onViewAllDocuments?: () => void }) {
+export function AdminDashboardScreen({ onViewAllDocuments, onOpenClient }: {
+  onViewAllDocuments?: () => void;
+  /** Open a client's profile, from the list behind a progress figure. */
+  onOpenClient?: (client: Profile) => void;
+}) {
   const { user, isLoading: authLoading } = useAuth();
   // On a phone the cards stack, one per line; at a fixed 285 they sat narrow
   // with the rest of the line empty beside them.
@@ -169,7 +181,7 @@ export function AdminDashboardScreen({ onViewAllDocuments }: { onViewAllDocument
   const mountedRef = useRef(true);
   useEffect(() => () => { mountedRef.current = false; }, []);
 
-  const [stats, setStats]           = useState<Stats>({ totalClients: 0, totalStaff: 0, clientsByService: { TAX: 0, YER: 0, BK: 0, CFO: 0 }, progressCounts: emptyProgressCounts(), svcByEmail: {}, nameByEmail: {}, pendingFtg: 0, forReview: 0, totalDocs: 0, newDocs: 0, docsThisWeek: 0, folderCounts: [], recentUploads: [] });
+  const [stats, setStats]           = useState<Stats>({ totalClients: 0, totalStaff: 0, clientsByService: { TAX: 0, YER: 0, BK: 0, CFO: 0 }, progressCounts: emptyProgressCounts(), clients: [], svcByEmail: {}, nameByEmail: {}, pendingFtg: 0, forReview: 0, totalDocs: 0, newDocs: 0, docsThisWeek: 0, folderCounts: [], recentUploads: [] });
   const [loading, setLoading]       = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [menuDoc, setMenuDoc]       = useState<RecentDoc | null>(null);
@@ -178,6 +190,8 @@ export function AdminDashboardScreen({ onViewAllDocuments }: { onViewAllDocument
   const [uploadPage, setUploadPage] = useState<Record<string, number>>({});
   // Which chart bar the pointer is over, for the tooltip.
   const [hoverBar, setHoverBar]     = useState<CategoryKey | null>(null);
+  // The progress line whose clients are listed, if one was tapped.
+  const [progressOpen, setProgressOpen] = useState<{ svc: CategoryKey; status: WorkProgress } | null>(null);
 
   // ── Data fetching ─────────────────────────────────────────────────────────
   const load = useCallback(async (isRefresh = false) => {
@@ -205,10 +219,9 @@ export function AdminDashboardScreen({ onViewAllDocuments }: { onViewAllDocument
       // Each client counted once per service they take, under the label that
       // service carries today.
       const progressCounts = emptyProgressCounts();
-      clientRows.forEach(c => {
-        const sp = normalizeServiceProgress(c.service_progress);
-        ((c.services ?? ['BK']) as ClientService[]).forEach(svc => {
-          if (svc in progressCounts) progressCounts[svc as CategoryKey][effectiveProgress(sp, svc)] += 1;
+      clientRows.map(normalizeProfile).forEach(c => {
+        c.services.forEach(svc => {
+          if (svc in progressCounts) progressCounts[svc as CategoryKey][effectiveProgress(c.service_progress, svc)] += 1;
         });
       });
       const clientsPerService = (svc: string) =>
@@ -239,6 +252,7 @@ export function AdminDashboardScreen({ onViewAllDocuments }: { onViewAllDocument
           CFO: clientsPerService('CFO'),
         },
         progressCounts,
+        clients: clientRows.map(normalizeProfile),
         svcByEmail,
         nameByEmail,
         pendingFtg: pendingDocs.filter(d => !isInternalRole(d.uploaded_by_role)).length,
@@ -289,6 +303,17 @@ export function AdminDashboardScreen({ onViewAllDocuments }: { onViewAllDocument
   // as the tag on each row.
   const sortedUploads   = stats.recentUploads.filter(d => !!d.subfolder_id);
   const unsortedUploads = stats.recentUploads.filter(d => !d.subfolder_id);
+
+  // Who is behind the progress line that was tapped — counted the same way as
+  // the figure on the card, so the list is as long as the number said. In the
+  // client list's order: by last name where there is one.
+  const sortName = (c: Profile) =>
+    (c.last_name?.trim() || c.company_name?.trim() || c.full_name || '').toLowerCase();
+  const progressClients = useMemo(() => !progressOpen ? [] : stats.clients
+    .filter(c => c.services.includes(progressOpen.svc as ClientService)
+      && effectiveProgress(c.service_progress, progressOpen.svc as ClientService) === progressOpen.status)
+    .sort((a, b) => sortName(a).localeCompare(sortName(b))),
+  [progressOpen, stats.clients]);
 
   /** The client's name for a row, falling back to the address for strays. */
   const labelFor = (email: string | null | undefined) =>
@@ -391,14 +416,24 @@ export function AdminDashboardScreen({ onViewAllDocuments }: { onViewAllDocument
                   </Text>
                 </View>
 
-                {/* One line per label, the dot in the label's colour. */}
+                {/* One line per label, the dot in the label's colour. A line
+                    with anyone on it opens the list of who. */}
                 <View style={s.progressList}>
                   {group.rows.map(r => (
-                    <View key={r.key} style={s.progressLine}>
+                    <TouchableOpacity
+                      key={r.key}
+                      style={s.progressLine}
+                      onPress={() => setProgressOpen({ svc: group.key, status: r.key })}
+                      disabled={r.count === 0}
+                      activeOpacity={0.6}
+                      accessibilityRole="button"
+                      accessibilityLabel={`${group.key} ${PROGRESS_LABEL[r.key]}: ${r.count} clients`}
+                    >
                       <View style={[s.progressDot, { backgroundColor: PROGRESS_COLOR[r.key] }]} />
                       <Text style={s.progressLineLabel}>{PROGRESS_LABEL[r.key]}</Text>
                       <Text style={s.progressLineValue}>{r.count}</Text>
-                    </View>
+                      <Ionicons name="chevron-forward" size={12} color={r.count > 0 ? '#A8998A' : 'transparent'} />
+                    </TouchableOpacity>
                   ))}
                 </View>
               </View>
@@ -606,6 +641,54 @@ export function AdminDashboardScreen({ onViewAllDocuments }: { onViewAllDocument
           <View style={{ height: 12 }} />
         </ScrollView>
       )}
+
+      {/* ── The clients behind a progress figure ── */}
+      <Modal visible={!!progressOpen} transparent animationType="slide" onRequestClose={() => setProgressOpen(null)}>
+        <Pressable style={[s.menuOverlay, sheet.overlay]} onPress={() => setProgressOpen(null)}>
+          <Pressable style={[s.menuSheet, sheet.sheet]} onPress={() => {}}>
+            <View style={s.menuHandle} />
+            {progressOpen && (
+              <>
+                <View style={s.listHead}>
+                  <View style={[s.progressDot, { backgroundColor: PROGRESS_COLOR[progressOpen.status] }]} />
+                  <Text style={s.menuFileName}>{progressOpen.svc} · {PROGRESS_LABEL[progressOpen.status]}</Text>
+                </View>
+                <Text style={s.menuEmail}>
+                  {progressClients.length} client{progressClients.length !== 1 ? 's' : ''} · tap one to open their profile
+                </Text>
+                <View style={s.menuDivider} />
+                {/* Scrolls on its own: a sheet cannot be scrolled or dragged up,
+                    and BK alone is twenty-odd clients. */}
+                <ScrollView style={s.listScroll} showsVerticalScrollIndicator={false}>
+                  {progressClients.map(c => {
+                    const name = c.company_name?.trim() || c.full_name || c.email;
+                    return (
+                      <TouchableOpacity
+                        key={c.id}
+                        style={s.listRow}
+                        onPress={() => { setProgressOpen(null); onOpenClient?.(c); }}
+                        disabled={!onOpenClient}
+                        activeOpacity={0.7}
+                      >
+                        <View style={s.listAvatar}>
+                          <Text style={s.listAvatarText}>{initialsOf(name)}</Text>
+                        </View>
+                        <View style={{ flex: 1, minWidth: 0 }}>
+                          <Text style={s.listName} numberOfLines={1}>{name}</Text>
+                          <Text style={s.listMeta} numberOfLines={1}>
+                            {c.company_name?.trim() && c.full_name ? `${c.full_name} · ${c.email}` : c.email}
+                          </Text>
+                        </View>
+                        <Ionicons name="chevron-forward" size={16} color="#A8998A" />
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+              </>
+            )}
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       {/* ── Document action menu ── */}
       <Modal visible={!!menuDoc} transparent animationType="slide" onRequestClose={() => setMenuDoc(null)}>
@@ -1427,6 +1510,14 @@ const s = StyleSheet.create({
     fontSize: 12,
     marginBottom: 4,
   },
+  // The clients behind a progress figure.
+  listHead:   { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  listScroll: { maxHeight: 420 },
+  listRow:    { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10, paddingHorizontal: 4 },
+  listAvatar: { width: 34, height: 34, borderRadius: 17, backgroundColor: 'rgba(232,185,35,0.18)', alignItems: 'center', justifyContent: 'center' },
+  listAvatarText: { color: '#3A3131', fontSize: 12, fontWeight: '800' },
+  listName:   { color: '#1C1713', fontSize: 14, fontWeight: '700' },
+  listMeta:   { color: '#A8998A', fontSize: 11.5, marginTop: 1 },
   menuDivider: {
     height: 1,
     backgroundColor: '#F2EDE3',
