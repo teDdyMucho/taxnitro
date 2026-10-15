@@ -86,30 +86,12 @@ export async function getDocumentsByEmail(email: string): Promise<Document[]> {
     })
   );
 
-  // Also try the legacy documents table so old data still appears
-  const legacySettled = await Promise.allSettled([
-    supabase.from('documents').select('*').eq('email', email).order('created_at', { ascending: false }),
-  ]);
-
-  const legacyDocs: Document[] = [];
-  if (legacySettled[0].status === 'fulfilled') {
-    const { data } = legacySettled[0].value;
-    (data ?? []).forEach(d => legacyDocs.push({
-      ...d,
-      approval_status: 'approved',
-      approval_note: null,
-    } as Document));
-  }
-
-  const newDocs = settled.flatMap(r => r.status === 'fulfilled' ? r.value : []);
-
-  const seen = new Set<string>();
-  const merged: Document[] = [];
-  for (const d of [...newDocs, ...legacyDocs]) {
-    if (!seen.has(d.id)) { seen.add(d.id); merged.push(d); }
-  }
-
-  return merged.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  // The old `documents` table is not read. It is where n8n writes what clients
+  // upload through Tax Nitro, and the database files each of those into the
+  // client's folders as it arrives (database/tax_nitro_documents.sql), so
+  // reading it too would count them twice. Its rows were never in a folder.
+  const docs = settled.flatMap(r => r.status === 'fulfilled' ? r.value : []);
+  return docs.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 }
 
 // ── Fetch ALL documents across all tables (admin only) ───────────────────────

@@ -1,6 +1,9 @@
 -- ============================================================
 -- DOCUMENTS TABLE  (GHL → n8n → Supabase)
 -- Fields sent by n8n: document_url, name, email, contact_id
+--
+-- Each row is filed into the client's folders as it arrives, by
+-- tax_nitro_documents.sql; the app reads the folders, not this table.
 -- ============================================================
 
 create table if not exists public.documents (
