@@ -27,7 +27,8 @@
 -- Agreement.pdf" is the client's document, not FTG's contract.
 --
 -- The row in public.documents stays as the record of what came in, marked with
--- where it went (filed_table, filed_id), so nothing is filed twice. A file for
+-- where it went (filed_table, filed_id), so nothing is filed twice — nor a file
+-- n8n sends again, retrying or replaying a past run for what it missed. A file for
 -- someone who has no client account yet waits there, and is filed when the
 -- account is made.
 --
@@ -158,6 +159,21 @@ begin
      order by d.created_at
        for update of d skip locked
   loop
+    -- The same file again — n8n retrying, or a past run replayed to bring in
+    -- the files it missed — is marked as filed where the first copy went,
+    -- rather than copied in twice.
+    select d2.filed_table, d2.filed_id into v_table, v_id
+      from public.documents d2
+     where d2.document_url = r.document_url
+       and d2.filed_table is not null
+       and d2.id <> r.id
+       and (d2.user_id = r.client_id or lower(d2.email) = lower(r.client_email))
+     limit 1;
+    if v_table is not null then
+      update public.documents set filed_table = v_table, filed_id = v_id where id = r.id;
+      continue;
+    end if;
+
     -- Its name: what n8n sent if it is a file's name — not the client's own
     -- name, which is what it sends now — else what GHL calls it.
     v_name := nullif(btrim(coalesce(r.file_name, '')), '');
