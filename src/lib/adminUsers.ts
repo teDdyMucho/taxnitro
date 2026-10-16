@@ -8,10 +8,11 @@ import { supabase } from './supabase';
 // so they go through the function, which holds the key on Supabase's side and
 // checks the caller is staff first.
 
-interface Result<T> { data: T | null; error: string | null }
+export interface Result<T> { data: T | null; error: string | null }
 
-async function call<T>(body: Record<string, unknown>): Promise<Result<T>> {
-  const { data, error } = await supabase.functions.invoke('admin-users', { body });
+/** One of the app's Edge Functions. Its { error } comes back as its own words. */
+export async function callFunction<T>(name: string, body: Record<string, unknown>): Promise<Result<T>> {
+  const { data, error } = await supabase.functions.invoke(name, { body });
   if (error) {
     // The function answers with { error } and a status; surface its words.
     let message = error.message;
@@ -24,6 +25,8 @@ async function call<T>(body: Record<string, unknown>): Promise<Result<T>> {
   if (data?.error) return { data: null, error: data.error };
   return { data: data as T, error: null };
 }
+
+const call = <T,>(body: Record<string, unknown>) => callFunction<T>('admin-users', body);
 
 /** A client's login and profile. The profile is written even if the login already had one. */
 export function createClientAccount(args: {

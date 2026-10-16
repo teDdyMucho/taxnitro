@@ -20,6 +20,7 @@ import {
 } from '../../db/requirements';
 import { ClientManageModal } from '../../components/ClientManageModal';
 import { createClientAccount } from '../../lib/adminUsers';
+import { pullFromTaxNitro, describePull } from '../../lib/taxNitro';
 import { joinName } from '../../lib/personName';
 import { useResponsive } from '../../hooks/useResponsive';
 import {
@@ -159,6 +160,8 @@ function AddClientModal({
   const [step, setStep]             = useState<'form' | 'success' | 'error'>('form');
   const [loading, setLoading]       = useState(false);
   const [errorMsg, setErrorMsg]     = useState('');
+  // Their Tax Nitro files, brought over once the account exists.
+  const [pullNote, setPullNote]     = useState<string | null>(null);
 
   const toggleService = (svc: ClientService) => {
     setServices(prev =>
@@ -169,7 +172,7 @@ function AddClientModal({
   const reset = () => {
     setFirstName(''); setLastName(''); setCompanyName(''); setEmail(''); setPassword(''); setPlan('Free');
     setServices(['BK']); setHasQbo(false); setBankAccounts([]);
-    setStep('form'); setErrorMsg(''); setShowPass(false);
+    setStep('form'); setErrorMsg(''); setShowPass(false); setPullNote(null);
   };
 
   // A half-filled bank row would be silently dropped on save — block instead.
@@ -217,6 +220,12 @@ function AddClientModal({
       }
 
       setStep('success');
+      // Camaree: pull a new client's documents from Tax Nitro when their account
+      // is made. It runs on its own; the account is made either way.
+      setPullNote('Bringing over their files from Tax Nitro…');
+      pullFromTaxNitro(email.trim()).then(({ data, error: pullErr }) =>
+        setPullNote(data ? describePull(data)
+          : `Their Tax Nitro files did not come over (${pullErr}). Pull them from Update Profile.`));
     } catch (e: any) {
       setErrorMsg(e?.message ?? 'Network error. Please try again.');
     } finally {
@@ -258,6 +267,13 @@ function AddClientModal({
                 <Ionicons name="shield-checkmark-outline" size={15} color="#E8B923" style={{ marginTop: 1 }} />
                 <Text style={ac.infoText}>Account created successfully. The client can log in immediately with the credentials above.</Text>
               </View>
+
+              {pullNote && (
+                <View style={ac.infoBox}>
+                  <Ionicons name="cloud-download-outline" size={15} color="#E8B923" style={{ marginTop: 1 }} />
+                  <Text style={ac.infoText}>{pullNote}</Text>
+                </View>
+              )}
 
               <TouchableOpacity style={ac.primaryBtn} onPress={handleDone}>
                 <Text style={ac.primaryBtnText}>Done</Text>

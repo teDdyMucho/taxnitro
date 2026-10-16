@@ -1311,6 +1311,7 @@ export function ClientDocumentsScreen({
           client={client}
           onClose={() => setManageOpen(false)}
           onSave={updated => { onClientChange?.(updated); setManageOpen(false); }}
+          onFilesAdded={() => load(true)}
           // No onOpenCfo: this screen's header already has the Dashboard
           // button, so the tray's CFO card would be the same door twice.
         />

@@ -25,6 +25,7 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { TEAM_ONE_SERVICES, getTeamOneServices, setTeamOneServices } from '../db/teamOne';
 import { setClientPassword } from '../lib/adminUsers';
+import { pullFromTaxNitro, describePull } from '../lib/taxNitro';
 
 // The tray for editing one client: their name, plan, services, bank accounts,
 // account status and password.
@@ -95,10 +96,13 @@ export function ClientManageModal({
   onClose,
   onSave,
   onOpenCfo,
+  onFilesAdded,
 }: {
   client: Profile;
   onClose: () => void;
   onSave: (updated: Profile) => void;
+  /** Files came over from Tax Nitro, so the folders behind the tray are out of date. */
+  onFilesAdded?: () => void;
   /**
    * Opens the client's CFO dashboard. Left out by the client's own screen,
    * which already carries a Dashboard button in its header — the card here
@@ -107,6 +111,17 @@ export function ClientManageModal({
   onOpenCfo?: () => void;
 }) {
   const sheet = useSheetStyles('md');
+  // Tax Nitro: what the last pull did, and whether one is running.
+  const [pulling, setPulling] = useState(false);
+  const [pullNote, setPullNote] = useState<string | null>(null);
+  const pullTaxNitro = async () => {
+    setPulling(true);
+    setPullNote(null);
+    const { data, error } = await pullFromTaxNitro(client.email);
+    setPulling(false);
+    setPullNote(data ? describePull(data) : `Could not pull from Tax Nitro: ${error}`);
+    if (data?.added) onFilesAdded?.();
+  };
   // On a phone the side-by-side rows below stack: two name boxes and a row of
   // three progress buttons do not fit beside their labels at phone width.
   const { isPhone } = useResponsive();
@@ -433,6 +448,26 @@ export function ClientManageModal({
 
             {/* Bank accounts — one required "Bank Statements" slot per account */}
             <BankAccountsField value={bankAccounts} onChange={setBankAccounts} />
+
+            {/* Tax Nitro. Adding a client pulls their files already; this pulls
+                again, for files that arrived another way or before the fix. */}
+            <View style={mm.field}>
+              <Text style={mm.label}>Tax Nitro</Text>
+              <TouchableOpacity
+                style={[mm.toggleBtn, { alignSelf: 'flex-start' }, pulling && { opacity: 0.6 }]}
+                onPress={pullTaxNitro}
+                disabled={pulling}
+                activeOpacity={0.75}
+              >
+                {pulling
+                  ? <ActivityIndicator size="small" color={Colors.textMuted} />
+                  : <Ionicons name="cloud-download-outline" size={16} color={Colors.textPrimary} />}
+                <Text style={mm.toggleText}>{pulling ? 'Pulling…' : 'Pull their files from Tax Nitro'}</Text>
+              </TouchableOpacity>
+              <Text style={mm.qboHint}>
+                {pullNote ?? 'Brings over everything they sent through Tax Nitro, into Unsorted Uploads. Files already here are skipped.'}
+              </Text>
+            </View>
 
             {/* QBO access — only relevant when CFO is on */}
             {services.includes('CFO') && (
