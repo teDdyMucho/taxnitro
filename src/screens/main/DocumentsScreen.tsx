@@ -36,7 +36,6 @@ import {
   updateDocumentStatus,
   uploadDocumentToStorage,
   createDocumentRecord,
-  deleteDocumentWithReason,
   renameDocument,
   moveDocumentToFolder,
   approveDocument,
@@ -828,11 +827,11 @@ function RenameModal({ visible, current, onConfirm, onCancel }: {
 
 // ── Document detail — metadata page ──────────────────────────────────────────
 
-function DocDetailPage({ doc, sf, root, fileOwnerId, userEmail, services, onClose, onMarkViewed, onDelete, onRename, onMove, onApprovalChange }: {
+function DocDetailPage({ doc, sf, root, fileOwnerId, userEmail, services, onClose, onMarkViewed, onRename, onMove, onApprovalChange }: {
   doc: Document; sf: SubFolder; root: RootFolder;
   fileOwnerId: string; userEmail: string;
   onClose: () => void; onMarkViewed: () => void;
-  onDelete: () => void; onRename: (newName: string) => void;
+  onRename: (newName: string) => void;
   services: string[];
   /** Returns an error to show, or null when the file has moved. */
   onMove: (toTable: string) => Promise<string | null>;
@@ -842,7 +841,6 @@ function DocDetailPage({ doc, sf, root, fileOwnerId, userEmail, services, onClos
   const { isDesktop } = useResponsive();   // center + cap the detail page on desktop
   const [viewerOpen, setViewerOpen]           = useState(false);
   const [renameOpen, setRenameOpen]           = useState(false);
-  const [deleteOpen, setDeleteOpen]           = useState(false);
   const [moveOpen, setMoveOpen]               = useState(false);
   const [moveBusy, setMoveBusy]               = useState(false);
   const [moveError, setMoveError]             = useState<string | null>(null);
@@ -869,12 +867,32 @@ function DocDetailPage({ doc, sf, root, fileOwnerId, userEmail, services, onClos
     else Alert.alert('Error', 'Could not approve this file.');
   };
 
+  // Rejecting asks why. The reason is the file's note, and goes to FTG as a
+  // message on the file, which lands in the staff reply bell — Daja: "require a
+  // reason for their rejection that will notify us as well on the staff side".
+  const { user } = useAuth();
+  const [rejectOpen, setRejectOpen]   = useState(false);
+  const [rejectReason, setRejectReason] = useState('');
   const clientReject = async () => {
-    if (reviewBusy) return;
+    const reason = rejectReason.trim();
+    if (reviewBusy || !reason) return;
     setReviewBusy(true);
-    const ok = await rejectDocument(doc.id, doc.document_type ?? '', userEmail, 'Rejected by client');
+    const ok = await rejectDocument(doc.id, doc.document_type ?? '', userEmail, reason);
+    if (ok) {
+      const { error } = await supabase.from('file_conversations').insert({
+        file_id:       doc.id,
+        folder_table:  doc.document_type,
+        file_owner_id: fileOwnerId,
+        sender_id:     user?.id ?? fileOwnerId,
+        sender_name:   user?.name ?? userEmail,
+        sender_role:   'client',
+        message:       `Rejected this file: ${reason}`,
+        is_read:       false,
+      });
+      if (error) console.error('rejection message:', error.message);
+    }
     setReviewBusy(false);
-    if (ok) onApprovalChange('rejected', 'Rejected by client');
+    if (ok) { setRejectOpen(false); setRejectReason(''); onApprovalChange('rejected', reason); }
     else Alert.alert('Error', 'Could not reject this file.');
   };
 
@@ -910,9 +928,8 @@ function DocDetailPage({ doc, sf, root, fileOwnerId, userEmail, services, onClos
           <TouchableOpacity style={dp.iconBtn} onPress={() => setRenameOpen(true)}>
             <Ionicons name="pencil-outline" size={19} color={Colors.white} />
           </TouchableOpacity>
-          <TouchableOpacity style={dp.iconBtn} onPress={() => setDeleteOpen(true)}>
-            <Ionicons name="trash-outline" size={19} color="#FF6B6B" />
-          </TouchableOpacity>
+          {/* No delete. Daja: clients "should only be able to view or upload";
+              a file sent to FTG stays with FTG. */}
         </View>
       </LinearGradient>
 
@@ -952,7 +969,7 @@ function DocDetailPage({ doc, sf, root, fileOwnerId, userEmail, services, onClos
         {/* ── Admin Feedback ── */}
         {!!doc.approval_note && doc.approval_status !== 'approved' && (
           <View style={dp.section}>
-            <Text style={dp.sectionLabel}>Admin Feedback</Text>
+            <Text style={dp.sectionLabel}>{isStaffFile ? 'Your Feedback' : 'Admin Feedback'}</Text>
             <View style={[dp.feedbackCard, doc.approval_status === 'rejected' ? dp.feedbackRejected : dp.feedbackPending]}>
               <View style={dp.feedbackRow}>
                 <Ionicons
@@ -969,7 +986,7 @@ function DocDetailPage({ doc, sf, root, fileOwnerId, userEmail, services, onClos
               </Text>
               <TouchableOpacity style={dp.replyBtn} onPress={() => setConversationOpen(true)} activeOpacity={0.85}>
                 <Ionicons name="chatbubble-outline" size={15} color="#2C2320" />
-                <Text style={dp.replyBtnText}>Reply to Feedback</Text>
+                <Text style={dp.replyBtnText}>{isStaffFile ? 'Message FTG' : 'Reply to Feedback'}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -982,7 +999,7 @@ function DocDetailPage({ doc, sf, root, fileOwnerId, userEmail, services, onClos
             <View style={dp.reviewCard}>
               <Text style={dp.reviewText}>Our team sent you this document. Please approve it, or reject it if something's wrong.</Text>
               <View style={dp.reviewRow}>
-                <TouchableOpacity style={[dp.rejectBtn, reviewBusy && { opacity: 0.5 }]} onPress={clientReject} disabled={reviewBusy} activeOpacity={0.85}>
+                <TouchableOpacity style={[dp.rejectBtn, reviewBusy && { opacity: 0.5 }]} onPress={() => setRejectOpen(true)} disabled={reviewBusy} activeOpacity={0.85}>
                   <Ionicons name="close-circle-outline" size={17} color="#DC2626" />
                   <Text style={dp.rejectText}>Reject</Text>
                 </TouchableOpacity>
@@ -1047,6 +1064,39 @@ function DocDetailPage({ doc, sf, root, fileOwnerId, userEmail, services, onClos
         onClose={() => setConversationOpen(false)}
       />
 
+      {/* ── Why it is rejected */}
+      <Modal visible={rejectOpen} animationType="fade" transparent onRequestClose={() => !reviewBusy && setRejectOpen(false)}>
+        <Pressable style={rm.overlay} onPress={() => !reviewBusy && setRejectOpen(false)}>
+          <Pressable style={rm.card} onPress={() => {}}>
+            <Text style={rm.title}>Reject This File</Text>
+            <Text style={mv.sub}>Tell us what's wrong with it, so we can fix it. Our team will see your reason.</Text>
+            <TextInput
+              style={[rj.input, { outlineWidth: 0 } as any]}
+              value={rejectReason}
+              onChangeText={setRejectReason}
+              placeholder="e.g. The March statement is missing"
+              placeholderTextColor={Colors.textMuted}
+              multiline
+              autoFocus
+            />
+            <View style={rm.btnRow}>
+              <TouchableOpacity style={rm.cancelBtn} onPress={() => setRejectOpen(false)} disabled={reviewBusy}>
+                <Text style={rm.cancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[dc.deleteBtn, (!rejectReason.trim() || reviewBusy) && { opacity: 0.5 }]}
+                onPress={clientReject}
+                disabled={!rejectReason.trim() || reviewBusy}
+              >
+                {reviewBusy
+                  ? <ActivityIndicator size="small" color={Colors.white} />
+                  : <><Ionicons name="close-circle-outline" size={15} color={Colors.white} /><Text style={dc.deleteBtnText}>Reject</Text></>}
+              </TouchableOpacity>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
       {/* ── Move to another folder */}
       <Modal visible={moveOpen} animationType="fade" transparent onRequestClose={() => setMoveOpen(false)}>
         <Pressable style={rm.overlay} onPress={() => !moveBusy && setMoveOpen(false)}>
@@ -1099,34 +1149,6 @@ function DocDetailPage({ doc, sf, root, fileOwnerId, userEmail, services, onClos
         </Pressable>
       </Modal>
 
-      {/* ── Delete confirmation modal */}
-      <Modal visible={deleteOpen} animationType="fade" transparent onRequestClose={() => setDeleteOpen(false)}>
-        <Pressable style={rm.overlay} onPress={() => setDeleteOpen(false)}>
-          <Pressable style={rm.card} onPress={e => e.stopPropagation()}>
-            <View style={dc.iconWrap}>
-              <Ionicons name="trash-outline" size={32} color={Colors.error} />
-            </View>
-            <Text style={dc.title}>Delete File</Text>
-            <Text style={dc.msg}>
-              Are you sure you want to delete{'\n'}
-              <Text style={dc.fileName}>"{displayName(doc)}"</Text>?{'\n'}
-              This cannot be undone.
-            </Text>
-            <View style={rm.btnRow}>
-              <TouchableOpacity style={rm.cancelBtn} onPress={() => setDeleteOpen(false)}>
-                <Text style={rm.cancelText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={dc.deleteBtn}
-                onPress={() => { setDeleteOpen(false); onDelete(); }}
-              >
-                <Ionicons name="trash-outline" size={15} color={Colors.white} />
-                <Text style={dc.deleteBtnText}>Delete</Text>
-              </TouchableOpacity>
-            </View>
-          </Pressable>
-        </Pressable>
-      </Modal>
 
     </View>
     </View>
@@ -1365,20 +1387,6 @@ export function DocumentsScreen() {
               setDocuments(prev => prev.map(d => d.id === selectedDoc.id ? updated : d));
               setSelectedDoc(updated);
             }}
-            onDelete={async () => {
-              const table = selectedDoc.document_type ?? '';
-              const docId = selectedDoc.id;
-              // The requirement slot is cleared inside the same transaction now,
-              // so the dashboard radio goes back to grey without a second call
-              // that could fail on its own.
-              const res = await deleteDocumentWithReason(docId, table);
-              if (res.ok) {
-                setDocuments(prev => prev.filter(d => d.id !== docId));
-                setSelectedDoc(null);
-              } else {
-                Alert.alert('Could not delete', res.error);
-              }
-            }}
             onMove={async (toTable) => {
               const from = selectedDoc.document_type ?? '';
               const docId = selectedDoc.id;
@@ -1411,6 +1419,16 @@ export function DocumentsScreen() {
 // ═════════════════════════════════════════════════════════════════════════════
 // Styles
 // ═════════════════════════════════════════════════════════════════════════════
+
+// The reason box in the reject dialog.
+const rj = StyleSheet.create({
+  input: {
+    alignSelf: 'stretch', minHeight: 90, marginTop: 12, marginBottom: 4,
+    borderWidth: 1, borderColor: Colors.border, borderRadius: 12,
+    paddingHorizontal: 12, paddingVertical: 10, textAlignVertical: 'top',
+    color: Colors.textPrimary, fontSize: 14, backgroundColor: Colors.bgCard,
+  },
+});
 
 const s = StyleSheet.create({
   screen:   { flex: 1, backgroundColor: Colors.bgDeep },
