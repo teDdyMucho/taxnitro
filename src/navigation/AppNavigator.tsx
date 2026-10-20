@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity, Platform, Image, useWindowDimensions } from 'react-native';
+import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity, Platform, Image, useWindowDimensions, Modal } from 'react-native';
 import { useAuth } from '../context/AuthContext';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -417,8 +417,8 @@ function IdleSignOutModal({ onDismiss }: { onDismiss: () => void }) {
 
         <Text style={idle.title}>Signed out for your security</Text>
         <Text style={idle.sub}>
-          There was no activity for {minutes} minutes, so we ended the session to keep
-          your financial documents private.
+          There was no activity for {minutes} minutes and no answer to "Still there?",
+          so we ended the session to keep your financial documents private.
         </Text>
 
         <View style={idle.divider} />
@@ -450,6 +450,52 @@ function IdleSignOutModal({ onDismiss }: { onDismiss: () => void }) {
         </TouchableOpacity>
       </View>
     </View>
+  );
+}
+
+// ── "Still there?" ───────────────────────────────────────────────────────────
+// Daja: "instead of automatically logging out, can we have a pop-up check in
+// saying 'Still There?' requiring the user to click Yes to resume their session
+// or No to logout". Asked after IDLE_TIMEOUT_MS without activity; with no answer
+// the session ends when the countdown does, as it always did.
+
+function StillThereModal({ until, onStay, onLeave }: {
+  until: number; onStay: () => void; onLeave: () => void;
+}) {
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, []);
+  const left = Math.max(0, Math.ceil((until - now) / 1000));
+  const minutes = Math.round(IDLE_TIMEOUT_MS / 60000);
+  return (
+    <Modal visible transparent animationType="fade" onRequestClose={onStay}>
+      <View style={idle.overlay}>
+        <View style={idle.card}>
+          <LinearGradient
+            colors={['rgba(232,185,35,0.18)', 'rgba(181,144,91,0.10)']}
+            style={idle.iconWrap}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+          >
+            <Ionicons name="hourglass-outline" size={28} color="#E8B923" />
+          </LinearGradient>
+          <Text style={idle.title}>Still there?</Text>
+          <Text style={idle.sub}>
+            There's been no activity for {minutes} minutes. To keep your documents
+            private, you'll be signed out in {Math.floor(left / 60)}:{String(left % 60).padStart(2, '0')}.
+          </Text>
+          <TouchableOpacity style={idle.btn} onPress={onStay} activeOpacity={0.85}>
+            <Ionicons name="checkmark-circle-outline" size={16} color="#3A3131" />
+            <Text style={idle.btnText}>Yes, keep me signed in</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={idle.btnQuiet} onPress={onLeave} activeOpacity={0.85}>
+            <Text style={idle.btnQuietText}>No, sign me out</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
   );
 }
 
@@ -485,10 +531,15 @@ const idle = StyleSheet.create({
     shadowOpacity: 0.32, shadowRadius: 10, elevation: 5,
   },
   btnText: { color: '#3A3131', fontWeight: '800', fontSize: 14 },
+  btnQuiet: {
+    alignItems: 'center', justifyContent: 'center', borderRadius: 14, paddingVertical: 13,
+    width: '100%', borderWidth: 1, borderColor: '#E8E0D0', backgroundColor: '#FFFFFF',
+  },
+  btnQuietText: { color: '#6B5E52', fontWeight: '700', fontSize: 14 },
 });
 
 export function AppNavigator() {
-  const { isAuthenticated, isLoading, logout, user, signOutReason, clearSignOutReason } = useAuth();
+  const { isAuthenticated, isLoading, logout, user, signOutReason, clearSignOutReason, idlePromptUntil, stayIn } = useAuth();
   const [authView, setAuthView] = useState<'landing' | 'login' | 'register'>(
     Platform.OS === 'web' ? 'landing' : 'login'
   );
@@ -532,20 +583,28 @@ export function AppNavigator() {
     );
   }
 
+  // Over whichever portal is showing, for every role.
+  const stillThere = idlePromptUntil != null
+    ? <StillThereModal until={idlePromptUntil} onStay={stayIn} onLeave={logout} />
+    : null;
+
   // Staff and admin get the admin portal, and so does Team One — cut down to
   // the clients assigned to it.
   if (user?.role === 'staff' || user?.role === 'admin' || user?.role === 'team_one') {
-    return <AdminNavigator onLogout={logout} />;
+    return <><AdminNavigator onLogout={logout} />{stillThere}</>;
   }
 
   if (Platform.OS === 'web') {
-    return <WebLayout onLogout={logout} />;
+    return <><WebLayout onLogout={logout} />{stillThere}</>;
   }
 
   return (
-    <NavigationContainer>
-      <MobileTabs onLogout={logout} />
-    </NavigationContainer>
+    <>
+      <NavigationContainer>
+        <MobileTabs onLogout={logout} />
+      </NavigationContainer>
+      {stillThere}
+    </>
   );
 }
 

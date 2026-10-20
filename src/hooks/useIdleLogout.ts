@@ -1,8 +1,15 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { AppState, Platform } from 'react-native';
 
-/** How long a session may sit untouched before it is ended. */
+/** How long a session may sit untouched before "Still there?" is asked. */
 export const IDLE_TIMEOUT_MS = 5 * 60 * 1000;   // 5 minutes
+
+/**
+ * How long "Still there?" waits for an answer before the session ends anyway.
+ * Daja asked for the question in place of signing straight out; a screen left
+ * unattended must still lock, so nobody answering means nobody is there.
+ */
+export const IDLE_GRACE_MS = 60 * 1000;         // 1 minute
 
 /** How often the last-activity stamp is checked. */
 const POLL_MS = 15 * 1000;
@@ -28,7 +35,7 @@ export function useIdleLogout({
   enabled: boolean;
   onIdle: () => void;
   timeoutMs?: number;
-}): { notifyActivity: () => void } {
+}): { notifyActivity: () => void; rearm: () => void } {
   const lastActivity = useRef(Date.now());
   // Held in a ref so a changing callback never restarts the timer.
   const onIdleRef = useRef(onIdle);
@@ -38,6 +45,12 @@ export function useIdleLogout({
 
   const notifyActivity = useCallback(() => {
     lastActivity.current = Date.now();
+  }, []);
+
+  /** Start counting again from now — after "Yes, I'm still here". */
+  const rearm = useCallback(() => {
+    lastActivity.current = Date.now();
+    firedRef.current = false;
   }, []);
 
   useEffect(() => {
@@ -91,5 +104,5 @@ export function useIdleLogout({
     };
   }, [enabled, timeoutMs]);
 
-  return { notifyActivity };
+  return { notifyActivity, rearm };
 }

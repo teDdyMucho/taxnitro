@@ -1,8 +1,8 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
-import { View, Platform } from 'react-native';
+import { View, Platform, AppState } from 'react-native';
 import { supabase } from '../lib/supabase';
 import { BankAccount, normalizeBankAccounts } from '../db/requirements';
-import { useIdleLogout, IDLE_TIMEOUT_MS } from '../hooks/useIdleLogout';
+import { useIdleLogout, IDLE_TIMEOUT_MS, IDLE_GRACE_MS } from '../hooks/useIdleLogout';
 
 // team_one: an outside team that sees only the clients assigned to it
 // (database/team_one_access.sql).
@@ -39,6 +39,10 @@ interface AuthContextValue {
   forgotPassword: (email: string) => Promise<{ success: boolean; error?: string }>;
   /** Re-read the profile after something changed it — closing a bank account, say. */
   refreshProfile: () => Promise<void>;
+  /** "Still there?" is being asked, and the session ends at this time unless answered. */
+  idlePromptUntil: number | null;
+  /** "Yes, keep me signed in." */
+  stayIn: () => void;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -222,18 +226,51 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // ── Idle sign-out ──────────────────────────────────────────────────────────
   // Applies to every role. Financial documents sit behind this session, so a
   // screen left unattended must not stay signed in.
-  const handleIdle = useCallback(async () => {
+  //
+  // Daja: ask "Still there?" first rather than signing straight out. The
+  // session ends only if nobody answers in time.
+  const signOutIdle = useCallback(async () => {
     setUser(null);
     setIsAuthenticated(false);
     setSignOutReason('idle');   // the signed-out screen explains what happened
     await supabase.auth.signOut();
   }, []);
 
-  const { notifyActivity } = useIdleLogout({
+  const [idlePromptUntil, setIdlePromptUntil] = useState<number | null>(null);
+  const handleIdle = useCallback(() => {
+    setIdlePromptUntil(Date.now() + IDLE_GRACE_MS);
+  }, []);
+
+  const { notifyActivity, rearm } = useIdleLogout({
     enabled: isAuthenticated,
     onIdle: handleIdle,
     timeoutMs: IDLE_TIMEOUT_MS,
   });
+
+  const stayIn = useCallback(() => {
+    setIdlePromptUntil(null);
+    rearm();
+  }, [rearm]);
+
+  // While the question is up: end the session when its time runs out. Checked
+  // on a clock, and again the moment the tab or app comes back, because a
+  // backgrounded page's timers run late or not at all.
+  useEffect(() => {
+    if (!isAuthenticated) { setIdlePromptUntil(null); return; }
+    if (idlePromptUntil == null) return;
+    const check = () => {
+      if (Date.now() >= idlePromptUntil) { setIdlePromptUntil(null); signOutIdle(); }
+    };
+    const timer = setInterval(check, 1000);
+    const onVisible = () => { if (typeof document === 'undefined' || !document.hidden) check(); };
+    if (Platform.OS === 'web' && typeof document !== 'undefined') document.addEventListener('visibilitychange', onVisible);
+    const sub = AppState.addEventListener('change', state => { if (state === 'active') check(); });
+    return () => {
+      clearInterval(timer);
+      if (Platform.OS === 'web' && typeof document !== 'undefined') document.removeEventListener('visibilitychange', onVisible);
+      sub.remove();
+    };
+  }, [isAuthenticated, idlePromptUntil, signOutIdle]);
 
   const forgotPassword = useCallback(async (email: string) => {
     const { error: err } = await supabase.auth.resetPasswordForEmail(email, {
@@ -256,6 +293,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     <AuthContext.Provider value={{
       isAuthenticated, isLoading, error, user, signOutReason, clearSignOutReason,
       login, register, logout, clearError, forgotPassword, refreshProfile,
+      idlePromptUntil, stayIn,
     }}>
       {/* Web tracks input through DOM listeners. React Native has no global
           input event, so touches are captured here and passed along — the
