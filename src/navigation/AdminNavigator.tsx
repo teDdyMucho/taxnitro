@@ -28,6 +28,7 @@ import { getProfile } from '../db/profiles';
 import { FinancialReportsScreen } from '../screens/admin/FinancialReportsScreen';
 import { TeamOneReviewScreen } from '../screens/admin/TeamOneReviewScreen';
 import { countTeamOneItems, ESCALATION_EMAIL, type TeamOneStatus } from '../db/teamOne';
+import { countUnreadChat } from '../db/teamOneChat';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -137,7 +138,9 @@ export function AdminNavigator({ onLogout }: { onLogout: () => void }) {
   const refreshTeamOneCount = useCallback(async () => {
     const statuses: TeamOneStatus[] = isTeamOne ? ['denied', 'revise']
       : (isDaja || isAdmin) ? ['pending', 'escalated'] : ['pending'];
-    setTeamOneCount(await countTeamOneItems(statuses));
+    // And chat messages from the other side, not read yet.
+    const [items, chat] = await Promise.all([countTeamOneItems(statuses), countUnreadChat(isTeamOne ? 'team_one' : 'staff')]);
+    setTeamOneCount(items + chat);
   }, [isTeamOne, isDaja, isAdmin]);
   useEffect(() => {
     refreshTeamOneCount();
@@ -216,7 +219,20 @@ export function AdminNavigator({ onLogout }: { onLogout: () => void }) {
             }}
           />
         );
-      case 'TeamOne':   return <TeamOneReviewScreen mode={isTeamOne ? 'team' : 'staff'} onChanged={refreshTeamOneCount} />;
+      case 'TeamOne':
+        return (
+          <TeamOneReviewScreen
+            mode={isTeamOne ? 'team' : 'staff'}
+            onChanged={refreshTeamOneCount}
+            onOpenClient={c => {
+              if (c.id !== selectedClient?.id) setClientFolderKey(null);
+              setSelectedClient(c);
+              setShowDashboard(false);
+              setActiveTab('Clients');
+              setBackTo('TeamOne');
+            }}
+          />
+        );
       case 'Staff':     return <StaffManagementScreen />;
       case 'Workflow':  return <WorkflowDashboardScreen />;
       case 'Reports':   return <FinancialReportsScreen />;

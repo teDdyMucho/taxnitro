@@ -10,6 +10,7 @@ import { Colors } from '../../constants/colors';
 import { useAuth } from '../../context/AuthContext';
 import { useSheetStyles } from '../../hooks/useSheetStyles';
 import { getAllClients, Profile } from '../../db/profiles';
+import { unreadChats, type UnreadThread } from '../../db/teamOneChat';
 import { moveDestinations } from '../../lib/folderCatalog';
 import {
   listTeamOneItems, listTeamOneUpdates, approveItem, denyItem, escalateItem, reviseItem, noteToClient,
@@ -75,7 +76,12 @@ const NOTE_COPY: Record<NoteAction, { title: string; hint: string; button: strin
   note:     { title: 'Note for the client', hint: 'The client reads this and is told it is there.', button: 'Send to client', required: true },
 };
 
-export function TeamOneReviewScreen({ mode, onChanged }: { mode: Mode; onChanged?: () => void }) {
+export function TeamOneReviewScreen({ mode, onChanged, onOpenClient }: {
+  mode: Mode;
+  onChanged?: () => void;
+  /** Open a client's profile, from a thread with new messages. */
+  onOpenClient?: (client: Profile) => void;
+}) {
   const { user } = useAuth();
   const insets = useSafeAreaInsets();
   const [items, setItems]       = useState<TeamOneItem[]>([]);
@@ -87,6 +93,8 @@ export function TeamOneReviewScreen({ mode, onChanged }: { mode: Mode; onChanged
   const [approveFor, setApproveFor] = useState<TeamOneItem | null>(null);
   const [noteFor, setNoteFor]   = useState<{ item: TeamOneItem; action: NoteAction } | null>(null);
   const [toast, setToast]       = useState<string | null>(null);
+  // Chat threads with messages from the other side not read yet.
+  const [threads, setThreads]   = useState<UnreadThread[]>([]);
 
   const me = { email: user?.email ?? null, name: user?.name ?? null, role: user?.role ?? null };
   const canDecideEscalated = mode === 'staff'
@@ -94,13 +102,15 @@ export function TeamOneReviewScreen({ mode, onChanged }: { mode: Mode; onChanged
 
   const load = useCallback(async (pull = false) => {
     if (pull) setRefreshing(true);
-    const [it, up, cl] = await Promise.all([listTeamOneItems(), listTeamOneUpdates(), getAllClients()]);
+    const [it, up, cl, th] = await Promise.all([
+      listTeamOneItems(), listTeamOneUpdates(), getAllClients(), unreadChats(user?.role)]);
+    setThreads(th);
     setItems(it);
     setUpdates(up);
     setClients(new Map(cl.map(c => [c.email.toLowerCase(), c])));
     setLoading(false);
     setRefreshing(false);
-  }, []);
+  }, [user?.role]);
   useEffect(() => { load(); }, [load]);
 
   const showToast = (m: string) => { setToast(m); setTimeout(() => setToast(null), 2600); };
@@ -228,6 +238,33 @@ export function TeamOneReviewScreen({ mode, onChanged }: { mode: Mode; onChanged
           contentContainerStyle={{ padding: 16, paddingBottom: 40, gap: 14 }}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => load(true)} tintColor={Colors.primary} />}
         >
+          {/* New chat messages, a line per client; tapping opens their profile,
+              where the thread is. */}
+          {threads.length > 0 && (
+            <View style={s.dates}>
+              <Text style={s.datesTitle}>New messages{mode === 'staff' ? ' from Team One' : ' from FTG'}</Text>
+              {threads.map(t => {
+                const c = clients.get(t.client_email);
+                return (
+                  <TouchableOpacity
+                    key={t.client_email}
+                    style={s.dateRow}
+                    onPress={() => { if (c) onOpenClient?.(c); }}
+                    disabled={!c || !onOpenClient}
+                    activeOpacity={0.7}
+                  >
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                      <Text style={s.dateClient} numberOfLines={1}>{nameOf(t.client_email)}</Text>
+                      <Text style={s.meta} numberOfLines={1}>{t.last.message}</Text>
+                    </View>
+                    <View style={[s.count, s.countOn]}><Text style={[s.countText, s.countTextOn]}>{t.count}</Text></View>
+                    <Ionicons name="chevron-forward" size={15} color={Colors.textMuted} />
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          )}
+
           {groups.length === 0 ? (
             <Text style={s.empty}>Nothing here.</Text>
           ) : groups.map(([email, list]) => (

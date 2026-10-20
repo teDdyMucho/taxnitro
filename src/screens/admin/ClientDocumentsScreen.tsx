@@ -41,6 +41,7 @@ import { useResponsive } from '../../hooks/useResponsive';
 import { getTeamOneServices } from '../../db/teamOne';
 import { TeamOneUpdateModal } from '../../components/TeamOneUpdateModal';
 import { ClientDetailsPanel } from '../../components/ClientDetailsPanel';
+import { TeamOneChatPanel } from '../../components/TeamOneChatPanel';
 import { AdminUploadModal } from '../../components/AdminUploadModal';
 import { ClientQuestionnairePanel } from '../../components/ClientQuestionnairePanel';
 import {
@@ -1069,6 +1070,7 @@ export function ClientDocumentsScreen({
             <ClientDetailsPanel clientEmail={client.email} clientName={client.full_name} />
             {/* What FTG tells the client — it shows on their dashboard. */}
             <ClientDetailsPanel shared clientEmail={client.email} clientName={client.full_name} />
+            <TeamOneChatPanel clientEmail={client.email} />
             <ClientQuestionnairePanel
               clientEmail={client.email}
               accounts={normalizeBankAccounts(client.bank_accounts)}
@@ -1126,12 +1128,15 @@ export function ClientDocumentsScreen({
                     <ClientDetailsPanel clientEmail={client.email} clientName={client.full_name} />
                     {/* What FTG tells the client — it shows on their dashboard. */}
                     <ClientDetailsPanel shared clientEmail={client.email} clientName={client.full_name} />
+                    {/* Team One and FTG talking about this client — never the client. */}
+                    <TeamOneChatPanel clientEmail={client.email} />
                     <ClientQuestionnairePanel
                       clientEmail={client.email}
                       accounts={normalizeBankAccounts(client.bank_accounts)}
                     />
                   </>
                 )}
+                {isTeamOne && <TeamOneChatPanel clientEmail={client.email} />}
                 {folders.length > 0 && (
                   <>
                     <Text style={s.sectionLabel}>Folders</Text>
