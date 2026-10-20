@@ -1030,10 +1030,11 @@ function DocDetailPage({ doc, sf, root, fileOwnerId, userEmail, services, onClos
             </TouchableOpacity>
           )}
 
-          {/* Message button (always available) */}
+          {/* Message button (always available). Camaree could not find it: it
+              was white on this light page. */}
           <TouchableOpacity style={dp.msgBtn} onPress={() => setConversationOpen(true)} activeOpacity={0.8}>
-            <Ionicons name="chatbubbles-outline" size={16} color="rgba(255,255,255,0.7)" />
-            <Text style={dp.msgBtnText}>Message Admin</Text>
+            <Ionicons name="chatbubbles-outline" size={16} color="#2C2320" />
+            <Text style={dp.msgBtnText}>Message FTG about this file</Text>
           </TouchableOpacity>
         </View>
 
@@ -1654,8 +1655,8 @@ const dp = StyleSheet.create({
   viewBtnText: { color: Colors.white, fontSize: 16, fontWeight: '800' },
   markBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 13, borderRadius: 14, borderWidth: 1, borderColor: 'rgba(37,99,235,0.3)', backgroundColor: 'rgba(37,99,235,0.08)', marginBottom: 10 },
   markBtnText: { color: Colors.primary, fontSize: 14, fontWeight: '600' },
-  msgBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 13, borderRadius: 14, borderWidth: 1, borderColor: 'rgba(255,255,255,0.14)', backgroundColor: 'rgba(255,255,255,0.05)' },
-  msgBtnText: { color: 'rgba(255,255,255,0.65)', fontSize: 14, fontWeight: '600' },
+  msgBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 13, borderRadius: 14, borderWidth: 1, borderColor: 'rgba(232,185,35,0.55)', backgroundColor: 'rgba(232,185,35,0.14)' },
+  msgBtnText: { color: '#2C2320', fontSize: 14, fontWeight: '700' },
 
   // Feedback card
   feedbackCard:     { borderRadius: 16, borderWidth: 1, padding: 14, gap: 8 },
