@@ -162,6 +162,8 @@ function AddClientModal({
   const [errorMsg, setErrorMsg]     = useState('');
   // Their Tax Nitro files, brought over once the account exists.
   const [pullNote, setPullNote]     = useState<string | null>(null);
+  // Create Client was pressed with something missing: from then on, say what.
+  const [tried, setTried]           = useState(false);
 
   const toggleService = (svc: ClientService) => {
     setServices(prev =>
@@ -172,7 +174,7 @@ function AddClientModal({
   const reset = () => {
     setFirstName(''); setLastName(''); setCompanyName(''); setEmail(''); setPassword(''); setPlan('Free');
     setServices(['BK']); setHasQbo(false); setBankAccounts([]);
-    setStep('form'); setErrorMsg(''); setShowPass(false); setPullNote(null);
+    setStep('form'); setErrorMsg(''); setShowPass(false); setPullNote(null); setTried(false);
   };
 
   // A half-filled bank row would be silently dropped on save — block instead.
@@ -181,16 +183,31 @@ function AddClientModal({
   // name is part of what is required to create the contact. TAX-only clients
   // are people and need none.
   const needsCompany = services.some(s => s === 'BK' || s === 'CFO' || s === 'YER');
-  const canSubmit =
-    !!fullName.trim() && !!email.trim() && password.length >= 8 &&
-    services.length > 0 && !bankIncomplete && !loading &&
-    (!needsCompany || !!companyName.trim());
+  // What is still missing, in words. The button used to grey out without
+  // saying why, and Camaree could not tell what it was waiting for — the
+  // name, email and company fields sit above where the form is scrolled to.
+  const missing = [
+    !fullName.trim() && 'their name',
+    !email.trim() && 'their email',
+    password.length < 8 && 'a password of 8 or more characters',
+    services.length === 0 && 'a client type',
+    needsCompany && !companyName.trim() && 'the company name (needed for Bookkeeping, CFO and YER clients)',
+    bankIncomplete && 'the rest of the bank account details',
+  ].filter((m): m is string => !!m);
+  const canSubmit = missing.length === 0 && !loading;
+  // Said once Create Client has been pressed, and kept current as the form is
+  // filled in, so it goes away with the last missing piece.
+  const missingText = missing.length === 0 ? ''
+    : `To create this client, add ${missing.length === 1 ? missing[0]
+      : `${missing.slice(0, -1).join(', ')} and ${missing[missing.length - 1]}`}.`;
+  const shownError = errorMsg || (tried ? missingText : '');
 
   const handleClose = () => { reset(); onClose(); };
   const handleDone  = () => { reset(); onDone(); };
 
   const handleSubmit = async () => {
-    if (!canSubmit) return;
+    if (loading) return;
+    if (missing.length) { setTried(true); return; }
     setLoading(true);
     setErrorMsg('');
     try {
@@ -416,10 +433,10 @@ function AddClientModal({
               </ScrollView>
 
               {/* Error */}
-              {!!errorMsg && (
+              {!!shownError && (
                 <View style={ac.errorBox}>
                   <Ionicons name="alert-circle-outline" size={14} color="#DC2626" />
-                  <Text style={ac.errorText}>{errorMsg}</Text>
+                  <Text style={ac.errorText}>{shownError}</Text>
                 </View>
               )}
 
@@ -429,9 +446,11 @@ function AddClientModal({
                   <Text style={ac.cancelText}>Cancel</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
+                  // Still looks unready until the form is complete, but answers a
+                  // press by saying what is missing.
                   style={[ac.primaryBtn, { flex: 2 }, !canSubmit && ac.primaryBtnDisabled]}
                   onPress={handleSubmit}
-                  disabled={!canSubmit}
+                  disabled={loading}
                   activeOpacity={0.85}
                 >
                   {loading
