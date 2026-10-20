@@ -465,7 +465,7 @@ export function ClientManageModal({
                 <Text style={mm.toggleText}>{pulling ? 'Pulling…' : 'Pull their files from Tax Nitro'}</Text>
               </TouchableOpacity>
               <Text style={mm.qboHint}>
-                {pullNote ?? 'Brings over everything they sent through Tax Nitro, into Unsorted Uploads. Files already here are skipped.'}
+                {pullNote ?? 'Brings over everything they sent through Tax Nitro, into Unsorted Uploads, and their paid invoices, into Invoices. Anything already here is skipped.'}
               </Text>
             </View>
 

@@ -109,3 +109,24 @@ number — no file names — so nobody can use it to send their own words as FTG
 
 and activate it. Until it is active the app's calls fail quietly and uploads
 carry on as before.
+
+---
+
+# Paid invoices
+
+Camaree: "Once an invoice is paid could that funnel to the app as well?"
+
+    every hour                                (automation/n8n/ftg-invoice-sync.json)
+      → POST .../functions/v1/tax-nitro { action: "sync_invoices" }
+      → each paid Tax Nitro invoice not filed yet, for a client with an account
+      → drawn as a PDF, filed in their Tax, BK or CFO Invoices folder
+
+GHL keeps invoices as data, so the PDF is made in the function. Which folder
+follows the invoice's own words (tax, bookkeeping, CFO) among the services the
+client takes. public.tax_nitro_invoices notes what is filed, so nothing goes
+in twice (database/tax_nitro_invoices.sql). At most 40 a run; the rest follow.
+
+**Set up:** run `database/tax_nitro_invoices.sql`; add the Edge Function
+secret `SYNC_KEY` (a long random string); deploy `supabase/functions/tax-nitro`;
+import the workflow with the anon key and the same `SYNC_KEY` in its headers,
+and activate it. The function refuses the key for anything but this sync.

@@ -1,0 +1,75 @@
+{
+  "name": "FTG invoice sync",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 1
+            }
+          ]
+        }
+      },
+      "id": "6f1c2a4e-3b7d-4e8a-9c1f-2d5b8e7a1c30",
+      "name": "Every hour",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -200,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://ruducnccpiasyhcebzcv.supabase.co/functions/v1/tax-nitro",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer REPLACE_WITH_THE_ANON_KEY"
+            },
+            {
+              "name": "x-sync-key",
+              "value": "REPLACE_WITH_SYNC_KEY"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\"action\": \"sync_invoices\"}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "9a3e5c7b-1d2f-4a6b-8e9c-0f1a2b3c4d5e",
+      "name": "File paid invoices",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        40,
+        300
+      ],
+      "notes": "Paid invoices not in the app yet go into the client's Invoices folder, at most 40 a run; the rest come next hour."
+    }
+  ],
+  "connections": {
+    "Every hour": {
+      "main": [
+        [
+          {
+            "node": "File paid invoices",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
