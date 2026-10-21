@@ -8,11 +8,16 @@ import { Colors } from '../constants/colors';
 // is the browser's own, which every browser now has and which needs nothing
 // installed. Elsewhere it is a typed date, checked with isIsoDate.
 
-/** A real calendar day written as YYYY-MM-DD. */
+/**
+ * A real calendar day written as YYYY-MM-DD. Checked as a day, not a moment:
+ * read as local midnight and compared in UTC, every date failed east of UTC —
+ * Team One in Manila could never send an update.
+ */
 export function isIsoDate(v: string | null | undefined): boolean {
   if (!v || !/^\d{4}-\d{2}-\d{2}$/.test(v)) return false;
-  const d = new Date(`${v}T00:00:00`);
-  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === v;
+  const [y, m, d] = v.split('-').map(Number);
+  const t = new Date(Date.UTC(y, m - 1, d));
+  return t.getUTCFullYear() === y && t.getUTCMonth() === m - 1 && t.getUTCDate() === d;
 }
 
 export function DateField({ value, onChange, min }: {

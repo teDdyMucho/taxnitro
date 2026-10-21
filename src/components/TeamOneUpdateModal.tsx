@@ -28,7 +28,12 @@ const SERVICE_LABEL: Record<UpdateService, string> = { TAX: 'TAX', BK: 'Bookkeep
 interface Draft { date: string; link: string; pnl: PickedDoc | null; balance: PickedDoc | null }
 const emptyDraft = (): Draft => ({ date: '', link: '', pnl: null, balance: null });
 
-const today = () => new Date().toISOString().slice(0, 10);
+// Today where the person is. toISOString() gave the UTC day: yesterday for a
+// Manila morning, tomorrow for a US evening, which then barred today.
+const today = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
 const looksLikeLink = (v: string) => /^https?:\/\/\S+\.\S+/i.test(v.trim());
 
 export function TeamOneUpdateModal({ visible, client, services, onClose, onSent }: {
