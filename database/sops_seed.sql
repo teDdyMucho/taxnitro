@@ -1,267 +1,644 @@
 -- ============================================================
--- SOPS SEED  (the starting knowledge base)
+-- SOPS SEED  (the knowledge base the help chat answers from)
 --
--- Every procedure below was read out of the code rather than written from
--- memory, so each one says what the software actually does today — including
--- where that differs from what its own buttons promise. A procedure that
--- describes an intention the system does not carry out is worse than no
--- procedure, because someone follows it and believes the step happened.
+-- Camaree: "can we have Ai generate how to text and videos for SOPs for the
+-- team" and "once SOP and knowledge base are done, chat bots are able to rely
+-- on those for how to answer questions, then we can actually invite clients".
 --
--- Where behaviour is known to be wrong, the SOP says so in the body and the
--- 'known-issue' tag marks it. Those are listed in database/SOP-GAPS.md.
+-- Rewritten 2026-10-22 from the app as it is now, screen by screen, with the
+-- button names exactly as they appear. Where the app does not do what a button
+-- says, the procedure says so and is tagged 'known-issue'; those are listed in
+-- database/SOP-GAPS.md. A procedure that describes an intention the app does
+-- not carry out is worse than none, because someone follows it and believes
+-- the step happened.
 --
--- Run database/sops.sql first.
+-- 28 for clients, 10 for Team One, 24 internal. The audience is a security
+-- boundary, enforced by RLS (sops.sql, sops_team_one.sql), not a label.
 --
--- SAFE TO RE-RUN — upserts on slug, so editing a body here and re-running
+-- Run database/sops.sql and database/sops_team_one.sql first.
+--
+-- SAFE TO RE-RUN: upserts on slug, so editing a body here and re-running
 -- updates the procedure in place instead of adding a second copy.
 -- ============================================================
 
-insert into public.sops (slug, title, body, audience, category, tags, services) values
+insert into public.sops (slug, title, body, audience, category, tags, services, is_active) values
 
 -- ══════════════════════════════════════════════════════════════
--- CLIENT-FACING
+-- CLIENT-FACING: what the assistant may tell a client
 -- ══════════════════════════════════════════════════════════════
+('client-sign-in',
+ $t$How do I sign in?$t$,
+ $b$Press **Sign In** on the Finance Therapy Group portal, enter your **Email Address** and **Password**, then press **Sign In**.
 
+- Our team sets up your account and gives you your email and a starting password. There is no sign-up page.
+- "Incorrect email or password." means one of the two does not match. Check you are using the email we set up for you.
+- You stay signed in on that browser until you sign out, or until you are signed out for being away (see "Why was I signed out?").
+
+To sign out, press the sign-out icon beside your name at the bottom of the menu, or go to **Profile** and press **Sign Out**.$b$,
+ 'client', 'account', array['sign in', 'log in', 'login', 'password', 'cannot log in', 'sign out', 'log out', 'account'], array[]::text[], true),
+('client-forgot-password',
+ $t$I forgot my password$t$,
+ $b$**Message us and we will set a new password for you.** The **Forgot Password?** link on the sign-in page does not work at the moment: the email it sends does not lead to a page where you can choose a new password.
+
+Once you are signed in you can change your password yourself: **Profile → Change Password**, enter your current password, then the new one twice (at least 8 characters). No confirmation appears on the web, so sign out and back in with the new password to check it worked.$b$,
+ 'client', 'account', array['forgot password', 'reset password', 'new password', 'locked out', 'cannot sign in', 'password reset email'], array[]::text[], true),
+('client-menu',
+ $t$What's in the menu?$t$,
+ $b$On a computer the menu is down the left side; on a phone it is the bar along the bottom.
+
+- **Dashboard**: what is new, what is missing and what is next this month.
+- **Documents**: all your folders, by service.
+- **Notifications**: notes and new documents from us. A red number shows how many are unread.
+- **Profile**: your name, photo, password and account details.
+- **Upload** (the gold button): send us documents.
+
+The gold chat bubble at the bottom right is the assistant. Ask it how anything works.$b$,
+ 'client', 'account', array['menu', 'navigation', 'where is', 'sidebar', 'pages', 'find'], array[]::text[], true),
+('client-dashboard',
+ $t$What does my dashboard show?$t$,
+ $b$Your dashboard has three columns.
+
+**What's New**: files we added for you in the last 30 days (marked NEW until you open them), our replies on your files, and uploads we accepted recently.
+
+**What's Missing**: what still needs you this month:
+- your monthly questionnaire (Bookkeeping and CFO only),
+- files we sent back ("Sent back by FTG. Please upload it again"),
+- files waiting for your approval ("From FTG. Please review and approve"),
+- each document still to upload this month ("To upload this month"),
+- anything we asked you for ("Requested by FTG").
+
+Above the list, "X of Y sent this month · Z accepted" counts your monthly documents. The bar turns green once every one is accepted.
+
+**What's Next**: notes from your accountant, uploads we are still reviewing, and what is due next month.
+
+Press a row under What's Missing to deal with it. Upload rows open the upload window; the others take you to your Documents. The dashboard always shows the current month.$b$,
+ 'client', 'dashboard', array['dashboard', 'home', 'what''s missing', 'what''s new', 'what''s next', 'progress', 'checklist', 'to do'], array[]::text[], true),
 ('client-required-documents-bk',
- 'What documents do I need to send each month? (Bookkeeping)',
- E'Bookkeeping clients send four things each month:\n\n'
- '1. **Bank Statements (all accounts)**\n'
- '2. **Credit Card Statements**\n'
- '3. **Loan Statements**\n'
- '4. **Payroll Reports**\n\n'
- 'Your dashboard shows these as a checklist under **Required Documents**, with a progress bar reading "N of 4 required items accepted".\n\n'
- 'If you have told us about your individual bank accounts, the first line is replaced by one line per account — for example "Bank Statements — BDO ••••4821". Each account is then ticked off separately, so the total goes up accordingly. If we have no account details on file, you will see the single combined line instead.',
- 'client', 'requirements', array['required documents','what do i send','monthly documents','checklist','bookkeeping'], array['BK']),
+ $t$What documents do I need to send each month? (Bookkeeping)$t$,
+ $b$Bookkeeping clients send four things each month:
 
+1. **Bank Statements**: one line for each bank account we have on file (for example "Bank Statements — Chase ••••1234"), or a single "Bank Statements (all accounts)" line if we have none on file.
+2. **Credit Card Statements**
+3. **Loan Statements**
+4. **Payroll Reports**
+
+They are listed on your dashboard under **What's Missing** as "To upload this month". Send each one with the gold **Upload** button, choosing it as the document type. It counts as sent straight away, and as done once we accept it.$b$,
+ 'client', 'requirements', array['required documents', 'what do i send', 'monthly documents', 'checklist', 'bookkeeping', 'bank statements'], array['BK'], true),
 ('client-required-documents-cfo',
- 'What documents do I need to send each month? (CFO)',
- E'CFO clients send six things each month:\n\n'
- '1. **Bank Statements (all accounts)**\n'
- '2. **Credit Card Statements**\n'
- '3. **Loan Statements**\n'
- '4. **Payroll Reports**\n'
- '5. **Prior Month Bookkeeping / QBO Access**\n'
- '6. **AR / AP Aging**\n\n'
- 'Item 5 disappears from your list if we already have QBO access — there is nothing to send, and your progress bar counts out of five instead of six.\n\n'
- 'As with bookkeeping, if we hold your individual bank account details, the bank line is replaced by one line per account.',
- 'client', 'requirements', array['required documents','what do i send','monthly documents','checklist','cfo','qbo'], array['CFO']),
+ $t$What documents do I need to send each month? (CFO)$t$,
+ $b$CFO clients send these each month:
 
+1. **Bank Statements**: one line per bank account we have on file, or "Bank Statements (all accounts)".
+2. **Credit Card Statements**
+3. **Loan Statements**
+4. **Payroll Reports**
+5. **Prior Month Bookkeeping / QBO Access**: not on your list if we already have access to your QuickBooks.
+6. **AR / AP Aging**
+
+If you have both Bookkeeping and CFO with us, you see both lists, labelled "Bookkeeping ·" and "CFO ·". Send each one with the gold **Upload** button, choosing it as the document type.$b$,
+ 'client', 'requirements', array['required documents', 'what do i send', 'monthly documents', 'checklist', 'cfo', 'qbo', 'ar ap aging'], array['CFO'], true),
 ('client-required-documents-tax',
- 'What documents do I need to send? (Tax)',
- E'Tax clients have **no monthly required-document checklist**. Nothing is tracked against a month and there is no progress bar to complete.\n\n'
- 'Instead you upload into whichever folder fits what you are sending:\n\n'
- '- Tax Contracts\n'
- '- Tax Invoices\n'
- '- Client Uploads\n'
- '- Additional Tax Docs\n'
- '- Tax Returns\n'
- '- Previous Tax Returns\n'
- '- Previous Year Transcripts\n\n'
- 'Send what your accountant has asked for. If you are unsure which folder, use **Client Uploads** and we will file it correctly.',
- 'client', 'requirements', array['tax','required documents','what do i send','tax folders'], array['TAX']),
+ $t$What documents do I need to send? (Tax)$t$,
+ $b$Tax clients have **no monthly checklist**. Send what your accountant asks for, when they ask.
 
+When you press **Upload**, choose the document type that fits:
+- **Identification**: driver's license, passport or other ID
+- **IRS Notices**: letters from the IRS
+- **IP Pins**
+- **Tax Returns**
+- **Transcripts**
+- **Unsure**: W-2s, 1099s and anything else, or whenever you are not sure. It goes to **Unsorted Uploads** and we file it for you.$b$,
+ 'client', 'requirements', array['tax', 'required documents', 'what do i send', 'w-2', '1099', 'tax documents'], array['TAX'], true),
+('client-find-documents',
+ $t$Where are my documents?$t$,
+ $b$Press **Documents** in the menu.
+
+- **The tabs at the top** switch between your services: **TAX**, **BK** (bookkeeping) and **CFO**. You only see the ones you have.
+- **Each folder** shows how many documents it holds. A gold number means new files.
+- **Unsorted Uploads** appears under every tab. Files land there until we file them.
+- Monthly reports are grouped under **Monthly Reporting**, and older tax years under **Prior Years**.
+
+Open a folder to see its files, grouped by the month they cover. **Search files…** finds a file by name, and **All / New / Viewed** filters the list. Some folders have folders inside them; open those the same way.
+
+To save copies, use the download icon on a folder (everything in it), or **Download all** and **Select** inside a folder.$b$,
+ 'client', 'documents', array['documents', 'folders', 'find a file', 'where is my', 'tabs', 'search', 'download'], array[]::text[], true),
+('client-folders-explained',
+ $t$What goes in each folder?$t$,
+ $b$**Every tab**
+- **Unsorted Uploads**: files we have not filed yet, including what you send through Tax Nitro.
+
+**TAX**
+- **Identification**, **IRS Notices**, **IP Pins**, **Tax Returns**: what the names say.
+- **Tax Contracts** and **Tax Invoices**: your agreements and paid invoices.
+- **Client Uploads**: documents from you that our team filed here.
+- **Other Tax Docs**: everything else, including **P&L Statement** and **Balance Sheet** folders.
+- **Prior Years**: **Previous Tax Returns** and **Transcripts**.
+
+**BK (bookkeeping)**
+- **BK Contracts**, **BK Invoices**, **Bank Accounts**, **Additional BK Docs**.
+- **Monthly Reporting**: **Required Info** (the monthly documents you sent us), **For Client Review** (reports we need you to check) and **Final Statements** (your finished reports).
+
+**CFO**
+- **CFO Contracts**, **CFO Invoices**, **Additional CFO Docs**.
+- **Monthly Reporting**: **Required Info**, **For Client Review**, **Final Statements & Insights**.$b$,
+ 'client', 'documents', array['folders', 'folder names', 'unsorted uploads', 'required info', 'for client review', 'final statements', 'other tax docs'], array[]::text[], true),
+('client-open-file',
+ $t$How do I open a file, and what can I do with it?$t$,
+ $b$Open a folder, then press the file. Its page shows the month it covers, when it was uploaded, its folder and its status, with these buttons:
+
+- **View Document**: opens it full screen and marks it as viewed.
+- **Mark as Viewed**: shown until you have viewed it.
+- **Message FTG about this file**: ask us anything about it.
+
+The download icon on the file's card in the folder saves a copy.
+
+**You cannot delete a file once it is sent.** If something went up by mistake, message us about it and we will take care of it.$b$,
+ 'client', 'documents', array['open file', 'view document', 'preview', 'mark as viewed', 'download file', 'delete file', 'rename'], array[]::text[], true),
 ('client-upload-a-document',
- 'How do I upload a document?',
- E'1. Press **Upload** in the sidebar (or the upload button inside any folder).\n'
- '2. Choose **what the document is** from the list. Items marked with a gold dot count toward your monthly progress.\n'
- '3. Pick the **month the documents cover** — not today''s date. A January statement you send in March should be marked January.\n'
- '4. Drag your files in, or press to browse. You can send several files, and several different document types, in one go.\n'
- '5. Add a note if there is something we should know about the file.\n'
- '6. Press **Upload**.\n\n'
- 'Files are sent one at a time, so if one fails the rest still arrive. You will see a confirmation listing anything that did not go through.\n\n'
- 'Once uploaded, the item turns **yellow (Pending)** on your dashboard until a member of our team reviews it.',
- 'client', 'uploads', array['upload','send a file','how to upload','attach document','submit documents'], array[]::text[]),
+ $t$How do I upload a document?$t$,
+ $b$1. Press the gold **Upload** button in the menu. (Bookkeeping and CFO clients answer the monthly questionnaire first if this month's is not submitted. The upload window opens by itself when you submit.)
+2. Under **Document type**, choose what you are sending. Types with a gold dot count toward this month's list.
+3. Drag your files into the box, or click to browse (on a phone, **Choose files…**). You can add several files, and switch type to add more.
+4. Choose the **month the documents cover**: **This month**, or an earlier month such as **Sep 2026**. One month applies to everything in that upload.
+5. Add a note if there is something we should know (optional).
+6. Press **Upload**.
 
+You will see "Your document has been sent for review." Your files show **Pending Approval** until our team reviews them. Folders do not have their own upload button; always use the gold one.$b$,
+ 'client', 'uploads', array['upload', 'send a file', 'how to upload', 'attach document', 'submit documents', 'send documents'], array[]::text[], true),
 ('client-upload-status-meaning',
- 'What do the colours on my checklist mean?',
- E'Each required item shows one of four states:\n\n'
- '- **Grey, no badge** — nothing uploaded yet.\n'
- '- **Yellow, "Pending"** — you have uploaded a file and it is waiting for our team to review.\n'
- '- **Green, "Accepted"** — we have reviewed and accepted it. Only accepted items count toward your progress bar.\n'
- '- **Red, "Declined"** — we could not use the file. Open the document to read why, then upload a replacement.\n\n'
- 'Your progress bar counts **accepted items only**, so it does not move when you upload — it moves when we accept.\n\n'
- 'The dashboard updates by itself as we review. You do not need to refresh.',
- 'client', 'requirements', array['pending','accepted','declined','colours','status','progress bar','green','red','yellow'], array[]::text[]),
+ $t$What do the labels on my files mean?$t$,
+ $b$- **Pending Approval** (amber): on a file you uploaded, it is waiting for our team to review it. On a file we sent you, it is waiting for you to approve it.
+- **Rejected** (red): the file could not be used. The reason is shown underneath. See "My upload was sent back".
+- **New**: not opened yet. **Viewed**: it has been opened.
 
+On your dashboard a monthly document counts as sent as soon as you upload it, and as accepted once we approve it.$b$,
+ 'client', 'uploads', array['pending', 'pending approval', 'rejected', 'new', 'viewed', 'status', 'labels', 'badge'], array[]::text[], true),
 ('client-upload-declined',
- 'My upload was declined — what do I do?',
- E'A red **Declined** badge means we could not use the file. The most common reasons are a missing page, an unreadable scan, or the wrong month.\n\n'
- 'Open the document from your Documents page to read the reason our team left.\n\n'
- 'Then simply upload a corrected file against the same item. **The item stays red until we accept the new file** — uploading alone does not clear it. Once we accept the replacement it turns green.\n\n'
- 'You do not need to delete the declined file first.',
- 'client', 'requirements', array['declined','rejected','red','failed','re-upload','fix upload'], array[]::text[]),
+ $t$My upload was sent back. What do I do?$t$,
+ $b$A **Rejected** label, or "Sent back by FTG. Please upload it again" on your dashboard, means we could not use the file. Usually a page is missing, the scan is unreadable, or it is the wrong month.
 
+1. Open the file and read our note under **Admin Feedback**. Press **Reply to Feedback** if you want to ask us about it.
+2. Send a corrected file with the gold **Upload** button, choosing the same document type and month.
+
+It stays listed as sent back until we accept the new file.$b$,
+ 'client', 'uploads', array['declined', 'rejected', 'sent back', 'red', 're-upload', 'fix upload', 'wrong file'], array[]::text[], true),
+('client-review-ftg-file',
+ $t$How do I approve or reject a file FTG sent me?$t$,
+ $b$When we send you something to check, usually a monthly report in **For Client Review**, it appears on your dashboard as "From FTG. Please review and approve".
+
+1. Open the file and press **View Document** to read it.
+2. Under **Review This File**, press **Approve** if it looks right, or **Reject** if something is wrong.
+3. Rejecting asks why. Tell us what is wrong, for example "The March statement is missing". We see your reason straight away.
+
+Neither choice can be undone, so read the document first. To ask a question without deciding, use **Message FTG about this file**.$b$,
+ 'client', 'documents', array['approve', 'reject', 'review', 'for client review', 'please review', 'sign off', 'report to check'], array[]::text[], true),
+('client-message-ftg',
+ $t$How do I message FTG about a file?$t$,
+ $b$Open the file and press **Message FTG about this file**. Type your message (up to 500 characters) and send it. One check means sent; two gold checks mean we have read it.
+
+Our replies appear in the same conversation, and on your dashboard under **What's New** as "FTG replied on …". A note you add when uploading becomes the first message on each file in that upload.
+
+For anything not about a particular file, use the gold chat bubble at the bottom right.$b$,
+ 'client', 'messages', array['message', 'question about a file', 'contact', 'reply', 'conversation', 'chat with accountant', 'comment'], array[]::text[], true),
 ('client-monthly-questionnaire',
- 'What is the monthly questionnaire?',
- E'Bookkeeping and CFO clients answer ten short yes/no questions before uploading each month. They tell us what to look for in your books so nothing is miscoded. **Tax-only clients are not asked.**\n\n'
- 'The questions cover: new accounts, closed accounts, unusual or large transactions, new loans or financing, income outside normal operations, compliance issues, assets bought, assets disposed of, anything you want reviewed, and anything else affecting the month.\n\n'
- 'Answering **No** to a question is always enough on its own. Answering **Yes** asks one follow-up — an explanation, account details, or a document.\n\n'
- 'You can press **Save for later** and return; a saved draft does not count as submitted. The questionnaire opens automatically when you press Upload from the sidebar and have not yet submitted it for the month.\n\n'
- 'One thing worth knowing: if you tick an account as **closed**, we stop asking for its statements from the following month. That only happens when you submit, not when you save a draft.',
- 'client', 'account', array['questionnaire','monthly questions','ten questions','survey','before upload'], array['BK','CFO']),
+ $t$What is the monthly questionnaire?$t$,
+ $b$Bookkeeping and CFO clients answer ten short Yes/No questions each month before uploading. They tell us what to look for in your books. Tax-only clients are not asked.
 
-('client-late-upload-month',
- 'I uploaded a statement for an earlier month — why did it not count?',
- E'**Please tell us when you do this, so we can credit the right month by hand.**\n\n'
- 'Right now the checklist credits the month you *send* a document, not the month the document *covers*. So a January statement uploaded in March ticks off March''s checklist rather than January''s — even though you correctly marked it as January on the upload screen.\n\n'
- 'The month you pick is still recorded on the document itself, so your accountant sees the correct period and your books are unaffected. It is only the dashboard progress bar that counts it against the wrong month.\n\n'
- 'This is a known problem and we are fixing it. Until then, if you are catching up on an earlier month, let us know and we will correct the checklist for you.',
- 'client', 'requirements', array['wrong month','late upload','january','previous month','did not count','catch up','known-issue'], array[]::text[]),
+It opens when you press **Upload**, or from the questionnaire row under **What's Missing**.
 
+- **No** is enough on its own. **Yes** asks for a little more: an explanation, account details, or a document.
+- **Save for later** keeps your answers, but you cannot upload until you **Submit**.
+- **Submit** checks that every question is answered (it marks any you missed), then opens the upload window.
+- Closing with the X does not save.
+
+Once submitted it cannot be changed. Message us if something needs correcting.$b$,
+ 'client', 'account', array['questionnaire', 'monthly questions', 'ten questions', 'survey', 'before upload', 'save for later'], array['BK', 'CFO'], true),
+('client-earlier-month',
+ $t$I'm sending documents for an earlier month$t$,
+ $b$Choose that month when you upload. After picking the document type, press the month chip (for example **Sep 2026**) instead of **This month**. The document is filed and counted for the month you chose.
+
+Your dashboard only shows the current month, so an earlier month's documents will not change this month's list. If you are catching up on several months, upload each month separately.$b$,
+ 'client', 'uploads', array['earlier month', 'previous month', 'late upload', 'catch up', 'back months', 'wrong month', 'last month'], array[]::text[], true),
 ('client-cannot-upload',
- 'I can''t upload — the button does nothing, or I can''t add files',
- E'Work through these in order. Most cases are one of the first three.\n\n'
- '1. **Did you choose a document type first?** The file area stays locked until you pick what the document is — it reads "Pick a document type first". Choose the item from the list, then add your files.\n\n'
- '2. **Is a file actually attached?** The **Upload** button stays greyed out until at least one file is in the list. After choosing files you should see "N files ready".\n\n'
- '3. **Did the questionnaire open instead?** Bookkeeping and CFO clients answer ten short questions before uploading each month. If that appeared, finish and submit it — the upload screen opens by itself afterwards.\n\n'
- '4. **Try a different way in.** If you pressed Upload in the sidebar, open **Documents**, go into the folder you want, and use the upload button there instead.\n\n'
- '5. **Refresh the page and sign in again.** A session that has been open a long time can stop accepting uploads.\n\n'
- 'If none of these work, tell us and we will raise it with our team. It helps if you say what happens when you press the button, and whether you got as far as attaching a file.',
- 'client', 'uploads', array['cannot upload','can not upload','upload not working','button does nothing','stuck','broken','error','troubleshoot','file won''t attach'], array[]::text[]),
+ $t$I can't upload. What should I check?$t$,
+ $b$Work through these in order:
 
+1. **Choose a document type first.** The file box says "Pick a document type first" until you do.
+2. **Did the questionnaire open instead?** Bookkeeping and CFO clients submit it before uploading each month. Finish it and press **Submit**; the upload window opens by itself.
+3. **Saved the questionnaire for later?** It still needs to be submitted before you can upload.
+4. **Is a file in the list?** The **Upload** button stays grey until at least one file is added.
+5. **Use the gold Upload button in the menu.** Folders do not have their own.
+6. **Refresh the page**, sign in again if asked, and try once more.
+
+If it still fails, tell us through the chat bubble what happens when you press the button. Some errors show no message on the web, so tell us even if nothing appeared.$b$,
+ 'client', 'uploads', array['cannot upload', 'upload not working', 'button does nothing', 'stuck', 'error', 'troubleshoot', 'file won''t attach', 'upload greyed out'], array[]::text[], true),
 ('client-who-sees-my-documents',
- 'Who can see what I upload?',
- E'Your documents are visible to you and to the Finance Therapy Group staff working on your account. Other clients cannot see them — every document is tied to your account and the database enforces that on every single request, not just in the app.\n\n'
- 'Notes you add to a file are read by our team and answered on the same file, so the conversation stays attached to the document it is about.',
- 'client', 'account', array['privacy','who can see','security','confidential','other clients'], array[]::text[]),
+ $t$Who can see what I upload?$t$,
+ $b$Only you and the Finance Therapy Group team working on your account. Other clients can never see your files: the database checks this on every request, not just the app.
+
+Messages you write on a file are read by our team and answered on the same file.$b$,
+ 'client', 'account', array['privacy', 'who can see', 'security', 'confidential', 'other clients', 'safe'], array[]::text[], true),
+('client-notifications',
+ $t$What are notifications?$t$,
+ $b$**Notifications** lists notes from us ("A note from FTG") and documents we filed for you ("New document from FTG"). The red number in the menu counts the unread ones.
+
+- Press a notification to mark it read, or **Mark all read** for all of them.
+- The trash icon deletes one.
+
+Replies on your files show on your dashboard under **What's New**, not here.$b$,
+ 'client', 'messages', array['notifications', 'alerts', 'bell', 'unread', 'note from ftg', 'new document'], array[]::text[], true),
+('client-invoices',
+ $t$Where are my invoices?$t$,
+ $b$Invoices you have **paid in full** appear in your **Invoices** folder for that service (**Tax Invoices**, **BK Invoices** or **CFO Invoices**) as a PDF marked **PAID IN FULL**. They are added automatically within the hour after you pay.
+
+Unpaid or partly paid invoices are not shown in the app; those come to you by email.$b$,
+ 'client', 'billing', array['invoice', 'invoices', 'bill', 'receipt', 'payment', 'paid', 'tax nitro invoice'], array[]::text[], true),
+('client-contracts',
+ $t$Where are my contracts?$t$,
+ $b$Your agreements with us are in the **Contracts** folder for that service: **Tax Contracts**, **BK Contracts** or **CFO Contracts**.
+
+A contract you just signed online can take a while to appear. If one is missing, message us and we will add it.$b$,
+ 'client', 'documents', array['contract', 'contracts', 'agreement', 'engagement letter', 'signed', 'terms'], array[]::text[], true),
+('client-tax-nitro-uploads',
+ $t$I uploaded a document through Tax Nitro. Where is it?$t$,
+ $b$Documents you send through Tax Nitro forms come into the app automatically. They land in **Unsorted Uploads** (under every tab of your Documents), marked **Pending Approval** until our team files and reviews them.$b$,
+ 'client', 'uploads', array['tax nitro', 'form', 'uploaded on the website', 'link', 'missing upload', 'where did my file go'], array[]::text[], true),
+('client-idle-signout',
+ $t$Why was I signed out?$t$,
+ $b$For your security, after 5 minutes with no activity we ask **Still there?**. Press **Yes, keep me signed in** to carry on. If nobody answers within a minute you are signed out and see "Signed out for your security". Press **Sign in again**.
+
+Anything you already uploaded is saved. A message or upload you had not sent yet is lost. Reading a long document in the preview may not count as activity, so move the mouse or scroll now and then.$b$,
+ 'client', 'account', array['signed out', 'logged out', 'still there', 'timeout', 'session expired', 'kicked out', 'idle'], array[]::text[], true),
+('client-profile',
+ $t$How do I change my name, photo or password?$t$,
+ $b$Go to **Profile**.
+
+- **Photo**: press your photo to change it.
+- **Edit Profile**: change your name. Your email cannot be changed here; message us to update it.
+- **Change Password**: enter your current password, then the new one twice (at least 8 characters).
+
+Your profile also shows how many documents you have, how many you have viewed and how many are pending.$b$,
+ 'client', 'account', array['profile', 'change name', 'photo', 'avatar', 'change password', 'email change', 'account details'], array[]::text[], true),
+('client-financial-dashboard',
+ $t$Where is my financial dashboard?$t$,
+ $b$If we have built a financial dashboard for you, open **Profile → Financial Dashboard**. Its tabs include the dashboard itself, **Profit & Loss**, **Balance Sheet** and **Financial Roadmap**. Press **Back to Profile** to return.
+
+If you do not see it, we have not set one up for you yet. Ask your accountant.$b$,
+ 'client', 'reports', array['financial dashboard', 'financials', 'p&l', 'profit and loss', 'balance sheet', 'roadmap', 'reports'], array[]::text[], true),
+('client-requested-by-ftg',
+ $t$FTG asked me for a document$t$,
+ $b$Our requests appear on your dashboard under **What's Missing** as **Requested by FTG**, with what we need.
+
+Send it with the gold **Upload** button. Choose the closest document type; for anything that does not fit, use **Unsure** (tax), **Additional BK Docs** or **Additional CFO Docs**. Add a note saying which request it answers.
+
+The request stays on the list until the end of the month, even after you send it. That is expected.$b$,
+ 'client', 'requirements', array['requested', 'requested by ftg', 'asked for', 'document request', 'need from me'], array[]::text[], true),
+('client-help',
+ $t$How do I get help?$t$,
+ $b$Press the gold chat bubble at the bottom right of any page and ask your question.
+
+For something about a particular file, open the file and use **Message FTG about this file**, so the conversation stays with it.$b$,
+ 'client', 'help', array['help', 'support', 'contact', 'question', 'talk to someone', 'assistant', 'chat'], array[]::text[], true),
 
 -- ══════════════════════════════════════════════════════════════
--- INTERNAL — staff and admin only
+-- TEAM ONE: assigned clients only, view and download
 -- ══════════════════════════════════════════════════════════════
+('teamone-getting-started',
+ $t$Getting started: signing in and the menu (Team One)$t$,
+ $b$Sign in on the Finance Therapy Group portal with the **Email Address** and **Password** FTG set up for you.
 
-('internal-workflow-overview',
- 'The monthly bookkeeping workflow: four phases',
- E'One workflow instance covers **one client for one calendar month**. It moves through four phases in a fixed order:\n\n'
- '| Phase | Status | What happens |\n'
- '|---|---|---|\n'
- '| A | `processor` | 16-item checklist. Ends "Submit to Reviewer". |\n'
- '| B | `reviewer` | 14-item checklist. The reviewer raises notes here. |\n'
- '| C | `reprocessor` | 4 items, **plus every reviewer note must be resolved**. |\n'
- '| D | `report_sender` | 5 items. Saves reports to SmartVault, notifies the client. |\n'
- '| — | `complete` | Done. No screen; the card opens nothing. |\n\n'
- 'A phase advances only when **every applicable checklist item is ticked**. Phase C additionally requires all reviewer notes resolved — it is the only phase with a second gate.\n\n'
- 'Some items are conditional: loan items in Phase A appear only if the workflow is marked as having loans; the fixed-assets item in Phase B only if marked as having fixed assets.\n\n'
- '**There is no way to send a workflow backwards.** Corrections travel forward as reviewer notes for Phase C to resolve. If a problem is found in Phase D there is no route back — see [internal-workflow-no-rollback].',
- 'internal', 'workflow', array['workflow','phases','processor','reviewer','reprocessor','report sender','pipeline'], array['BK','CFO']),
+Your menu has three items:
+- **Clients**: the clients FTG has assigned to Team One.
+- **My Updates**: what you sent FTG, and what FTG decided.
+- **Profile**: your name, photo and password.
 
-('internal-workflow-no-rollback',
- 'A workflow cannot be sent backwards',
- E'**Known limitation. Read before starting Phase D.**\n\n'
- 'The workflow only moves forward. No screen or action sets a workflow to an earlier phase, and none is planned into the current code.\n\n'
- 'This means: if the Report Sender finds a problem in Phase D, there is no supported way to return it to Reprocessing. The only options are to fix it outside the system, or to **delete the workflow and recreate it** — which permanently destroys its checklist, notes, query items, messages and drive links.\n\n'
- '**Practical guidance:** the Reviewer (Phase B) is the last point where a correction can be routed through the system properly. Review thoroughly there. In Phase D, verify the reports before ticking anything.\n\n'
- 'If you must delete and recreate, note what was in the notes first — they are not recoverable.',
- 'internal', 'workflow', array['rollback','go back','undo','mistake','delete workflow','known-issue'], array['BK','CFO']),
+The gold chat bubble at the bottom right answers how-to questions and takes bug reports. To sign out, use the icon beside your name, or **Profile → Sign Out**. If you forget your password, ask FTG; the **Forgot Password?** link does not work at the moment.$b$,
+ 'team_one', 'account', array['sign in', 'log in', 'menu', 'getting started', 'password', 'sign out', 'team one'], array[]::text[], true),
+('teamone-which-clients',
+ $t$Which clients can I see?$t$,
+ $b$You see a client once FTG ticks at least one service for them under **Team One Access**. Every Team One login sees the same clients.
 
-('internal-reviewer-notes',
- 'Raising and resolving reviewer notes',
- E'Reviewer notes are how a correction travels from Phase B to Phase C. They are the system''s only rejection mechanism.\n\n'
- '**Raising (Phase B only).** The Add button for notes appears only on the Reviewer screen. Write what needs correcting, specifically enough that the reprocessor can act without asking. An unresolved note does **not** block you from submitting Phase B — it becomes Phase C''s problem, which is the intent.\n\n'
- '**Resolving (Phase C only).** Each note has a Resolve button that asks how it was resolved. **Every note must be resolved before Phase C can advance** — this is the one hard gate in the workflow beyond the checklists.\n\n'
- 'Two cautions:\n\n'
- '- The resolution text is **not validated**. An empty resolution is accepted and the note counts as resolved. Write a real one — it is the only record of what was done.\n'
- '- Phase C requires **all** notes on the workflow resolved, from any phase and any author, not just the current reviewer''s.',
- 'internal', 'workflow', array['notes','reviewer notes','reject','correction','resolve','query'], array['BK','CFO']),
+On **Clients**, search by name, business name or email, filter by **Active / Paused / Closed** or by service, and sort by **Name** or **Progress**. Tap a card to open the client.
 
-('internal-report-sender',
- 'Phase D: sending reports to the client',
- E'Phase D places three documents in **SmartVault** for the client: the **Balance Sheet**, the **Profit & Loss**, and the **Query Sheet**.\n\n'
- 'The five checklist items are: review the Query Sheet for client-readiness, save each of the three documents to SmartVault, and send the client notification.\n\n'
- '**The app does not send anything.** This is the single most important thing to understand about this phase. Item FR-64 ("Send client notification") is a checkbox you tick to record that *you* notified the client by some other means. No email, no in-app notification and no document transfer happens when you tick it, and none happens when you press **Mark Complete & Notify Client** — despite the button''s wording.\n\n'
- '**So: actually send the notification yourself, then tick the box.**\n\n'
- 'Two further notes:\n\n'
- '- The SmartVault link slots are **optional** — the phase completes with none saved — and **cannot be edited once saved**. Paste carefully; a wrong URL cannot be corrected from this screen.\n'
- '- A saved link does not appear as saved until you reopen the screen. It did save.',
- 'internal', 'workflow', array['report sender','smartvault','send reports','notify client','phase d','complete','known-issue'], array['BK','CFO']),
+If a client you work on is missing, ask FTG to give Team One access. If FTG removes access, the client, its updates and its chat disappear for you at once.$b$,
+ 'team_one', 'clients', array['clients', 'assigned', 'missing client', 'cannot see client', 'access', 'which clients'], array[]::text[], true),
+('teamone-open-files',
+ $t$Opening and downloading a client's files$t$,
+ $b$Open a client from **Clients**. The tabs show the services assigned to Team One; tap a folder to open it.
 
-('internal-query-items',
- 'Query Sheet items: raise them in Phase A or B only',
- E'**Raise query items in Phase A or B. A query item raised in Phase C or D is silently thrown away.**\n\n'
- 'The panel appears in all four phases and looks identical everywhere, but the database only accepts items tagged to phases A or B. An item added from Phase C or D is rejected by the database, no error is shown, and the dialog closes as though it worked. The item does not exist.\n\n'
- 'This is a known bug. Until it is fixed, if something needs querying during Phase C or D, raise it as a team message on the workflow or handle it outside the system.\n\n'
- 'Other things worth knowing about query items:\n\n'
- '- Unresolved query items **never block** a phase from advancing. Only reviewer notes do that.\n'
- '- Resolving one takes a single tap with no confirmation and no note. There is no undo.\n'
- '- The "Needs client input" toggle is **staff-visible only**. There is no client-facing screen for query items, so ticking it does not ask the client anything. Contact them directly.',
- 'internal', 'workflow', array['query sheet','query items','needs client input','phase c','known-issue'], array['BK','CFO']),
+- The eye icon on a file opens a preview; the arrow downloads it.
+- **Download all** downloads every file in the folder. **Select** lets you tick files, then **Download**.
+- The download icon on a folder tile downloads the whole folder.
+- The back arrow leaves the folder first, then the client.
 
-('internal-workflow-assignment',
- 'Assignment is a label, not a lock',
- E'Assigning a Processor and a Reviewer is **informational only**. Nothing in the app or the database restricts who can act on a workflow: any staff or admin can open any workflow in any phase and tick any item, assigned or not.\n\n'
- 'Consequences worth knowing:\n\n'
- '- There is **no "my work" view**. Everyone sees every client''s workflow for the selected month.\n'
- '- Assignment is **optional** — a workflow can be created with nobody assigned, and nothing flags or queues it.\n'
- '- **Phases C and D have no assignee field at all.** Who reprocesses and who sends reports is not recorded on the workflow.\n'
- '- Assignment can be changed at any time, including after completion. Tapping the currently-assigned person clears it.\n'
- '- The staff list offered for assignment includes **deactivated** members.\n\n'
- 'The client on a workflow **cannot** be changed after creation — deliberately, since changing it would move a month of checklist and notes to the wrong client.\n\n'
- 'Because none of this is enforced by software, coordinate by agreement. Check the assignment before starting work on a workflow that is not yours.',
- 'internal', 'workflow', array['assignment','assign','my work','who does what','reassign','claim'], array['BK','CFO']),
+Your access is **view and download only**: you cannot upload into the client's folders, rename, move or delete. To send FTG something, use **Add Update**.$b$,
+ 'team_one', 'documents', array['files', 'folders', 'download', 'view', 'documents', 'open file', 'zip'], array[]::text[], true),
+('teamone-send-update',
+ $t$Sending FTG an update for review$t$,
+ $b$1. **Clients** → open the client → **Add Update** (shown when no folder is open).
+2. Tick the services it is for: **TAX**, **Bookkeeping** and/or **CFO**.
+3. For each ticked service, fill in the **Estimated completion date** (required).
+4. For Bookkeeping or CFO you can also add:
+   - **Query Sheet (link)**: a web link starting with http:// or https://,
+   - **P&L**: upload the P&L file,
+   - **Balance Sheet**: upload the balance sheet.
+5. Press **Send for Review**. You will see "Sent for review".
 
+Each link and file is reviewed separately. Your files are kept apart from the client's folders until FTG approves them. Tapping outside the form throws the draft away, and if a send fails partway, check **My Updates** before sending again so nothing goes twice.$b$,
+ 'team_one', 'updates', array['add update', 'send for review', 'query sheet', 'p&l', 'balance sheet', 'completion date', 'submit work', 'report'], array[]::text[], true),
+('teamone-my-updates',
+ $t$Where do I see what FTG decided? (My Updates)$t$,
+ $b$**My Updates** shows what was sent for your assigned clients and what FTG decided, in three tabs:
+
+- **Needs fixing**: Denied or Revise, with FTG's note.
+- **Waiting**: waiting for review, or escalated to Daja.
+- **Done**: Approved (with "Filed as …"), or a note sent to the client.
+
+Each card shows the item (Query Sheet, P&L or Balance Sheet), the service, its status, the due date, when it was sent, and FTG's note. Above the cards, "New messages from FTG" lists clients with unread chat; below them, "Estimated completion" lists the latest date per client and service.
+
+You are not emailed about decisions; check here and watch the red number on **My Updates**.$b$,
+ 'team_one', 'updates', array['my updates', 'status', 'approved', 'denied', 'needs fixing', 'waiting', 'done', 'escalated', 'decision'], array[]::text[], true),
+('teamone-fix-sent-back',
+ $t$Fixing something FTG sent back$t$,
+ $b$Read FTG's note on the card under **Needs fixing**. There is no resubmit button: make the correction, then send it as a new update (**Clients** → client → **Add Update**).
+
+The old item stays under Needs fixing; that is expected. If something is unclear, ask in the client's **Chat with FTG**.$b$,
+ 'team_one', 'updates', array['denied', 'revise', 'needs fixing', 'resubmit', 'send again', 'fix', 'sent back'], array[]::text[], true),
+('teamone-chat',
+ $t$Messaging FTG about a client$t$,
+ $b$Open the client. At the top of their folders is **Chat with FTG** ("Only FTG and Team One see this"). Type in "Message FTG…" and press the send arrow; Enter only starts a new line.
+
+Messages are labelled "You", "FTG · name" or "Team One · name", and new ones appear as they arrive. There is one thread per client, shared by all FTG staff and all Team One logins. **The client never sees it.** The chat does not show inside a folder.$b$,
+ 'team_one', 'messages', array['chat', 'message ftg', 'question', 'communicate', 'chat with ftg', 'contact ftg'], array[]::text[], true),
+('teamone-alerts',
+ $t$What the red number on My Updates means$t$,
+ $b$The red number on **My Updates** counts items FTG sent back (Denied or Revise) plus unread chat messages from FTG. It refreshes about every minute, or when you change menu item.
+
+There is no Notifications page and no email for Team One; this number, the tab counts and "New messages from FTG" are how you know something changed.$b$,
+ 'team_one', 'updates', array['badge', 'red number', 'notification', 'alerts', 'unread', 'count'], array[]::text[], true),
+('teamone-signed-out',
+ $t$Why was I signed out?$t$,
+ $b$After 5 minutes with no activity the app asks **Still there?**. Press **Yes, keep me signed in**. With no answer within a minute you are signed out for security; press **Sign in again**.
+
+Anything already sent is saved. An update or chat message you had not sent yet is lost.$b$,
+ 'team_one', 'account', array['signed out', 'logged out', 'still there', 'timeout', 'idle', 'session'], array[]::text[], true),
+('teamone-help',
+ $t$Getting help or reporting a problem (Team One)$t$,
+ $b$Press the gold chat bubble and ask how something works, or describe the problem: what you pressed, what you expected, and what happened. For anything about a particular client, use that client's **Chat with FTG** instead.$b$,
+ 'team_one', 'help', array['help', 'bug', 'problem', 'not working', 'support', 'ticket'], array[]::text[], true),
+
+-- ══════════════════════════════════════════════════════════════
+-- INTERNAL: FTG staff and admin only
+-- ══════════════════════════════════════════════════════════════
+('internal-menu',
+ $t$The staff menu: what each page is for$t$,
+ $b$- **Dashboard**: work progress by service, documents waiting on us or on clients, recent uploads.
+- **Documents**: every client's files. Approve or reject uploads here, answer file messages from the reply bell, and use **Browse** to move files.
+- **Clients**: find, add and update clients, and open a client's profile.
+- **Team One**: review what Team One sends for a decision.
+- **Staff** (admins only): add staff, admins and Team One logins, change roles, deactivate.
+- **Financial Reports**: the client financial dashboards.
+- **Profile**: your own account.
+
+The red number on **Team One** counts items waiting for review plus unread Team One chat messages; admins and Daja also count escalated items. The gold chat bubble answers how-to questions and raises bug tickets. The app reopens the client and folder you last had open.$b$,
+ 'internal', 'account', array['menu', 'pages', 'navigation', 'where is', 'sidebar', 'badge'], array[]::text[], true),
+('internal-dashboard',
+ $t$Reading the staff dashboard$t$,
+ $b$**Work Progress** cards (TAX, YER, BK, CFO) count clients by the **Work Progress** set on each client in **Update Profile**: Not Started, In Progress, Completed (TAX and YER) or Current (BK and CFO). BK and CFO **Current** goes back to Not Started on the 1st of each month.
+
+Click a line (for example "In Progress") to list those clients; tap one to open their profile, and **Back** returns to the dashboard. Lines at 0 cannot be clicked.
+
+Two tiles count pending files: **Documents pending FTG approval** (client uploads waiting on us) and **Documents for client review** (our uploads waiting on the client). They are not clickable.
+
+**Recent uploads** splits into Sorted (filed in a subfolder) and Unsorted, five a page. **View All** opens Documents.$b$,
+ 'internal', 'dashboard', array['dashboard', 'work progress', 'in progress', 'not started', 'completed', 'current', 'pending approval', 'recent uploads'], array[]::text[], true),
+('internal-add-client',
+ $t$Adding a new client$t$,
+ $b$1. **Clients → + Add Client**.
+2. Fill in **First Name**, **Last Name**, **Email Address** and a **Password** of 8 or more characters (**Generate** makes one).
+3. Tick the **Client Type**: TAX, YER, Bookkeeping and/or CFO. **Company Name** is required for Bookkeeping, CFO and YER.
+4. Pick the **Plan**.
+5. Add each bank account under **Bank Accounts** (bank name and exactly 4 digits). Each one becomes its own monthly "Bank Statements" item.
+6. For CFO, answer **Do we already have QBO access?**
+7. Press **Create Client**. If something is missing, a red line says what.
+
+Afterwards:
+- **No welcome email is sent.** "Client Created!" shows the email and password; send them to the client yourself.
+- The app pulls the client's files and paid invoices from Tax Nitro straight away, matching on the email.
+- Bookkeeping clients get **Query Sheet**, **P&L Statement** and **Balance Sheet** folders under For Client Review; TAX clients get **P&L Statement** and **Balance Sheet** under Other Tax Docs.$b$,
+ 'internal', 'clients', array['add client', 'new client', 'create client', 'onboard client', 'client account', 'password'], array[]::text[], true),
+('internal-find-client',
+ $t$Finding a client$t$,
+ $b$On **Clients**:
+- Type in **Search by client name, business name or email…**
+- Tap **Total / Active / Paused / Closed** to filter, and tap again to clear.
+- **TAX / YER / BK / CFO** filter by service.
+- Sort by **Name** (last name, then company) or **Progress** (least advanced first).
+
+Tap a card to open the profile. On each card, the checklist icon shows that client's **Required Documents** for the month, and the gear opens **Update Profile**.$b$,
+ 'internal', 'clients', array['find client', 'search', 'client list', 'filter', 'sort', 'active', 'paused', 'closed'], array[]::text[], true),
+('internal-client-profile',
+ $t$What's on a client's profile$t$,
+ $b$The header has **Update Profile**, **Upload File**, **Request Doc**, and **Dashboard** (only when a financial dashboard exists).
+
+- **Service tabs** (TAX, YER, BK, CFO) show that service's folders. A service the client no longer takes still shows, marked archived, while it holds files.
+- CFO clients have two tabs: **CFO** (panels, **CFO DOCUMENTS** and **ENTER CFO SUITE**) and **CFO DOCS** (their folders).
+- Panels above the folders: **Business details** (internal only), **Notes for the client** (the client sees these), the **Team One chat**, and the **Monthly questionnaire**.
+- Inside a folder, each file has view (marks it viewed), download, rename and delete. **Download all** saves everything.
+
+Approving or rejecting a client's upload is done on the **Documents** page, not here.$b$,
+ 'internal', 'clients', array['client profile', 'client page', 'folders', 'tabs', 'business details', 'notes', 'cfo suite'], array[]::text[], true),
+('internal-update-profile',
+ $t$The Update Profile tray$t$,
+ $b$Open it from the client's profile (**Update Profile**) or the gear on their card.
+
+- **Name, Company Name, Plan, Client Type** (services).
+- **Work Progress** per service. BK and CFO go back to Not Started on the 1st of each month.
+- **Team One Access**: the services whose folders Team One may see.
+- **Bank Accounts**: one monthly Bank Statements item per account.
+- **Pull their files from Tax Nitro**: brings over their Tax Nitro uploads and paid invoices.
+- **QBO Access** (CFO): "We have it" removes the QBO item from their list.
+- **Account Status**: Active, Paused or Closed.
+- **Change Password** → **Update Password** (client logins only).
+
+**The Tax Nitro pull and the password change happen immediately.** Everything else is kept only when you press **Save Changes**. Saving is blocked if no service is ticked or a bank account is half filled.$b$,
+ 'internal', 'clients', array['update profile', 'edit client', 'services', 'work progress', 'bank accounts', 'qbo', 'account status', 'change password'], array[]::text[], true),
+('internal-upload-for-client',
+ $t$Uploading a file for a client, or sending one for review$t$,
+ $b$1. On the client's profile press **Upload File** (or **Documents → Upload** and pick the client).
+2. Pick the **Folder**. Only the client's services are offered.
+3. In delivery folders, answer **What is this document?** (for example Query Sheet, P&L Statement, Balance Sheet; FINAL P&L Statement in Final Statements). The label goes in front of the file name.
+4. Pick the **Month**, and a **Subfolder** if you want one ("Folder root", an existing one, or a new name).
+5. Drag in the files or click to browse, then press **Upload**.
+
+**To have the client check something, upload it to Monthly Reporting (For Client Review).** It appears on their dashboard as "From FTG. Please review and approve", and they approve or reject it. A rejection reason reaches you as a message on the file.
+
+Every file staff upload starts as pending on the client, in any folder, so clients also see Approve and Reject on contracts and final statements.$b$,
+ 'internal', 'documents', array['upload for client', 'send to client', 'for client review', 'deliver report', 'p&l', 'balance sheet', 'query sheet', 'final statements'], array[]::text[], true),
 ('internal-approve-reject-upload',
- 'Approving and declining a client upload',
- E'A client upload arrives as a document in the service''s Required Info collector folder, with the required item''s name prefixed to the filename — for example "Bank Statements — BDO ••••4821 — january.pdf". That prefix is how the system knows which checklist slot the file answers.\n\n'
- '**Approving** flips the client''s checklist item to green **Accepted** and moves their progress bar. It also clears a previous Declined state if the client has re-uploaded.\n\n'
- '**Declining** turns the item red **Declined** on the client''s dashboard. Write the reason on the file — the client reads it there, and it is the only explanation they get.\n\n'
- 'Rules that matter:\n\n'
- '- The client''s progress bar counts **accepted items only**. Their upload alone never moves it.\n'
- '- A declined item **stays red** if the client re-uploads. Only your approval of the new file clears it. Re-check declined items when a client says they have fixed something.\n'
- '- One slot per item per month, no matter how many files the client sends for it.\n'
- '- **Deleting the fulfilling file deletes the credit** — the item reverts to grey, as if never uploaded.',
- 'internal', 'documents', array['approve','decline','reject','review upload','accept document','progress'], array['BK','CFO']),
+ $t$Approving or rejecting a client's upload$t$,
+ $b$Use the **Documents** page; the client profile has no approve or reject.
 
-('internal-upload-month-bug',
- 'Late uploads credit the wrong month',
- E'**Known bug. Affects any client catching up on an earlier month.**\n\n'
- 'The upload screen asks the client which month the documents cover, and correctly stores that on the document. But the **checklist slot is always stamped with the current month**, ignoring what the client picked.\n\n'
- 'So a January bank statement uploaded in March: the document carries period January (correct, and what the accountant sees), while the checklist credit lands on **March** (wrong).\n\n'
- 'Consequences:\n\n'
- '- A client catching up on old months appears to be completing the *current* month.\n'
- '- The earlier month''s checklist stays incomplete no matter what they send.\n'
- '- Progress percentages for past months are unreliable where late uploads happened.\n\n'
- '**Until this is fixed:** when a client tells you they are uploading for an earlier month, correct the requirement row by hand, and do not read a past month''s progress bar as fact without checking the document periods.\n\n'
- 'The books themselves are unaffected — only the dashboard counter is wrong.',
- 'internal', 'requirements', array['wrong month','late upload','period','monthOf','bug','known-issue'], array['BK','CFO']),
+1. Find the client's file: search, then open the client's card, or switch to the list view, which opens on **Pending**.
+2. Press **Accept**. The **Approve Upload** window shows the client's note.
+   - If the client chose a monthly item when uploading, press **Approve**.
+   - If not, pick the item it answers and press **Approve & Tag**, or **Approve only**.
+   The item turns green on the client's dashboard.
+3. Or press **Reject**, write the reason, then **Reject**. The client sees "Sent back by FTG. Please upload it again" and your reason on the file. The reason is optional, but always write one; it is all the client gets.
 
+Accept and Reject also show on our own files that are waiting for the client. Leave those for the client.$b$,
+ 'internal', 'documents', array['approve', 'accept', 'reject', 'decline', 'review upload', 'pending', 'checklist', 'tag'], array[]::text[], true),
+('internal-file-messages',
+ $t$Answering a client's message on a file (the reply bell)$t$,
+ $b$The bell in the **Documents** header lists unread client messages and new client uploads. **Mark all read** clears it, and the ✓✓ on a row marks one. Read state is shared by all staff, and the rows do not open the file.
+
+To reply, find the file in **Documents** and press its chat icon. Type in "Type your reply…" (500 characters) and send. The client sees "FTG replied on {file}" on their dashboard; no email is sent.
+
+When a client rejects a file we sent, their reason arrives here as "Rejected this file: …".$b$,
+ 'internal', 'messages', array['reply', 'message', 'client message', 'conversation', 'bell', 'notifications', 'unread', 'rejected this file'], array[]::text[], true),
+('internal-move-rename-delete',
+ $t$Moving, renaming and deleting files and folders$t$,
+ $b$**Moving files** is done in **Documents → Browse** (the folder icon): category → folder → client → file → **Move to Subfolder** or **Move to Another Folder**. For several files, **Select**, then **Move** or **Delete**. A moved file lands at the top of its new folder.
+
+**Subfolders in Browse**: **New Subfolder**; tap a chip to filter and again to step in; **Rename**, **Move to another folder**, **Delete** (the files inside stay and become unfiled).
+
+**On a client's profile**: **Add New Folder**. On a folder tile, the pencil renames, the arrow moves it into another folder (**Move Here**), and the trash deletes it (its files go back to the folder above).
+
+Deleting a file also deletes its messages and its checklist credit. Careful with older shared folders: deleting one from a profile deletes it for every client.$b$,
+ 'internal', 'documents', array['move file', 'rename', 'delete', 'subfolder', 'new folder', 'browse', 'organize', 'file away'], array[]::text[], true),
+('internal-request-doc',
+ $t$Asking a client for a document (Request Doc)$t$,
+ $b$On the client's profile press **Request Doc**, fill in **What do you need?** and an optional **Note**, then **Send Request**.
+
+The client sees it on their dashboard under **What's Missing** as "Requested by FTG", for the current month only.
+
+**Known limits:** the request is never marked done, even after the client uploads; it disappears at the end of the month; and there is no list of requests on our side. Keep track of what you asked for yourself.$b$,
+ 'internal', 'requirements', array['request document', 'request doc', 'ask client', 'missing document', 'need from client'], array[]::text[], true),
+('internal-client-notes',
+ $t$Writing a note for a client$t$,
+ $b$On the client's profile, use the **Notes for the client** panel. The client sees the note on their dashboard under **What's Next** ("Note from {your name}") and gets the notification "A note from FTG".
+
+Editing a note does not notify them again. **Business details**, the panel beside it, is internal and never shown to the client.$b$,
+ 'internal', 'messages', array['note', 'note for client', 'shared note', 'message client', 'announcement'], array[]::text[], true),
+('internal-team-one-access',
+ $t$Giving Team One a client$t$,
+ $b$Open the client's **Update Profile**, tick the services under **Team One Access**, then press **Save Changes**. The hint reads "Team One sees this client and only the folders ticked here."
+
+- Team One sees the folders of the ticked services, plus Unsorted Uploads and our subfolders. They can view and download only: no uploads, renames, moves or deletes.
+- Access is per client: every Team One login sees the same clients.
+- Untick to take a client away; their updates and chat disappear for Team One at once.$b$,
+ 'internal', 'team-one', array['team one', 'assign', 'team one access', 'share client', 'outsource', 'give access'], array[]::text[], true),
+('internal-team-one-review',
+ $t$Reviewing what Team One sends$t$,
+ $b$Go to **Team One → Waiting**. Each item is a link (Query Sheet) or a file (P&L, Balance Sheet) for one client and service.
+
+- **Approve**: pick the folder (it suggests Required Info for a query sheet, For Client Review for a P&L or balance sheet), then **Approve & File**. It is filed as our upload, pending on the client, and the client gets "New document from FTG".
+- **Deny**: write a note (required), then **Send back to Team One**. They see it under Needs fixing.
+- **Escalate**: send it to Daja, with an optional note.
+
+**Escalated** items: Daja and admins decide with **Revise** (back to Team One with a note) or **Note to client** (the note goes on the client's dashboard). Everyone else sees "Waiting on Daja."
+
+Team One gets no email about any of this, only the count in their app.$b$,
+ 'internal', 'team-one', array['team one', 'review', 'approve', 'deny', 'escalate', 'daja', 'waiting', 'query sheet', 'p&l', 'balance sheet'], array[]::text[], true),
+('internal-team-one-chat',
+ $t$Chatting with Team One about a client$t$,
+ $b$On the client's profile, use the **Team One chat** panel ("Only FTG and Team One see this"). Type in "Message Team One…" and send. It shows when the client is assigned to Team One or already has messages.
+
+There is one thread per client, shared by all FTG staff and all Team One logins. The client never sees it. New Team One messages are listed on the **Team One** page under "New messages from Team One" and counted on its menu badge.$b$,
+ 'internal', 'team-one', array['team one chat', 'message team one', 'chat', 'internal chat', 'communicate'], array[]::text[], true),
 ('internal-staff-onboarding',
- 'Adding a new staff member',
- E'From **Staff → Add Staff**, enter their email and pick the role.\n\n'
- '**If they already have an account**, the role is applied immediately. Note the email match is **case-sensitive** — a mismatch silently falls through to the invite path below instead.\n\n'
- '**If they do not have an account yet**, you create a pending invite. The role is applied automatically the moment they sign up, with no approval step afterwards.\n\n'
- '**"Send Invite" does not send an email.** It writes a database row and nothing more, despite the button text and the "Invite Sent!" confirmation. **You must contact the person separately and tell them to sign up.** If you do not, nothing happens and the invite sits unused.\n\n'
- 'Other rules:\n\n'
- '- Re-inviting the same address replaces the previous invite, so changing your mind about the role just means inviting again.\n'
- '- Cancelling an invite does not stop them signing up — they simply arrive as a normal client.\n'
- '- You cannot demote yourself, or demote the last remaining admin.\n'
- '- Admins cannot be deactivated from this screen; demote first.\n'
- '- A member who has touched any workflow **cannot be deleted** — deleting them would break that history. Deactivate instead, which preserves everything and only blocks sign-in.',
- 'internal', 'account', array['staff','onboarding','invite','new hire','add staff','role','admin','deactivate'], array[]::text[]),
+ $t$Adding a staff member, admin or Team One login$t$,
+ $b$**Staff → Add Staff**, type the email, pick **Staff**, **Admin** or **Team One**, then:
+- **Assign Role** if they already have an account. The role applies at once.
+- **Send Invite** if they do not. The invite waits under "Waiting to sign up".
 
+**Known issues:**
+- **Send Invite sends no email, and the app has no sign-up page**, so an invited person cannot create their own account. Ask Angelo to set up the login.
+- The email must match exactly, including capital letters.
+- The suggestions include clients. Check you are not turning a client into staff.$b$,
+ 'internal', 'staff', array['staff', 'onboarding', 'invite', 'new hire', 'add staff', 'role', 'admin', 'team one login'], array[]::text[], true),
+('internal-staff-manage',
+ $t$Changing a role, deactivating or deleting a member$t$,
+ $b$On **Staff**, use the **Admins / Staff / Team One** tabs.
+
+- **Role**: tap the role pill to switch Staff and Admin. You cannot change your own role or the last admin's. To change a Team One login's role, assign it again through **Add Staff**.
+- **Deactivate** (not admins): "Deactivate this member?" → **Yes, deactivate**. Reactivating is one tap.
+- **Delete** (not admins, not yourself): blocked if they have old Workflow records; deactivate them instead.
+
+**Known issue: deactivating does not lock a staff or admin login out.** They can still sign in and see client files. When someone leaves, also ask Angelo to remove their login. A deactivated Team One login can sign in but sees no clients.$b$,
+ 'internal', 'staff', array['change role', 'promote', 'demote', 'deactivate', 'delete staff', 'remove access', 'offboard', 'known-issue'], array[]::text[], true),
 ('internal-roles',
- 'What admin can do that staff cannot',
- E'Within the bookkeeping workflow, **staff and admin have identical powers**. Both can create, edit, advance and delete any workflow, including the cascading delete that destroys notes and messages.\n\n'
- 'The only real difference: **admins can reach the Staff page** and manage people — inviting, promoting, demoting, deactivating, deleting.\n\n'
- 'Clients can read only their own data, and the database enforces that on every request rather than relying on the app to ask correctly.\n\n'
- 'Do not assume a workflow action is admin-gated. It is not.',
- 'internal', 'account', array['roles','permissions','admin','staff','who can','access'], array[]::text[]),
+ $t$What admins, staff and Team One can do$t$,
+ $b$- **Admins** can do everything, including the **Staff** page (people and roles). Admins and Daja decide escalated Team One items.
+- **Staff** can do everything except the Staff page.
+- **Team One** see only **Clients** (the ones assigned to them, view and download only), **My Updates** and **Profile**. They send query sheets, P&Ls and balance sheets for our review and chat with us on each client.
+- **Clients** see only their own files and data. The database enforces this on every request.$b$,
+ 'internal', 'staff', array['roles', 'permissions', 'admin', 'staff', 'team one', 'who can', 'access'], array[]::text[], true),
+('internal-financial-reports',
+ $t$Financial Reports and client dashboards$t$,
+ $b$**Financial Reports** lists the client financial dashboards. Inside one, the tabs are Dashboard, Profit & Loss, Balance Sheet, Financial Roadmap, Assumptions, FS-A and FS-R, plus **Findings for Review** and **TL;DR**, which only staff see.
 
+The client opens theirs from **Profile → Financial Dashboard**. The list is built into the app, so adding a client's dashboard needs Angelo.$b$,
+ 'internal', 'reports', array['financial reports', 'dashboard', 'client dashboard', 'p&l', 'balance sheet', 'roadmap', 'tldr'], array[]::text[], true),
+('internal-tax-nitro',
+ $t$How Tax Nitro files, contracts and invoices reach the app$t$,
+ $b$Everything is matched on email: the client's email in Tax Nitro must be the same as in the app.
+
+- **Client uploads** through Tax Nitro forms → **Unsorted Uploads**, pending our review.
+- **Our own uploads** in Tax Nitro → contracts and agreements go to that service's **Contracts** folder, everything else to **Unsorted Uploads**, both already approved.
+- **Paid invoices** → a PDF marked PAID IN FULL in the **Tax**, **BK** or **CFO Invoices** folder, checked every hour. The folder follows the invoice's wording, among the services the client has. Unpaid invoices never come over.
+- **New clients**: the pull runs when you create them. To pull again, **Update Profile → Pull their files from Tax Nitro**. Anything already in the app is skipped.
+- **Signed contracts** from Tax Nitro's signing do not come over automatically yet.
+
+If a file is missing, check the emails match, then pull again.$b$,
+ 'internal', 'tax-nitro', array['tax nitro', 'ghl', 'sync', 'uploads', 'contracts', 'invoices', 'pull', 'automation', 'missing file'], array[]::text[], true),
 ('internal-required-items-reference',
- 'Required items: the exact list and when each applies',
- E'**Bookkeeping (4):** Bank Statements (all accounts), Credit Card Statements, Loan Statements, Payroll Reports.\n\n'
- '**CFO (6):** the same four, plus Prior Month Bookkeeping / QBO Access, and AR / AP Aging.\n\n'
- '**Tax: none.** Tax has no required-item list and no monthly tracking; the database rejects any attempt to create one. Tax clients upload into flat folders instead.\n\n'
- 'Two conditions change a client''s list:\n\n'
- '1. **QBO access.** Setting "we already have QBO access" on a CFO client''s profile removes *Prior Month Bookkeeping / QBO Access* from their list entirely, and from the denominator — their bar counts out of 5, not 6.\n\n'
- '2. **Bank accounts.** If a client has individual accounts recorded, the single *Bank Statements (all accounts)* line is replaced by **one line per account**, labelled like "Bank Statements — BDO ••••4821". Three accounts means three separate items to accept. With no accounts recorded, the single combined line stays.\n\n'
- 'Credit cards do **not** expand per card, only bank accounts do.\n\n'
- 'A client with no services recorded is treated as Bookkeeping.\n\n'
- '**Never reuse or renumber a bank account id.** The checklist slot depends on it, and reusing one silently re-points a historical month''s record. When a client closes an account through the questionnaire, its item stops appearing from the next month; historical rows remain and show as "(removed account)".',
- 'internal', 'requirements', array['required items','list','qbo','bank accounts','expansion','denominator'], array['BK','CFO','TAX'])
+ $t$Monthly required items: the exact list$t$,
+ $b$**Bookkeeping (4):** Bank Statements, Credit Card Statements, Loan Statements, Payroll Reports.
+
+**CFO (6):** the same four, plus Prior Month Bookkeeping / QBO Access, and AR / AP Aging. A client with both services sees both lists.
+
+**Tax and YER:** no monthly list.
+
+What changes a client's list:
+1. **Bank accounts.** With accounts recorded in Update Profile, "Bank Statements (all accounts)" becomes one item per account, for example "Bank Statements — Chase ••••1234". Credit cards do not split per card.
+2. **QBO access.** "We have it" removes Prior Month Bookkeeping / QBO Access.
+3. **Closed accounts.** A client marking an account closed in the questionnaire removes it from their list.
+
+An item counts as sent when uploaded, and as done when we accept it. Uploads count for the month the client picks.$b$,
+ 'internal', 'requirements', array['required items', 'checklist', 'list', 'qbo', 'bank accounts', 'what clients send'], array['BK', 'CFO', 'TAX'], true),
+('internal-account-status',
+ $t$Pausing or closing a client$t$,
+ $b$**Update Profile → Account Status → Active, Paused or Closed**, then **Save Changes**. Paused means coming back; Closed means the service has ended. The status shows on the client's card and profile, and the Clients filters use it.
+
+The status does not by itself stop the client signing in to the app.$b$,
+ 'internal', 'clients', array['pause', 'paused', 'close', 'closed', 'cancel', 'account status', 'inactive', 'active'], array[]::text[], true),
+('internal-client-password',
+ $t$A client can't sign in or forgot their password$t$,
+ $b$1. Open the client's **Update Profile**.
+2. Under **Change Password**, type a new password (8 or more characters) and press **Update Password**. It changes straight away.
+3. Send the client the new password, and suggest they change it in **Profile → Change Password**.
+
+The **Forgot Password?** link on the sign-in page does not work at the moment, so this is the way to reset one. It works for client logins only. A staff or Team One password needs Angelo.$b$,
+ 'internal', 'clients', array['client password', 'reset password', 'forgot password', 'cannot sign in', 'locked out', 'login help'], array[]::text[], true),
+('internal-help-and-bugs',
+ $t$Getting help or reporting a bug$t$,
+ $b$Press the gold chat bubble and either ask how something works, or describe the problem: what you pressed, what you expected, and what happened. It raises a ticket (numbered TKT-…) for the team.
+
+A conversation is not saved when you reload the page. The refresh icon starts a new one.$b$,
+ 'internal', 'help', array['bug', 'report a bug', 'ticket', 'help', 'broken', 'not working', 'support'], array[]::text[], true)
 
 on conflict (slug) do update set
-  title    = excluded.title,
-  body     = excluded.body,
-  audience = excluded.audience,
-  category = excluded.category,
-  tags     = excluded.tags,
-  services = excluded.services;
+  title     = excluded.title,
+  body      = excluded.body,
+  audience  = excluded.audience,
+  category  = excluded.category,
+  tags      = excluded.tags,
+  services  = excluded.services,
+  is_active = excluded.is_active;
+
+-- Retired, kept on record. The Workflow page is archived (Camaree: off the
+-- menu, kept built), and the late-upload month bug is fixed: uploads now
+-- count for the month the client picks.
+update public.sops set is_active = false
+ where slug in ('internal-workflow-overview', 'internal-workflow-no-rollback', 'internal-reviewer-notes', 'internal-report-sender', 'internal-query-items', 'internal-workflow-assignment', 'internal-upload-month-bug', 'client-late-upload-month');

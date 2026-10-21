@@ -1,143 +1,207 @@
 # Gaps found while writing the SOPs
 
-Written 2026-09-17, from reading the code rather than running it.
+Rewritten 2026-10-22, when the SOPs were rewritten for the app as it is now
+(`sops_seed.sql`). First written 2026-09-17.
 
-These are places where the software does not do what its own buttons say. The
-SOPs in `sops_seed.sql` document the behaviour as it actually is today, and each
-of the procedures below carries a `known-issue` tag so they can be found and
-rewritten once a fix ships.
+These are places where the app does not do what its own buttons say, or where
+something breaks. The SOPs describe the behaviour as it actually is, and a
+procedure affected by one of these carries the `known-issue` tag so it can be
+found and rewritten once the fix ships.
 
-Nothing here has been changed. Fixing any of it is a separate decision.
-
----
-
-## 1. Late uploads credit the wrong month
-
-**Confirmed as a bug by the product owner. Not yet fixed.**
-
-`src/components/ClientUploadModal.tsx:410` writes the requirement slot with
-`monthOf()` — today's month — while the same upload stores the client's chosen
-month on the document itself (`:378`). The comment three lines above the picker
-(`:175-176`) states the intent plainly: "a January statement can arrive in
-March." The requirement write ignores it.
-
-So a January statement uploaded in March credits March's checklist. January's
-stays incomplete no matter what the client sends.
-
-The fix is to pass `period` instead of `monthOf()` at `:410`. It looks like a
-one-line change, with two consequences worth thinking about first:
-
-- Past months' progress figures will change the moment it ships, because
-  existing rows keep the month they were stamped with. A backfill would need to
-  re-derive each slot's month from its document's `period`.
-- A client could then complete a month that has already been closed and
-  reported, which nothing currently guards against.
-
-SOPs affected: `client-late-upload-month`, `internal-upload-month-bug`.
+Items marked **checked** were confirmed against the code and, where possible,
+run. The rest come from reading the code screen by screen and have not been
+tried in the live app. Fixing any of them is a separate decision.
 
 ---
 
-## 2. "Send Invite" sends no email
+## Most urgent
 
-`src/db/pendingStaff.ts:32-46` writes a row to `pending_staff` and does nothing
-else. The UI reports "Invite Sent!" (`StaffManagementScreen.tsx:202`).
+### 1. Deactivated staff and admins keep full access (checked)
 
-Nobody is contacted. Unless an admin separately tells the person to sign up, the
-invite sits unused indefinitely.
+**Staff → Deactivate** only sets `profiles.is_active = false`
+(`src/db/profiles.ts:198-200`). Sign-in never reads it
+(`src/context/AuthContext.tsx`), and `is_staff_or_admin()`, which the folder
+policies use, checks the role alone (`database/sops.sql:28-31`). So a
+deactivated staff member can still sign in and read every client's files. The
+dialog promises they "won't be able to sign in". A deactivated **Team One**
+login does lose its clients, because `is_team_one()` checks `is_active`.
 
-Either wire it to an email, or change the button and confirmation to say what it
-does — something like "Save invite" and "Role will be applied when they sign
-up. Tell them to create an account."
+Fix: make `is_staff_or_admin()` require `is_active`, so every policy using it
+locks them out at once, and sign an inactive user out at sign-in with a message.
+Until then, removing someone means deleting their login.
 
-SOP affected: `internal-staff-onboarding`.
+SOP: `internal-staff-manage`.
+
+### 2. Team One could not send an update east of UTC (checked, fixed in this change)
+
+`isIsoDate()` read the date as local midnight and compared it in UTC
+(`src/components/DateField.tsx`), so from Manila every date failed and **Send for
+Review** stayed off. The earliest allowed day was also the UTC day
+(`TeamOneUpdateModal.tsx`). Both now work on the calendar day in any time zone.
+
+### 3. Forgot Password is a dead end (checked)
+
+`resetPasswordForEmail` sends people to `financetherapygroup://reset-password`
+(`src/context/AuthContext.tsx:276-278`), an app link that nothing handles: the
+web app has no such scheme and no screen to choose a new password. **Change
+Password** needs the current one. Today the only way is staff setting one in
+**Update Profile → Change Password** (client logins only).
+
+Fix: point the link at the web app, and add a "Set a new password" screen for
+Supabase's password-recovery sign-in.
+
+SOPs: `client-forgot-password`, `internal-client-password`, `teamone-getting-started`.
+
+### 4. Staff and Team One logins cannot be created in the app (checked)
+
+**Send Invite** writes a `pending_staff` row and nothing else
+(`src/db/pendingStaff.ts:32-46`), yet says "Invite Sent!". The sign-in page has
+no sign-up link (`LoginScreen.tsx:40` never uses its register handler), and the
+`admin-users` function makes client logins only (`create_client` sets role
+`client`). So an invited person has no way to make their account.
+
+Fix: an `admin-users` action that creates a staff or Team One login with a
+password, the way **Add Client** does, used by **Add Staff**.
+
+SOP: `internal-staff-onboarding`.
+
+### 5. Errors and confirmations do not show on the web
+
+`Alert.alert` does nothing in react-native-web, and the web is where everyone
+uses the app. So these fail or succeed without a word:
+- Change Password and Edit Profile (`ProfileScreen.tsx:116,137,206-214`)
+- upload failures (`ClientUploadModal.tsx:439,477,485`)
+- approve, reject and rename errors (`DocumentsScreen.tsx:867,896,1410`)
+- a file message or Team One chat message that did not send (`FileConversationPanel.tsx:147`, `TeamOneChatPanel.tsx:82`)
+- Add New Folder, Rename Folder, Rename Document (`ClientDocumentsScreen.tsx:514-518,1188-1190,1241-1244`)
+- forgot-password errors (`LoginScreen.tsx:188,197`)
+- any confirmation built on `Alert.alert`, which never runs its button
+
+Fix: one small web version of `Alert.alert` (the browser's alert and confirm),
+installed once at start-up.
+
+SOPs: `client-cannot-upload`, `client-forgot-password`.
+
+### 6. The help chat trusts the role the browser sends
+
+`ChatWidget.tsx:150-161` posts `role`, `userId` and `email` in the request body
+to the n8n `chatbot` webhook. The flow is not in this repository. If it picks
+which SOPs to read from that `role`, anyone can ask as `staff` and get internal
+answers, around the boundary `sops.sql` sets out to enforce. The flow also needs
+to read the new `team_one` audience for Team One (`sops_team_one.sql`).
+
+Fix: send the signed-in session token; have the flow check it with Supabase
+and take the role from the profile.
 
 ---
 
-## 3. Query items raised in Phase C or D are silently discarded
+## Documents and files
 
-`supabase_workflow_schema.sql:72` constrains `phase_added` to `('A','B')`, but
-`WorkflowPhaseBase.tsx:167` passes the current phase, and the panel renders in
-all four. `addQueryItem` only `console.error`s on failure
-(`src/db/workflow.ts:356`) and the caller ignores the return value, so the
-dialog closes as though it saved.
+7. **"Requested by FTG" never completes.** `fulfillCustomRequest` is never
+   called (`src/db/customRequests.ts:51`). The request vanishes at the end of
+   the month, staff have no list of requests, and the dialog says it "appears in
+   their Required Documents list" (`ClientDocumentsScreen.tsx:268`). SOPs:
+   `client-requested-by-ftg`, `internal-request-doc`.
+8. **Every staff upload starts pending on the client** (`src/db/documents.ts:334-345`),
+   so contracts and final statements get Approve and Reject on the client's side,
+   not just For Client Review. SOP: `internal-upload-for-client`.
+9. **Accept and Reject show on our own files waiting for the client**
+   (`AdminDocumentsScreen.tsx:787-808`), and the Approve window shows the
+   current month rather than the file's (`:292,319`). SOP: `internal-approve-reject-upload`.
+10. **Clients can rename FTG's files.** The pencil always shows and the "update
+    own" policy allows it (`DocumentsScreen.tsx:928`; `client_profile_folders.sql:93-97`).
+    Renaming can strip the "{item} —" prefix that ties an upload to its monthly item.
+11. **Deleting an older shared folder from one profile deletes it for every
+    client** (`ClientDocumentsScreen.tsx:1253-1256`). SOP: `internal-move-rename-delete`.
+12. **The reply bell's rows cannot be opened**, only marked read
+    (`AdminReplyBell.tsx:300-346`). In Browse, the Approve/Decline code has no
+    button (`AdminFileBrowser.tsx:334-367,1327-1343`), the header pencil opens the
+    viewer instead of renaming (`:1225-1227`), and an empty folder says "Create
+    subfolders above." where there is no subfolder bar (`:834-843`).
+13. **Viewed is shared by staff and client.** When staff open a file it shows as
+    Viewed to the client (`ClientDocumentsScreen.tsx:520-525`).
+14. **"Pending Approval" means opposite things**: your upload waiting on FTG, or
+    FTG's file waiting on you. Profile's "Pending" count mixes both (`ProfileScreen.tsx:444`).
+15. **The Tax Nitro pull message** says files go "into Unsorted Uploads"
+    (`src/lib/taxNitro.ts:31`); contracts go to the Contracts folders.
 
-A staff member in Phase C can raise a query item, see it accepted, and have it
-not exist.
+## Team One
 
-Either widen the constraint to `('A','B','C','D')`, or hide the panel outside
-A and B. Either way the error should surface — the silent failure is the worst
-part of this.
+16. **Needs fixing, and the red number, never go down.** Team One cannot change
+    an item (`team_one_updates.sql:95-96`) and FTG has no action on denied items
+    (`TeamOneReviewScreen.tsx:179-205`). SOP: `teamone-fix-sent-back`.
+17. **Sending again after a partial failure sends everything twice**
+    (`TeamOneUpdateModal.tsx:94-97`; `teamOne.ts:144-176`). SOP: `teamone-send-update`.
+18. **The escalation note meant for Daja is shown to Team One** (`TeamOneReviewScreen.tsx:74,174`).
+19. **"FTG staff will check it and let you know"** (`TeamOneUpdateModal.tsx:124`):
+    nothing lets them know except the badge.
+20. **A TAX or date-only update shows "Nothing here." in every tab** (`TeamOneReviewScreen.tsx:268-269`).
+21. **Client cards and the service filter use all of a client's services**, not
+    the ones assigned to Team One (`ClientListScreen.tsx:965,1011-1025,1161`), and
+    the empty list says "Add your first client using the button above." to
+    people who have no such button (`:1208-1212`).
+22. **Folder unread counts never clear for Team One**; the app cannot record their views.
+23. **FTG-made subfolders show on every tab**, so a TAX+BK client has two "P&L
+    Statement" and two "Balance Sheet" folders, one looking empty
+    (`ClientDocumentsScreen.tsx:397-407,609-619,702-703`).
 
-SOP affected: `internal-query-items`.
+## Accounts and staff
+
+24. **Paused and Closed do not affect sign-in.** `profiles_account_status.sql:14`
+    says sign-in checks `is_active`; the app does not. SOP: `internal-account-status`.
+25. **Assign Role matches the email case-sensitively** (`StaffManagementScreen.tsx:159-163`),
+    and its suggestions include clients, so a client can be made staff by mistake (`:135-139`).
+26. **"Client Created!" shows even if the profile details failed to save** (`ClientListScreen.tsx:217-239`).
+27. **No welcome email** for a new client. Staff send the email and password themselves. SOP: `internal-add-client`.
+
+## Questionnaire and dashboard
+
+28. **New accounts entered in the questionnaire are never added to the profile**,
+    and the field's help text talks about "the client" (`BankAccountsField.tsx:73,85`).
+29. **Closed accounts are removed at once**, though the screen says from next month
+    (`MonthlyQuestionnaireModal.tsx:110-118,162`). Save failures are silent (`:105`).
+30. **Save for later blocks uploading** for BK and CFO until the questionnaire is
+    submitted (`AppNavigator.tsx:82-85`). SOPs: `client-monthly-questionnaire`, `client-cannot-upload`.
+31. **The dashboard shows only the current month.** Uploads now count for the
+    month the client picks, which fixed the old wrong-month bug, but an earlier
+    month's progress is shown nowhere. A policy decision. SOP: `client-earlier-month`.
+
+## Smaller things
+
+- A YER-only client has no service root on the Documents page (`DocumentsScreen.tsx:309,1351`)
+  and no upload folders (`AdminUploadModal.tsx:113-116`).
+- Buttons that do nothing: "Remember me" (`LoginScreen.tsx:43,257`), "Learn More"
+  (`LandingScreen.tsx:390`), the Push Notifications, Biometric and Auto-Sync toggles
+  (`ProfileScreen.tsx:740-764`), the dashboard avatar (`DashboardScreen.tsx:493`).
+- Reading a long PDF in the preview may not count as activity, so "Still there?"
+  can appear mid-read (the preview is a cross-origin frame).
+- `notifications.sql:10` allows only the types new/upload/viewed/reminder; check
+  the live table before relying on "Approved"/"Declined" notifications.
+- The phone app build (MobileTabs) has no Upload, chat or questionnaire
+  (`AppNavigator.tsx:329-396`). Clients use the web app.
+- Bank account `last4` is validated differently by `normalizeBankAccounts` and
+  `isCompleteBankAccount`, so an account can exist with no digits (not rechecked).
 
 ---
 
-## 4. `client_notified_at` is never written
+## Fixed or retired since 2026-09-17
 
-`markClientNotified()` (`src/db/workflow.ts:249-256`) sets both
-`client_notified_at` and `status: 'complete'`, but is never called. Completion
-goes through the generic `updateWorkflowStatus`, which writes `status` only.
+- **Late uploads credited the wrong month**: fixed. The monthly item now counts
+  for the month the client picks (`ClientUploadModal.tsx:432`).
+- **The questionnaire could be bypassed from a folder's upload button**: folders
+  no longer have one.
+- **The Workflow page** (phases A to D) is archived: off the menu, kept built
+  (`AdminNavigator.tsx:60-63`). Its gaps stand if it ever comes back: query items
+  raised in Phase C or D are discarded, `client_notified_at` is never written,
+  "Mark Complete & Notify Client" notifies nobody, workflows cannot go backwards,
+  empty note resolutions are accepted, message dots never clear, SmartVault links
+  cannot be edited, staff can delete workflows, and deactivated staff appear in
+  its assignment picker. Its SOPs are retired, not deleted.
 
-The column is therefore NULL on every completed workflow and cannot be used for
-reporting or audit. The only evidence a client was notified is the FR-64
-checkbox row, which records who ticked it and when — but ticking it does not
-send anything (see below).
+## Do not run
 
----
-
-## 5. "Mark Complete & Notify Client" notifies nobody
-
-No notification code exists in Phase D. The button sets status to `complete`.
-FR-64 is an assertion by the staff member that they notified the client
-elsewhere.
-
-This is defensible as a manual process, but the button wording promises
-otherwise, and combined with #4 there is no record of the notification beyond a
-checkbox. Worth either automating or renaming.
-
-SOP affected: `internal-report-sender`.
-
----
-
-## 6. No way to send a workflow backwards
-
-`NEXT_STATUS` (`src/db/workflow.ts:442-448`) is forward-only and nothing sets an
-earlier status. A problem found in Phase D can only be resolved outside the
-system or by deleting and recreating the workflow, which cascades away its
-checklist, notes, query items, messages and drive links.
-
-Not a bug exactly — but a real operational gap, and the reason the SOP tells
-reviewers that Phase B is the last safe point for corrections.
-
-SOP affected: `internal-workflow-no-rollback`.
-
----
-
-## 7. Smaller things
-
-- **Empty note resolutions are accepted.** `handleResolve`
-  (`WorkflowPhaseBase.tsx:156-162`) has no guard on the resolution text, unlike
-  `handleAddNote` which checks `!newNote.trim()`. The resolution is the only
-  record of what was done about a reviewer's objection.
-- **Message unread dots never clear.** `is_read` defaults false
-  (`supabase_workflow_schema.sql:82`) and nothing ever sets it true.
-- **SmartVault links cannot be edited or removed** once saved
-  (`ReportSenderScreen.tsx:57-58`), and a wrong URL has no correction path.
-- **`reconcile_requirements.sql` targets stale table names.** It checks
-  `tax_required_documents`, `bk_required_documents` and `tax_client_uploads`,
-  not the live collectors `bk_mr_required_info` / `cfo_mr_required_info`.
-  Running it as written would delete live requirement slots. Its own NOTE
-  acknowledges the list needs extending. **Do not run it.**
-- **Staff can delete workflows.** The workflow dashboard computes `isAdmin`
-  (`WorkflowDashboardScreen.tsx:50`) but never uses it; the cascading delete is
-  available to any staff member.
-- **Deactivated staff still appear** in the assignment picker
-  (`src/db/profiles.ts:130-140` does not filter on `is_active`).
-- **Bank account `last4` validation is inconsistent** between
-  `normalizeBankAccounts` (id + bank only) and `isCompleteBankAccount` (bank +
-  exactly 4 digits). Which applies depends on the write path, so an account can
-  exist with a blank `last4` and produce a requirement labelled
-  "Bank Statements — BDO" with no digits.
-- **The questionnaire gate is bypassable.** The Documents-screen upload button
-  (`DocumentsScreen.tsx:559`) opens the upload modal directly with no
-  questionnaire check, and nothing enforces it at the database level.
+- `reconcile_requirements.sql` targets old table names and would delete live
+  monthly-item rows.
+- `move_document.sql`, `tax_prior_year_folders.sql` and `client_profile_folders.sql`
+  carry older copies of `is_folder_table` that leave out newer folders; re-running
+  them breaks moves into Unsorted Uploads, Identification, IRS Notices and IP Pins.
