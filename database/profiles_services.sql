@@ -41,7 +41,7 @@ set search_path = public
 as $$
   select exists (
     select 1 from public.profiles
-    where id = auth.uid() and role in ('admin', 'staff')
+    where id = auth.uid() and role in ('admin', 'staff') and coalesce(is_active, true)
   );
 $$;
 

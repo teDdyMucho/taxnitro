@@ -16,7 +16,7 @@ tried in the live app. Fixing any of them is a separate decision.
 
 ## Most urgent
 
-### 1. Deactivated staff and admins keep full access (checked)
+### 1. Deactivated staff and admins kept full access (fixed)
 
 **Staff → Deactivate** only sets `profiles.is_active = false`
 (`src/db/profiles.ts:198-200`). Sign-in never reads it
@@ -26,9 +26,11 @@ deactivated staff member can still sign in and read every client's files. The
 dialog promises they "won't be able to sign in". A deactivated **Team One**
 login does lose its clients, because `is_team_one()` checks `is_active`.
 
-Fix: make `is_staff_or_admin()` require `is_active`, so every policy using it
-locks them out at once, and sign an inactive user out at sign-in with a message.
-Until then, removing someone means deleting their login.
+Fixed 2026-10-23: `is_staff_or_admin()` requires `is_active`, in every copy
+(`database/staff_active_only.sql`), so every policy built on it shuts at once;
+and the app signs a switched-off staff, admin or Team One login straight out
+with "This account is switched off" (`src/context/AuthContext.tsx`). Clients
+are not affected.
 
 SOP: `internal-staff-manage`.
 
@@ -39,7 +41,7 @@ SOP: `internal-staff-manage`.
 Review** stayed off. The earliest allowed day was also the UTC day
 (`TeamOneUpdateModal.tsx`). Both now work on the calendar day in any time zone.
 
-### 3. Forgot Password is a dead end (checked)
+### 3. Forgot Password was a dead end (app fixed; two Supabase settings to check)
 
 `resetPasswordForEmail` sends people to `financetherapygroup://reset-password`
 (`src/context/AuthContext.tsx:276-278`), an app link that nothing handles: the
@@ -47,8 +49,13 @@ web app has no such scheme and no screen to choose a new password. **Change
 Password** needs the current one. Today the only way is staff setting one in
 **Update Profile → Change Password** (client logins only).
 
-Fix: point the link at the web app, and add a "Set a new password" screen for
-Supabase's password-recovery sign-in.
+Fixed in the app 2026-10-23: the link now comes back to the web app, which
+shows "Choose a new password" (`src/screens/auth/SetPasswordScreen.tsx`), and a
+link that expired says so. Two settings in Supabase decide whether it reaches
+people: **Authentication → URL Configuration** must list the app's address
+under Redirect URLs (or as the Site URL), and **Authentication → Emails** needs
+custom SMTP, since Supabase's own sender only mails the project's team. The
+SOPs keep saying "ask FTG" until a real reset email has been seen to arrive.
 
 SOPs: `client-forgot-password`, `internal-client-password`, `teamone-getting-started`.
 
@@ -65,7 +72,10 @@ password, the way **Add Client** does, used by **Add Staff**.
 
 SOP: `internal-staff-onboarding`.
 
-### 5. Errors and confirmations do not show on the web
+### 5. Errors and confirmations did not show on the web (fixed)
+
+Fixed 2026-10-23: `src/lib/webAlert.ts` shows the browser's own box for every
+`Alert.alert` on the web, loaded first in `App.tsx`. What it was:
 
 `Alert.alert` does nothing in react-native-web, and the web is where everyone
 uses the app. So these fail or succeed without a word:
@@ -82,7 +92,12 @@ installed once at start-up.
 
 SOPs: `client-cannot-upload`, `client-forgot-password`.
 
-### 6. The help chat trusts the role the browser sends
+### 6. The help chat trusts the role the browser sends (app and database done; n8n to switch)
+
+Done 2026-10-23 on this side: the widget sends the person's session as
+`accessToken`, and `search_my_sops()` (`database/sops_search_mine.sql`) reads the
+procedures as that person, videos included. Left: point the n8n flow at it.
+What it was:
 
 `ChatWidget.tsx:150-161` posts `role`, `userId` and `email` in the request body
 to the n8n `chatbot` webhook. The flow is not in this repository. If it picks

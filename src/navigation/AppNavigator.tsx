@@ -10,6 +10,7 @@ import { Colors } from '../constants/colors';
 import { supabase } from '../lib/supabase';
 import { LandingScreen } from '../screens/auth/LandingScreen';
 import { LoginScreen } from '../screens/auth/LoginScreen';
+import { SetPasswordScreen } from '../screens/auth/SetPasswordScreen';
 import { RegisterScreen } from '../screens/auth/RegisterScreen';
 import { DashboardScreen } from '../screens/main/DashboardScreen';
 import { DocumentsScreen } from '../screens/main/DocumentsScreen';
@@ -459,6 +460,36 @@ function IdleSignOutModal({ onDismiss }: { onDismiss: () => void }) {
   );
 }
 
+// ── Other notices on the signed-out screen ──────────────────────────────────
+// A login switched off on the Staff page, and a reset link that did not work.
+// Each says what happened and what to do, rather than dropping the person on
+// the sign-in page without a word.
+
+function NoticeModal({ icon, title, body, button, onDismiss }: {
+  icon: keyof typeof Ionicons.glyphMap; title: string; body: string; button: string; onDismiss: () => void;
+}) {
+  return (
+    <View style={idle.overlay}>
+      <View style={idle.card}>
+        <LinearGradient
+          colors={['rgba(232,185,35,0.18)', 'rgba(181,144,91,0.10)']}
+          style={idle.iconWrap}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+        >
+          <Ionicons name={icon} size={28} color="#E8B923" />
+        </LinearGradient>
+        <Text style={idle.title}>{title}</Text>
+        <Text style={idle.sub}>{body}</Text>
+        <TouchableOpacity style={idle.btn} onPress={onDismiss} activeOpacity={0.85}>
+          <Ionicons name="log-in-outline" size={16} color="#3A3131" />
+          <Text style={idle.btnText}>{button}</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+}
+
 // ── "Still there?" ───────────────────────────────────────────────────────────
 // Daja: "instead of automatically logging out, can we have a pop-up check in
 // saying 'Still There?' requiring the user to click Yes to resume their session
@@ -545,7 +576,10 @@ const idle = StyleSheet.create({
 });
 
 export function AppNavigator() {
-  const { isAuthenticated, isLoading, logout, user, signOutReason, clearSignOutReason, idlePromptUntil, stayIn } = useAuth();
+  const {
+    isAuthenticated, isLoading, logout, user, signOutReason, clearSignOutReason, idlePromptUntil, stayIn,
+    recovering, resetLinkProblem, clearResetLinkProblem,
+  } = useAuth();
   const [authView, setAuthView] = useState<'landing' | 'login' | 'register'>(
     Platform.OS === 'web' ? 'landing' : 'login'
   );
@@ -561,8 +595,25 @@ export function AppNavigator() {
 
   if (!isAuthenticated) {
     // Dismissing goes straight to the sign-in form — that is what they need next.
+    const toLogin = () => { clearSignOutReason(); clearResetLinkProblem(); setAuthView('login'); };
     const notice = signOutReason === 'idle' ? (
-      <IdleSignOutModal onDismiss={() => { clearSignOutReason(); setAuthView('login'); }} />
+      <IdleSignOutModal onDismiss={toLogin} />
+    ) : signOutReason === 'deactivated' ? (
+      <NoticeModal
+        icon="person-remove-outline"
+        title="This account is switched off"
+        body="An FTG admin has switched this login off, so it can no longer open the portal. If that is a mistake, ask an admin to switch it back on."
+        button="OK"
+        onDismiss={toLogin}
+      />
+    ) : resetLinkProblem ? (
+      <NoticeModal
+        icon="link-outline"
+        title="That reset link didn't work"
+        body={`${resetLinkProblem.replace(/\.$/, '')}. A reset link works once, for a short time. Ask for a new one with Forgot Password? on the sign-in page.`}
+        button="Back to sign in"
+        onDismiss={toLogin}
+      />
     ) : null;
 
     if (authView === 'landing') {
@@ -588,6 +639,9 @@ export function AppNavigator() {
       </View>
     );
   }
+
+  // Signed in by a password-reset link: the new password comes before anything else.
+  if (recovering) return <SetPasswordScreen />;
 
   // Over whichever portal is showing, for every role.
   const stillThere = idlePromptUntil != null

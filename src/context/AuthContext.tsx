@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import { View, Platform, AppState } from 'react-native';
-import { supabase } from '../lib/supabase';
+import { supabase, openedFromResetLink, resetLinkError } from '../lib/supabase';
 import { BankAccount, normalizeBankAccounts } from '../db/requirements';
 import { useIdleLogout, IDLE_TIMEOUT_MS, IDLE_GRACE_MS } from '../hooks/useIdleLogout';
 
@@ -19,10 +19,12 @@ export interface AuthUser {
   services: ClientService[];    // which categories/requirements this client sees
   hasQboAccess: boolean;        // true → hide "Prior Month Bookkeeping / QBO Access"
   bankAccounts: BankAccount[];  // one required Bank Statements slot per account
+  /** Off when switched off on the Staff page (or a client Paused or Closed). */
+  isActive?: boolean;
 }
 
 /** Why the last session ended — drives the notice shown on the signed-out screen. */
-export type SignOutReason = 'idle' | null;
+export type SignOutReason = 'idle' | 'deactivated' | null;
 
 interface AuthContextValue {
   isAuthenticated: boolean;
@@ -43,6 +45,13 @@ interface AuthContextValue {
   idlePromptUntil: number | null;
   /** "Yes, keep me signed in." */
   stayIn: () => void;
+  /** Signed in by a password-reset link: a new password is needed before anything else. */
+  recovering: boolean;
+  /** Save the new password chosen after a reset link. */
+  finishRecovery: (password: string) => Promise<{ success: boolean; error?: string }>;
+  /** A reset link that did not work, to explain on the sign-in page. */
+  resetLinkProblem: string | null;
+  clearResetLinkProblem: () => void;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -102,6 +111,7 @@ async function fetchProfile(userId: string, email: string): Promise<AuthUser | n
       hasQboAccess: data.has_qbo_access ?? false,
       // Absent until database/profiles_bank_accounts.sql is run → no accounts.
       bankAccounts: normalizeBankAccounts(data.bank_accounts),
+      isActive: data.is_active !== false,
     };
   } catch (err: any) {
     console.error('fetchProfile:', err?.message ?? err);
@@ -115,6 +125,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [error, setError] = useState<string | null>(null);
   const [user, setUser] = useState<AuthUser | null>(null);
   const [signOutReason, setSignOutReason] = useState<SignOutReason>(null);
+  const [recovering, setRecovering] = useState(openedFromResetLink);
+  const [resetLinkProblem, setResetLinkProblem] = useState<string | null>(resetLinkError);
+
+  // A staff, admin or Team One login switched off on the Staff page is signed
+  // straight back out. Deactivate used to be only a flag, and the person kept
+  // full access (database/staff_active_only.sql). Clients are left alone: a
+  // Paused or Closed client signs in as before.
+  const acceptProfile = useCallback((profile: AuthUser | null) => {
+    if (!profile) return;
+    if (profile.role !== 'client' && profile.isActive === false) {
+      setUser(null);
+      setIsAuthenticated(false);
+      setSignOutReason('deactivated');
+      supabase.auth.signOut();
+      return;
+    }
+    setUser(profile);
+  }, []);
 
   useEffect(() => {
     // Step 1: Fast session check from local storage — no network needed
@@ -127,9 +155,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         // Step 2: Enrich with profile data in background (non-blocking).
         // On failure keep the minimal user rather than overwriting it.
-        fetchProfile(session.user.id, session.user.email ?? '').then(profile => {
-          if (profile) setUser(profile);
-        });
+        fetchProfile(session.user.id, session.user.email ?? '').then(acceptProfile);
       }
       // Clear loading immediately after session check — don't wait for profile
       setIsLoading(false);
@@ -139,18 +165,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     // Step 3: Subscribe to future auth state changes (sign in, sign out, token refresh)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+      // A reset link signs the person in; the new password comes first.
+      if (event === 'PASSWORD_RECOVERY') setRecovering(true);
+      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'PASSWORD_RECOVERY') {
         if (session?.user) {
           setIsAuthenticated(true);
           // Use functional update: if a user already exists (re-fire on web focus/token refresh),
           // keep their current data while silently refreshing the profile so we never
           // briefly reset role to 'client', which would unmount AdminNavigator.
           setUser(prev => {
-            fetchProfile(session.user.id, session.user.email ?? '').then(profile => {
-              // Never clobber a good user with a failed lookup — that would drop
-              // an admin back to the client portal on a transient error.
-              if (profile) setUser(profile);
-            });
+            // Never clobber a good user with a failed lookup — that would drop
+            // an admin back to the client portal on a transient error.
+            fetchProfile(session.user.id, session.user.email ?? '').then(acceptProfile);
             // Fresh login — show minimal user immediately while profile loads
             if (!prev) return sessionUser(session.user.id, session.user.email ?? '');
             // Already authenticated — preserve current user until profile arrives
@@ -160,6 +186,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } else if (event === 'SIGNED_OUT') {
         setUser(null);
         setIsAuthenticated(false);
+        setRecovering(false);
       }
       setIsLoading(false);
     });
@@ -272,13 +299,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, [isAuthenticated, idlePromptUntil, signOutIdle]);
 
+  // The link used to point at financetherapygroup://reset-password, an app
+  // address nothing answered, so it led nowhere. It now comes back to this web
+  // app, which asks for the new password. The address must be among the
+  // Redirect URLs in Supabase → Authentication → URL Configuration, or
+  // Supabase sends people to the Site URL instead.
   const forgotPassword = useCallback(async (email: string) => {
     const { error: err } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: 'financetherapygroup://reset-password',
+      redirectTo: Platform.OS === 'web' && typeof window !== 'undefined'
+        ? `${window.location.origin}/`
+        : 'financetherapygroup://reset-password',
     });
     if (err) return { success: false, error: err.message };
     return { success: true };
   }, []);
+
+  const finishRecovery = useCallback(async (password: string) => {
+    const { error: err } = await supabase.auth.updateUser({ password });
+    if (err) return { success: false, error: err.message };
+    setRecovering(false);
+    return { success: true };
+  }, []);
+  const clearResetLinkProblem = useCallback(() => setResetLinkProblem(null), []);
 
   // Same rule as everywhere else here: on failure keep the user we have rather
   // than replacing them with defaults.
@@ -286,14 +328,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session?.user) return;
     const profile = await fetchProfile(session.user.id, session.user.email ?? '');
-    if (profile) setUser(profile);
-  }, []);
+    acceptProfile(profile);
+  }, [acceptProfile]);
 
   return (
     <AuthContext.Provider value={{
       isAuthenticated, isLoading, error, user, signOutReason, clearSignOutReason,
       login, register, logout, clearError, forgotPassword, refreshProfile,
       idlePromptUntil, stayIn,
+      recovering, finishRecovery, resetLinkProblem, clearResetLinkProblem,
     }}>
       {/* Web tracks input through DOM listeners. React Native has no global
           input event, so touches are captured here and passed along — the

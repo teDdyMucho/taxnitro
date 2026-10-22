@@ -7,6 +7,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Colors } from '../constants/colors';
 import { useAuth } from '../context/AuthContext';
+import { supabase } from '../lib/supabase';
 
 // The n8n chatbot flow. It receives one message at a time plus who sent it, and
 // answers with the assistant's reply.
@@ -143,6 +144,10 @@ export function ChatWidget() {
     const timer = setTimeout(() => controller.abort(), REPLY_TIMEOUT_MS);
 
     try {
+      // The person's own session, so the flow can ask Supabase who this really
+      // is and read the procedures as them (database/sops_search_mine.sql),
+      // rather than trusting `role` below, which a browser can change.
+      const { data: { session } } = await supabase.auth.getSession();
       const res = await fetch(WEBHOOK_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -158,6 +163,7 @@ export function ChatWidget() {
           // routes the ticket on this, so it decides which Slack channel and
           // which set of procedures the assistant may read from.
           role: user?.role ?? 'client',
+          accessToken: session?.access_token ?? null,
           sentAt: new Date().toISOString(),
         }),
       });

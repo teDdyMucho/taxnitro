@@ -40,7 +40,7 @@ To sign out, press the sign-out icon beside your name at the bottom of the menu,
  $t$I forgot my password$t$,
  $b$**Message us and we will set a new password for you.** The **Forgot Password?** link on the sign-in page does not work at the moment: the email it sends does not lead to a page where you can choose a new password.
 
-Once you are signed in you can change your password yourself: **Profile → Change Password**, enter your current password, then the new one twice (at least 8 characters). No confirmation appears on the web, so sign out and back in with the new password to check it worked.$b$,
+Once you are signed in you can change your password yourself: **Profile → Change Password**, enter your current password, then the new one twice (at least 8 characters).$b$,
  'client', 'account', array['forgot password', 'reset password', 'new password', 'locked out', 'cannot sign in', 'password reset email'], array[]::text[], true),
 ('client-menu',
  $t$What's in the menu?$t$,
@@ -231,7 +231,7 @@ Your dashboard only shows the current month, so an earlier month's documents wil
 5. **Use the gold Upload button in the menu.** Folders do not have their own.
 6. **Refresh the page**, sign in again if asked, and try once more.
 
-If it still fails, tell us through the chat bubble what happens when you press the button. Some errors show no message on the web, so tell us even if nothing appeared.$b$,
+If it still fails, tell us through the chat bubble what happens when you press the button, and what the message said.$b$,
  'client', 'uploads', array['cannot upload', 'upload not working', 'button does nothing', 'stuck', 'error', 'troubleshoot', 'file won''t attach', 'upload greyed out'], array[]::text[], true),
 ('client-who-sees-my-documents',
  $t$Who can see what I upload?$t$,
@@ -568,8 +568,8 @@ There is one thread per client, shared by all FTG staff and all Team One logins.
 - **Deactivate** (not admins): "Deactivate this member?" → **Yes, deactivate**. Reactivating is one tap.
 - **Delete** (not admins, not yourself): blocked if they have old Workflow records; deactivate them instead.
 
-**Known issue: deactivating does not lock a staff or admin login out.** They can still sign in and see client files. When someone leaves, also ask Angelo to remove their login. A deactivated Team One login can sign in but sees no clients.$b$,
- 'internal', 'staff', array['change role', 'promote', 'demote', 'deactivate', 'delete staff', 'remove access', 'offboard', 'known-issue'], array[]::text[], true),
+A deactivated staff, admin or Team One login is signed straight out with "This account is switched off", and loses all staff access at once. Reactivate them to let them back in.$b$,
+ 'internal', 'staff', array['change role', 'promote', 'demote', 'deactivate', 'delete staff', 'remove access', 'offboard', 'switched off'], array[]::text[], true),
 ('internal-roles',
  $t$What admins, staff and Team One can do$t$,
  $b$- **Admins** can do everything, including the **Staff** page (people and roles). Admins and Daja decide escalated Team One items.

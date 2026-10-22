@@ -18,6 +18,21 @@ const storage = Platform.OS === 'web'
       removeItem: (key: string) => SecureStore.deleteItemAsync(key),
     };
 
+// A password-reset link lands back here with a session in the address
+// (#access_token=…&type=recovery), or with why it did not work
+// (#error=…&error_description=…). supabase-js reads the address and tidies it
+// away as it starts, so look first.
+const arrivedAt = Platform.OS === 'web' && typeof window !== 'undefined'
+  ? `${window.location.hash}&${window.location.search}`
+  : '';
+/** Opened from a password-reset email: ask for a new password before anything else. */
+export const openedFromResetLink = /type=recovery/.test(arrivedAt);
+/** The reset link did not work (expired, or used already), in Supabase's words. */
+export const resetLinkError: string | null = (() => {
+  const m = /error_description=([^&]*)/.exec(arrivedAt);
+  return m ? decodeURIComponent(m[1].replace(/\+/g, ' ')) : null;
+})();
+
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     storage,

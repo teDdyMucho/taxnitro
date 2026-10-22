@@ -14,7 +14,7 @@
 -- Recursion-safe role check (also in profiles_services.sql).
 create or replace function public.is_staff_or_admin()
 returns boolean language sql security definer stable set search_path = public as $$
-  select exists (select 1 from public.profiles where id = auth.uid() and role in ('admin','staff'));
+  select exists (select 1 from public.profiles where id = auth.uid() and role in ('admin','staff') and coalesce(is_active, true));
 $$;
 grant execute on function public.is_staff_or_admin() to authenticated, anon;
 

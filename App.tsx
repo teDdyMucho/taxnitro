@@ -1,4 +1,6 @@
 import 'react-native-gesture-handler';
+// Before anything can call Alert.alert: on the web it otherwise shows nothing.
+import './src/lib/webAlert';
 import React from 'react';
 import { Platform } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
