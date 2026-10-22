@@ -49,6 +49,7 @@ Once you are signed in you can change your password yourself: **Profile → Chan
 - **Dashboard**: what is new, what is missing and what is next this month.
 - **Documents**: all your folders, by service.
 - **Notifications**: notes and new documents from us. A red number shows how many are unread.
+- **How-to**: step-by-step guides like this one, with short videos. On a phone, open it from **Profile → How-to guides and videos**.
 - **Profile**: your name, photo, password and account details.
 - **Upload** (the gold button): send us documents.
 
@@ -295,7 +296,7 @@ The request stays on the list until the end of the month, even after you send it
  'client', 'requirements', array['requested', 'requested by ftg', 'asked for', 'document request', 'need from me'], array[]::text[], true),
 ('client-help',
  $t$How do I get help?$t$,
- $b$Press the gold chat bubble at the bottom right of any page and ask your question.
+ $b$Press the gold chat bubble at the bottom right of any page and ask your question. For step-by-step guides with short videos, open **How-to** in the menu (on a phone, **Profile → How-to guides and videos**).
 
 For something about a particular file, open the file and use **Message FTG about this file**, so the conversation stays with it.$b$,
  'client', 'help', array['help', 'support', 'contact', 'question', 'talk to someone', 'assistant', 'chat'], array[]::text[], true),
@@ -307,9 +308,10 @@ For something about a particular file, open the file and use **Message FTG about
  $t$Getting started: signing in and the menu (Team One)$t$,
  $b$Sign in on the Finance Therapy Group portal with the **Email Address** and **Password** FTG set up for you.
 
-Your menu has three items:
+Your menu has four items:
 - **Clients**: the clients FTG has assigned to Team One.
 - **My Updates**: what you sent FTG, and what FTG decided.
+- **How-to**: step-by-step guides with short videos. On a phone, open it from **Profile**.
 - **Profile**: your name, photo and password.
 
 The gold chat bubble at the bottom right answers how-to questions and takes bug reports. To sign out, use the icon beside your name, or **Profile → Sign Out**. If you forget your password, ask FTG; the **Forgot Password?** link does not work at the moment.$b$,
@@ -384,7 +386,7 @@ Anything already sent is saved. An update or chat message you had not sent yet i
  'team_one', 'account', array['signed out', 'logged out', 'still there', 'timeout', 'idle', 'session'], array[]::text[], true),
 ('teamone-help',
  $t$Getting help or reporting a problem (Team One)$t$,
- $b$Press the gold chat bubble and ask how something works, or describe the problem: what you pressed, what you expected, and what happened. For anything about a particular client, use that client's **Chat with FTG** instead.$b$,
+ $b$Open **How-to** for step-by-step guides with short videos. Or press the gold chat bubble and ask how something works, or describe the problem: what you pressed, what you expected, and what happened. For anything about a particular client, use that client's **Chat with FTG** instead.$b$,
  'team_one', 'help', array['help', 'bug', 'problem', 'not working', 'support', 'ticket'], array[]::text[], true),
 
 -- ══════════════════════════════════════════════════════════════
@@ -398,6 +400,7 @@ Anything already sent is saved. An update or chat message you had not sent yet i
 - **Team One**: review what Team One sends for a decision.
 - **Staff** (admins only): add staff, admins and Team One logins, change roles, deactivate.
 - **Financial Reports**: the client financial dashboards.
+- **How-to**: every procedure with its video, for staff, clients and Team One. On a phone, open it from **Profile**.
 - **Profile**: your own account.
 
 The red number on **Team One** counts items waiting for review plus unread Team One chat messages; admins and Daja also count escalated items. The gold chat bubble answers how-to questions and raises bug tickets. The app reopens the client and folder you last had open.$b$,
@@ -623,7 +626,7 @@ The **Forgot Password?** link on the sign-in page does not work at the moment, s
  'internal', 'clients', array['client password', 'reset password', 'forgot password', 'cannot sign in', 'locked out', 'login help'], array[]::text[], true),
 ('internal-help-and-bugs',
  $t$Getting help or reporting a bug$t$,
- $b$Press the gold chat bubble and either ask how something works, or describe the problem: what you pressed, what you expected, and what happened. It raises a ticket (numbered TKT-…) for the team.
+ $b$Open **How-to** for every procedure with its video, including what clients and Team One are told. Or press the gold chat bubble and ask how something works, or describe the problem: what you pressed, what you expected, and what happened. It raises a ticket (numbered TKT-…) for the team.
 
 A conversation is not saved when you reload the page. The refresh icon starts a new one.$b$,
  'internal', 'help', array['bug', 'report a bug', 'ticket', 'help', 'broken', 'not working', 'support'], array[]::text[], true)

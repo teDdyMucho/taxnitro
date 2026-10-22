@@ -14,6 +14,7 @@ import { RegisterScreen } from '../screens/auth/RegisterScreen';
 import { DashboardScreen } from '../screens/main/DashboardScreen';
 import { DocumentsScreen } from '../screens/main/DocumentsScreen';
 import { NotificationsScreen } from '../screens/main/NotificationsScreen';
+import { HowToScreen } from '../screens/main/HowToScreen';
 import { ProfileScreen } from '../screens/main/ProfileScreen';
 import { ClientDashboardScreen } from '../screens/admin/ClientDashboardScreen';
 import { dashboardForClient } from '../lib/clientDashboards';
@@ -31,6 +32,7 @@ export type MainTabParamList = {
   Documents: undefined;
   Notifications: undefined;
   Profile: undefined;
+  HowTo: undefined;
 };
 
 type TabName = keyof MainTabParamList;
@@ -41,6 +43,9 @@ const NAV_ITEMS: { name: TabName; label: string; active: keyof typeof Ionicons.g
   { name: 'Dashboard',     label: 'Dashboard',      active: 'grid',          inactive: 'grid-outline' },
   { name: 'Documents',     label: 'Documents',      active: 'folder',        inactive: 'folder-outline' },
   { name: 'Notifications', label: 'Notifications',  active: 'notifications', inactive: 'notifications-outline' },
+  // The SOPs and their videos. On a phone it is opened from Profile: the bar
+  // along the bottom has no room for another item.
+  { name: 'HowTo',         label: 'How-to',         active: 'play-circle',   inactive: 'play-circle-outline' },
   { name: 'Profile',       label: 'Profile',        active: 'person',        inactive: 'person-outline' },
 ];
 
@@ -123,6 +128,7 @@ function WebLayout({ onLogout }: { onLogout: () => void }) {
         );
       case 'Documents':     return <DocumentsScreen />;
       case 'Notifications': return <NotificationsScreen />;
+      case 'HowTo':         return <HowToScreen onBack={isDesktop ? undefined : () => goTab('Profile')} />;
       case 'Profile':
         // The client's own report — without the internal working tabs.
         if (showDashboard && myDashboard) {
@@ -134,7 +140,7 @@ function WebLayout({ onLogout }: { onLogout: () => void }) {
             />
           );
         }
-        return <ProfileScreen onLogout={onLogout} onOpenDashboard={() => setShowDashboard(true)} />;
+        return <ProfileScreen onLogout={onLogout} onOpenDashboard={() => setShowDashboard(true)} onOpenHowTo={() => goTab('HowTo')} />;
     }
   };
 
@@ -152,7 +158,7 @@ function WebLayout({ onLogout }: { onLogout: () => void }) {
         {/* Floating pill tab bar */}
         <View style={[mob.pillOuter, { paddingBottom: insets.bottom + 8 }]}>
           <View style={mob.pillInner}>
-            {NAV_ITEMS.map(item => {
+            {NAV_ITEMS.filter(i => i.name !== 'HowTo').map(item => {
               const isActive = activeTab === item.name;
               return (
                 <TouchableOpacity

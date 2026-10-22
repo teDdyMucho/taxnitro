@@ -26,6 +26,7 @@ import { dashboardForClient } from '../lib/clientDashboards';
 import { loadLastPlace, saveLastPlace } from '../lib/lastPlace';
 import { getProfile } from '../db/profiles';
 import { FinancialReportsScreen } from '../screens/admin/FinancialReportsScreen';
+import { HowToScreen } from '../screens/main/HowToScreen';
 import { TeamOneReviewScreen } from '../screens/admin/TeamOneReviewScreen';
 import { countTeamOneItems, ESCALATION_EMAIL, type TeamOneStatus } from '../db/teamOne';
 import { countUnreadChat } from '../db/teamOneChat';
@@ -35,7 +36,7 @@ import { countUnreadChat } from '../db/teamOneChat';
 // 'Reports' used to open Clyde's own report generator (public/financial-report.html).
 // It now opens our own client dashboards instead; the old page and its
 // ReportsScreen are still in the repo, unreferenced.
-type AdminTab = 'Dashboard' | 'Documents' | 'Clients' | 'TeamOne' | 'Staff' | 'Workflow' | 'Reports' | 'Profile';
+type AdminTab = 'Dashboard' | 'Documents' | 'Clients' | 'TeamOne' | 'Staff' | 'Workflow' | 'Reports' | 'HowTo' | 'Profile';
 
 interface NavItem {
   name: AdminTab;
@@ -48,7 +49,7 @@ interface NavItem {
 // ── Nav config ────────────────────────────────────────────────────────────────
 
 /** All Team One has: its clients, its updates, and its own profile. */
-const TEAM_ONE_TABS: AdminTab[] = ['Clients', 'TeamOne', 'Profile'];
+const TEAM_ONE_TABS: AdminTab[] = ['Clients', 'TeamOne', 'HowTo', 'Profile'];
 
 const NAV_ITEMS: NavItem[] = [
   { name: 'Dashboard', label: 'Dashboard', active: 'grid',          inactive: 'grid-outline' },
@@ -62,6 +63,9 @@ const NAV_ITEMS: NavItem[] = [
   // archived." The screen and its data stay; this line brings it back:
   // { name: 'Workflow',  label: 'Workflow',  active: 'git-branch',    inactive: 'git-branch-outline' },
   { name: 'Reports',   label: 'Financial Reports', active: 'analytics', inactive: 'analytics-outline' },
+  // The SOPs and their videos. On a phone it is opened from Profile: the bar
+  // along the bottom has no room for another item.
+  { name: 'HowTo',     label: 'How-to',    active: 'play-circle',   inactive: 'play-circle-outline' },
   { name: 'Profile',   label: 'Profile',   active: 'person',        inactive: 'person-outline' },
 ];
 
@@ -236,7 +240,8 @@ export function AdminNavigator({ onLogout }: { onLogout: () => void }) {
       case 'Staff':     return <StaffManagementScreen />;
       case 'Workflow':  return <WorkflowDashboardScreen />;
       case 'Reports':   return <FinancialReportsScreen />;
-      case 'Profile':   return <ProfileScreen onLogout={onLogout} />;
+      case 'HowTo':     return <HowToScreen onBack={isDesktop ? undefined : () => handleTabPress('Profile')} />;
+      case 'Profile':   return <ProfileScreen onLogout={onLogout} onOpenHowTo={() => handleTabPress('HowTo')} />;
     }
   };
 
@@ -384,7 +389,7 @@ export function AdminNavigator({ onLogout }: { onLogout: () => void }) {
         },
       ]}>
         <View style={mob.tabBar}>
-          {visibleItems.map(item => {
+          {visibleItems.filter(i => i.name !== 'HowTo').map(item => {
             const isActive = activeTab === item.name;
             return (
               <TouchableOpacity

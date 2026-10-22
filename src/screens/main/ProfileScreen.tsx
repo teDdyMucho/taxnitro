@@ -373,9 +373,11 @@ interface Props {
   onLogout: () => void;
   /** Opens this client's own financial dashboard, when one has been built. */
   onOpenDashboard?: () => void;
+  /** Opens the How-to page: the way in on a phone, where the menu has no room for it. */
+  onOpenHowTo?: () => void;
 }
 
-export function ProfileScreen({ onLogout, onOpenDashboard }: Props) {
+export function ProfileScreen({ onLogout, onOpenDashboard, onOpenHowTo }: Props) {
   const insets = useSafeAreaInsets();
   const { user, logout } = useAuth();
   // A dashboard is built per client, so most accounts have none and the row
@@ -733,6 +735,22 @@ export function ProfileScreen({ onLogout, onOpenDashboard }: Props) {
               </>
             )}
           </View>
+
+          {/* ── Help ──────────────────────────────────────────────────────── */}
+          {onOpenHowTo && (
+            <>
+              <SectionLabel label="HELP" />
+              <View style={styles.card}>
+                <SettingRow
+                  icon="play-circle-outline"
+                  label="How-to guides and videos"
+                  onPress={onOpenHowTo}
+                  color={Colors.accentGold}
+                  last
+                />
+              </View>
+            </>
+          )}
 
           {/* ── Preferences ───────────────────────────────────────────────── */}
           <SectionLabel label="PREFERENCES" />
