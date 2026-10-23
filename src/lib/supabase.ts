@@ -27,6 +27,8 @@ const arrivedAt = Platform.OS === 'web' && typeof window !== 'undefined'
   : '';
 /** Opened from a password-reset email: ask for a new password before anything else. */
 export const openedFromResetLink = /type=recovery/.test(arrivedAt);
+/** ...and it was an invite (admin-users, invite_client): greet them as new. */
+export const openedFromInvite = openedFromResetLink && /[?&]welcome=1\b/.test(arrivedAt);
 /** The reset link did not work (expired, or used already), in Supabase's words. */
 export const resetLinkError: string | null = (() => {
   const m = /error_description=([^&]*)/.exec(arrivedAt);

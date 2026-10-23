@@ -4,6 +4,7 @@
 //   create_client   make a client's login and profile        (Clients → Add Client)
 //   set_password    change a client's password                (Update Profile tray)
 //   delete_staff    remove a staff or Team One login          (Staff page)
+//   invite_client   email a client a link to set a password   (client profile → Invite)
 //
 // Anyone could read the key out of the bundle and use it to read every client's
 // files, which also made Team One's limits meaningless. Here the key stays on
@@ -12,7 +13,8 @@
 //
 // Deploy: Supabase dashboard → Edge Functions → Deploy a new function, named
 // admin-users, with this file. SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are
-// provided to it by Supabase; nothing needs setting.
+// provided to it by Supabase. Invites also need N8N_EMAIL_KEY, the same value
+// as the n8n "FTG account email key" credential.
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
@@ -24,6 +26,11 @@ const cors = {
 
 const reply = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { ...cors, 'Content-Type': 'application/json' } });
+
+// Where an invite's link comes back to, and the n8n flow that emails it from
+// info@ (automation/n8n/ftg-account-email.json).
+const APP_URL = 'https://financetherapygroup.netlify.app';
+const N8N_EMAIL_URL = 'https://primary-production-6722.up.railway.app/webhook/ftg-account-email';
 
 // What a new client's profile may carry. Role and active are set here, never
 // taken from the request.
@@ -108,6 +115,37 @@ Deno.serve(async req => {
         return reply({ error: linked ? 'This member is still linked to workflow records and cannot be deleted.' : error.message }, 400);
       }
       return reply({ ok: true });
+    }
+
+    // Camaree: "can we create an Invite button to allow us to invite clients
+    // to the app directly from the app?" A one-time link that signs them in
+    // and asks for a password, emailed from info@. A reset link underneath;
+    // ?welcome=1 makes the page greet them as new. It sends nothing through
+    // Supabase's own mailer, so its hourly email limit does not apply.
+    case 'invite_client': {
+      const userId = String(body.user_id ?? '');
+      const { data: who } = await admin
+        .from('profiles').select('id, role, email, full_name').eq('id', userId).maybeSingle();
+      if (!who || who.role !== 'client' || !who.email) return reply({ error: 'Only a client can be invited.' }, 403);
+      const key = Deno.env.get('N8N_EMAIL_KEY');
+      if (!key) return reply({ error: 'Invites are not set up yet (N8N_EMAIL_KEY).' }, 500);
+
+      const { data: made, error } = await admin.auth.admin.generateLink({
+        type: 'recovery', email: who.email, options: { redirectTo: `${APP_URL}/?welcome=1` },
+      });
+      const link = made?.properties?.action_link;
+      if (error || !link) return reply({ error: error?.message ?? 'Could not make the invite link.' }, 400);
+
+      const sent = await fetch(N8N_EMAIL_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-ftg-key': key },
+        body: JSON.stringify({ kind: 'invite', to: who.email, name: who.full_name ?? '', link }),
+      }).catch(() => null);
+      if (!sent?.ok) return reply({ error: 'The invite email could not be sent. Please try again in a minute.' }, 502);
+
+      // For "Invite again" on their profile. Absent until database/client_invites.sql is run.
+      await admin.from('profiles').update({ invited_at: new Date().toISOString() }).eq('id', userId);
+      return reply({ ok: true, email: who.email });
     }
 
     default:

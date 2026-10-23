@@ -130,3 +130,38 @@ in twice (database/tax_nitro_invoices.sql). At most 40 a run; the rest follow.
 secret `SYNC_KEY` (a long random string); deploy `supabase/functions/tax-nitro`;
 import the workflow with the anon key and the same `SYNC_KEY` in its headers,
 and activate it. The function refuses the key for anything but this sync.
+
+---
+
+# Account emails: invites and password resets
+
+Camaree: "can we create an Invite button to allow us to invite clients to the
+app directly from the app?" and "how soon until the forgot password button
+becomes operational?" Both go out from info@ (automation/n8n/ftg-account-email.json):
+
+    client profile → Invite                    sign-in page → Forgot Password?
+      → admin-users, invite_client               → Supabase Auth's Send Email hook
+      → a one-time link (?welcome=1)             → auth-email, checking Supabase signed it
+                         ↘                       ↙
+             POST /webhook/ftg-account-email   (x-ftg-key header)
+               → Write the email   (only links into this project's own sign-in)
+               → Send it from info@
+
+The link signs the person in and the app asks for their password: a welcome
+for an invite, "Choose a new password" for a reset. Supabase's own sender only
+mails the project's team, so it sends nothing itself once the hook is on.
+
+**Set up:**
+1. n8n: a Header Auth credential named "FTG account email key" (Name
+   `x-ftg-key`, Value a long random string). Import the workflow, pick that
+   credential on its webhook and the info@ Outlook credential on its send, and
+   publish.
+2. Supabase Edge Function secret `N8N_EMAIL_KEY`: the same string.
+3. Deploy `supabase/functions/auth-email` with "Verify JWT" off, and redeploy
+   `supabase/functions/admin-users`.
+4. Authentication → Hooks → Send Email hook → HTTPS →
+   `<supabase url>/functions/v1/auth-email`. Generate its secret and save it as
+   the secret `SEND_EMAIL_HOOK_SECRET`.
+5. Run `database/client_invites.sql` (when each client was last invited).
+6. Authentication → Email → "Email OTP Expiration": 86400, so an invite's link
+   lasts a day rather than an hour.

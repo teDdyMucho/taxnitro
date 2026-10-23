@@ -49,6 +49,14 @@ export function setClientPassword(userId: string, password: string) {
   return call<{ ok: true }>({ action: 'set_password', user_id: userId, password });
 }
 
+/**
+ * Email a client a link, from info@, to set a password and sign in (Camaree:
+ * an Invite button "to invite clients to the app directly from the app").
+ */
+export function inviteClient(userId: string) {
+  return call<{ ok: true; email: string }>({ action: 'invite_client', user_id: userId });
+}
+
 /** Remove a staff or Team One login. Admin only; admins are not removable. */
 export function deleteStaffAccount(userId: string) {
   return call<{ ok: true }>({ action: 'delete_staff', user_id: userId });

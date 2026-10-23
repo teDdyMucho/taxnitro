@@ -19,7 +19,7 @@ import {
   BankAccount, normalizeBankAccounts,
 } from '../../db/requirements';
 import { ClientManageModal } from '../../components/ClientManageModal';
-import { createClientAccount } from '../../lib/adminUsers';
+import { createClientAccount, inviteClient } from '../../lib/adminUsers';
 import { pullFromTaxNitro, describePull } from '../../lib/taxNitro';
 import { joinName } from '../../lib/personName';
 import { useResponsive } from '../../hooks/useResponsive';
@@ -164,6 +164,9 @@ function AddClientModal({
   const [pullNote, setPullNote]     = useState<string | null>(null);
   // Create Client was pressed with something missing: from then on, say what.
   const [tried, setTried]           = useState(false);
+  // The new login, so they can be sent an invite from the success screen.
+  const [newId, setNewId]           = useState<string | null>(null);
+  const [inviteNote, setInviteNote] = useState<string | null>(null);
 
   const toggleService = (svc: ClientService) => {
     setServices(prev =>
@@ -175,6 +178,7 @@ function AddClientModal({
     setFirstName(''); setLastName(''); setCompanyName(''); setEmail(''); setPassword(''); setPlan('Free');
     setServices(['BK']); setHasQbo(false); setBankAccounts([]);
     setStep('form'); setErrorMsg(''); setShowPass(false); setPullNote(null); setTried(false);
+    setNewId(null); setInviteNote(null);
   };
 
   // A half-filled bank row would be silently dropped on save — block instead.
@@ -205,6 +209,15 @@ function AddClientModal({
   const handleClose = () => { reset(); onClose(); };
   const handleDone  = () => { reset(); onDone(); };
 
+  // The invite: an email from info@ with a link to set their own password, so
+  // nobody has to pass the one above along by hand.
+  const sendInvite = async () => {
+    if (!newId || inviteNote === 'Sending the invite...') return;
+    setInviteNote('Sending the invite...');
+    const r = await inviteClient(newId);
+    setInviteNote(r.error ? `The invite was not sent: ${r.error}` : `Invite sent to ${email.trim()}.`);
+  };
+
   const handleSubmit = async () => {
     if (loading) return;
     if (missing.length) { setTried(true); return; }
@@ -214,7 +227,7 @@ function AddClientModal({
       // Through the admin-users Edge Function, which makes the login confirmed
       // (no verification email) and writes the profile as a client. The role is
       // set there, not taken from here.
-      const { error } = await createClientAccount({
+      const { data: made, error } = await createClientAccount({
         email: email.trim(),
         password: password.trim(),
         fullName: fullName.trim(),
@@ -236,6 +249,7 @@ function AddClientModal({
         return;
       }
 
+      setNewId(made?.id ?? null);
       setStep('success');
       // Camaree: pull a new client's documents from Tax Nitro when their account
       // is made. It runs on its own; the account is made either way.
@@ -266,7 +280,7 @@ function AddClientModal({
                 </LinearGradient>
               </View>
               <Text style={ac.title}>Client Created!</Text>
-              <Text style={ac.subtitle}>Share these credentials with your client to log in.</Text>
+              <Text style={ac.subtitle}>Email them an invite to set their own password, or share these credentials.</Text>
 
               <View style={ac.credBox}>
                 <View style={ac.credRow}>
@@ -289,6 +303,19 @@ function AddClientModal({
                 <View style={ac.infoBox}>
                   <Ionicons name="cloud-download-outline" size={15} color="#E8B923" style={{ marginTop: 1 }} />
                   <Text style={ac.infoText}>{pullNote}</Text>
+                </View>
+              )}
+
+              {newId && (
+                <TouchableOpacity style={[ac.cancelBtn, { flex: 0, flexDirection: 'row', justifyContent: 'center', gap: 7, marginBottom: 10 }]} onPress={sendInvite} activeOpacity={0.85}>
+                  <Ionicons name="mail-outline" size={16} color={Colors.textSecondary} />
+                  <Text style={ac.cancelText}>Email them an invite</Text>
+                </TouchableOpacity>
+              )}
+              {inviteNote && (
+                <View style={ac.infoBox}>
+                  <Ionicons name="mail-outline" size={15} color="#E8B923" style={{ marginTop: 1 }} />
+                  <Text style={ac.infoText}>{inviteNote}</Text>
                 </View>
               )}
 

@@ -3,10 +3,12 @@ import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator 
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth } from '../../context/AuthContext';
+import { openedFromInvite } from '../../lib/supabase';
 
 // After a password-reset link. The link signs the person in; here they choose
 // the new password before reaching their portal. Forgot Password used to send
 // them to an app address nothing answered (database/SOP-GAPS.md, item 3).
+// An invite is the same link, and is greeted as a welcome instead.
 
 function Field({ label, value, onChange, show, onToggle, onSubmit }: {
   label: string;
@@ -57,7 +59,9 @@ export function SetPasswordScreen() {
     setProblem(null);
     const r = await finishRecovery(password);
     setBusy(false);
-    if (!r.success) setProblem(r.error ?? 'It could not be saved. Please try again.');
+    if (!r.success) { setProblem(r.error ?? 'It could not be saved. Please try again.'); return; }
+    // The invite's ?welcome=1 has done its job; a reload should not repeat it.
+    if (typeof window !== 'undefined' && window.location?.search) window.history.replaceState(null, '', window.location.pathname);
   };
 
   return (
@@ -66,9 +70,12 @@ export function SetPasswordScreen() {
         <LinearGradient colors={['rgba(232,185,35,0.18)', 'rgba(181,144,91,0.10)']} style={st.iconWrap} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
           <Ionicons name="key-outline" size={28} color="#E8B923" />
         </LinearGradient>
-        <Text style={st.title}>Choose a new password</Text>
+        <Text style={st.title}>{openedFromInvite ? 'Welcome to Finance Therapy Group' : 'Choose a new password'}</Text>
         <Text style={st.sub}>
-          {user?.email && user.email !== '' ? `For ${user.email}. ` : ''}You opened a password reset link. Pick a new password to finish signing in.
+          {user?.email && user.email !== '' ? `For ${user.email}. ` : ''}
+          {openedFromInvite
+            ? 'Choose a password for your portal. From now on you sign in with your email and this password.'
+            : 'You opened a password reset link. Pick a new password to finish signing in.'}
         </Text>
 
         <Field label="New password" value={password} onChange={setPassword} show={show} onToggle={() => setShow(s => !s)} />
@@ -79,7 +86,7 @@ export function SetPasswordScreen() {
         <TouchableOpacity style={[st.btn, busy && { opacity: 0.6 }]} onPress={save} disabled={busy} activeOpacity={0.85}>
           {busy
             ? <ActivityIndicator color="#3A3131" size="small" />
-            : <><Ionicons name="checkmark-circle-outline" size={16} color="#3A3131" /><Text style={st.btnText}>Save new password</Text></>}
+            : <><Ionicons name="checkmark-circle-outline" size={16} color="#3A3131" /><Text style={st.btnText}>{openedFromInvite ? 'Save password' : 'Save new password'}</Text></>}
         </TouchableOpacity>
         <TouchableOpacity style={st.quiet} onPress={logout} disabled={busy} activeOpacity={0.85}>
           <Text style={st.quietText}>Sign out</Text>

@@ -43,6 +43,7 @@ import { TeamOneUpdateModal } from '../../components/TeamOneUpdateModal';
 import { ClientDetailsPanel } from '../../components/ClientDetailsPanel';
 import { TeamOneChatPanel } from '../../components/TeamOneChatPanel';
 import { AdminUploadModal } from '../../components/AdminUploadModal';
+import { inviteClient } from '../../lib/adminUsers';
 import { ClientQuestionnairePanel } from '../../components/ClientQuestionnairePanel';
 import {
   monthOf,
@@ -463,6 +464,34 @@ export function ClientDocumentsScreen({
   // The manage tray, opened by the gear in the header. It sits on this screen
   // rather than sending you back to the clients list to change a setting.
   const [manageOpen, setManageOpen] = useState(false);
+
+  // Camaree: "can we create an Invite button to allow us to invite clients to
+  // the app directly from the app?" An email from info@ with a link that signs
+  // them in and asks for a password (admin-users, invite_client).
+  const [inviting, setInviting] = useState(false);
+  const [invitedAt, setInvitedAt] = useState<string | null>((client as any).invited_at ?? null);
+  const invite = () => {
+    const first = client.full_name?.split(' ')[0] || 'this client';
+    const last = invitedAt ? ` They were last invited ${new Date(invitedAt).toLocaleDateString()}.` : '';
+    Alert.alert(
+      `Invite ${first} to the portal?`,
+      `We will email ${client.email} a link to set a password and sign in.${last}`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Send invite',
+          onPress: async () => {
+            setInviting(true);
+            const r = await inviteClient(client.id);
+            setInviting(false);
+            if (r.error) { Alert.alert('The invite was not sent', r.error); return; }
+            setInvitedAt(new Date().toISOString());
+            Alert.alert('Invite sent', `${client.email} has an email with a link to set a password and sign in.`);
+          },
+        },
+      ],
+    );
+  };
   // One setter, so the parent is told every time — there is no way to change
   // the folder here and forget to report it.
   const setActiveFolderKey = useCallback((key: string | null) => {
@@ -961,6 +990,10 @@ export function ClientDocumentsScreen({
               <TouchableOpacity style={[s.requestBtn, isPhone && s.headerBtnPhone]} onPress={() => setRequestOpen(true)} activeOpacity={0.85}>
                 <Ionicons name="clipboard-outline" size={14} color="#E8B923" />
                 <Text style={s.requestText}>Request Doc</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[s.requestBtn, isPhone && s.headerBtnPhone, inviting && { opacity: 0.6 }]} onPress={invite} disabled={inviting} activeOpacity={0.85}>
+                <Ionicons name="mail-outline" size={14} color="#E8B923" />
+                <Text style={s.requestText}>{inviting ? 'Sending...' : invitedAt ? 'Invite again' : 'Invite'}</Text>
               </TouchableOpacity>
             </>
           )}
