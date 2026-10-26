@@ -12,7 +12,10 @@
 -- not carry out is worse than none, because someone follows it and believes
 -- the step happened.
 --
--- 28 for clients, 10 for Team One, 24 internal. The audience is a security
+-- Updated 2026-10-26 for invites and Forgot Password, which now email from
+-- info@ (supabase/functions/auth-email, and admin-users' invite_client).
+--
+-- 28 for clients, 10 for Team One, 25 internal. The audience is a security
 -- boundary, enforced by RLS (sops.sql, sops_team_one.sql), not a label.
 --
 -- Run database/sops.sql and database/sops_team_one.sql first.
@@ -30,15 +33,22 @@ insert into public.sops (slug, title, body, audience, category, tags, services, 
  $t$How do I sign in?$t$,
  $b$Press **Sign In** on the Finance Therapy Group portal, enter your **Email Address** and **Password**, then press **Sign In**.
 
-- Our team sets up your account and gives you your email and a starting password. There is no sign-up page.
+- Our team sets up your account; there is no sign-up page. We either email you an invite, "Your Finance Therapy Group portal is ready" from info@financetherapygroup.com, or give you your email and a starting password.
+- In the invite, press **Set your password**. The portal opens on "Welcome to Finance Therapy Group": type a password of at least 8 characters twice and press **Save password**. From then on you sign in with your email and that password.
+- The invite link works once and lasts 24 hours. If it has expired, use **Forgot Password?** on the sign-in page, or ask us to send it again.
 - "Incorrect email or password." means one of the two does not match. Check you are using the email we set up for you.
 - You stay signed in on that browser until you sign out, or until you are signed out for being away (see "Why was I signed out?").
 
 To sign out, press the sign-out icon beside your name at the bottom of the menu, or go to **Profile** and press **Sign Out**.$b$,
- 'client', 'account', array['sign in', 'log in', 'login', 'password', 'cannot log in', 'sign out', 'log out', 'account'], array[]::text[], true),
+ 'client', 'account', array['sign in', 'log in', 'login', 'password', 'cannot log in', 'sign out', 'log out', 'account', 'invite', 'set password', 'welcome email', 'first time'], array[]::text[], true),
 ('client-forgot-password',
  $t$I forgot my password$t$,
- $b$**Message us and we will set a new password for you.** The **Forgot Password?** link on the sign-in page does not work at the moment: the email it sends does not lead to a page where you can choose a new password.
+ $b$1. On the sign-in page, press **Forgot Password?**.
+2. Enter your email and press **Send Link**.
+3. Open "Reset your Finance Therapy Group password" from info@financetherapygroup.com and press **Choose a new password**. If it has not arrived within a few minutes, check your spam folder.
+4. The portal opens on "Choose a new password": type a new password of at least 8 characters twice and press **Save new password**. You are signed in.
+
+The link works once and lasts 24 hours. If it has expired, or the portal says "That reset link didn't work", ask for a new one the same way.
 
 Once you are signed in you can change your password yourself: **Profile → Change Password**, enter your current password, then the new one twice (at least 8 characters).$b$,
  'client', 'account', array['forgot password', 'reset password', 'new password', 'locked out', 'cannot sign in', 'password reset email'], array[]::text[], true),
@@ -314,7 +324,7 @@ Your menu has four items:
 - **How-to**: step-by-step guides with short videos. On a phone, open it from **Profile**.
 - **Profile**: your name, photo and password.
 
-The gold chat bubble at the bottom right answers how-to questions and takes bug reports. To sign out, use the icon beside your name, or **Profile → Sign Out**. If you forget your password, ask FTG; the **Forgot Password?** link does not work at the moment.$b$,
+The gold chat bubble at the bottom right answers how-to questions and takes bug reports. To sign out, use the icon beside your name, or **Profile → Sign Out**. If you forget your password, press **Forgot Password?** on the sign-in page and we email you a link to choose a new one.$b$,
  'team_one', 'account', array['sign in', 'log in', 'menu', 'getting started', 'password', 'sign out', 'team one'], array[]::text[], true),
 ('teamone-which-clients',
  $t$Which clients can I see?$t$,
@@ -426,10 +436,22 @@ Two tiles count pending files: **Documents pending FTG approval** (client upload
 7. Press **Create Client**. If something is missing, a red line says what.
 
 Afterwards:
-- **No welcome email is sent.** "Client Created!" shows the email and password; send them to the client yourself.
+- **Client Created!** offers **Email them an invite**: the client gets an email from info@ with a link to set their own password. Or share the email and password it shows yourself. You can also invite them later from their profile (see "Inviting a client to the portal").
 - The app pulls the client's files and paid invoices from Tax Nitro straight away, matching on the email.
 - Bookkeeping clients get **Query Sheet**, **P&L Statement** and **Balance Sheet** folders under For Client Review; TAX clients get **P&L Statement** and **Balance Sheet** under Other Tax Docs.$b$,
- 'internal', 'clients', array['add client', 'new client', 'create client', 'onboard client', 'client account', 'password'], array[]::text[], true),
+ 'internal', 'clients', array['add client', 'new client', 'create client', 'onboard client', 'client account', 'password', 'welcome email'], array[]::text[], true),
+('internal-invite-client',
+ $t$Inviting a client to the portal$t$,
+ $b$1. Open the client from **Clients**.
+2. Press **Invite**, beside **Upload File** and **Request Doc**.
+3. The box asks "Invite {first name} to the portal?" and shows their email. Check it, then press **Send invite**. "Invite sent" confirms it, and the button now reads **Invite again**.
+
+The client gets a welcome email, "Your Finance Therapy Group portal is ready", from info@financetherapygroup.com. **Set your password** signs them in and asks them to choose a password; from then on they sign in with their email and that password.
+
+- Right after **Create Client**, **Email them an invite** on "Client Created!" sends the same email.
+- The link works once and lasts 24 hours. If it expires, press **Invite again**: it sends a new link and the old one stops working. The client can also use **Forgot Password?** themselves.
+- The email goes to the address on their profile, so check it is right first. Only client logins can be invited.$b$,
+ 'internal', 'clients', array['invite', 'invite client', 'invite again', 'welcome email', 'send login', 'set password', 'onboarding', 'portal access'], array[]::text[], true),
 ('internal-find-client',
  $t$Finding a client$t$,
  $b$On **Clients**:
@@ -618,11 +640,13 @@ The status does not by itself stop the client signing in to the app.$b$,
  'internal', 'clients', array['pause', 'paused', 'close', 'closed', 'cancel', 'account status', 'inactive', 'active'], array[]::text[], true),
 ('internal-client-password',
  $t$A client can't sign in or forgot their password$t$,
- $b$1. Open the client's **Update Profile**.
-2. Under **Change Password**, type a new password (8 or more characters) and press **Update Password**. It changes straight away.
-3. Send the client the new password, and suggest they change it in **Profile → Change Password**.
+ $b$Quickest first:
 
-The **Forgot Password?** link on the sign-in page does not work at the moment, so this is the way to reset one. It works for client logins only. A staff or Team One password needs Angelo.$b$,
+1. **They reset it themselves.** On the sign-in page they press **Forgot Password?**, enter their email and press **Send Link**. An email from info@ lets them choose a new password.
+2. **Send them a link.** Open the client and press **Invite** (or **Invite again**). The email reads as a welcome, but it works the same for someone who has signed in before.
+3. **Set one yourself.** In the client's **Update Profile**, under **Change Password**, type a new password (8 or more characters) and press **Update Password**. It changes straight away. Send it to the client, and suggest they change it in **Profile → Change Password**.
+
+Option 3 works for client logins only. Staff and Team One reset theirs with **Forgot Password?**.$b$,
  'internal', 'clients', array['client password', 'reset password', 'forgot password', 'cannot sign in', 'locked out', 'login help'], array[]::text[], true),
 ('internal-help-and-bugs',
  $t$Getting help or reporting a bug$t$,

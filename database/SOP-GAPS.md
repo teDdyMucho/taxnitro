@@ -41,7 +41,7 @@ SOP: `internal-staff-manage`.
 Review** stayed off. The earliest allowed day was also the UTC day
 (`TeamOneUpdateModal.tsx`). Both now work on the calendar day in any time zone.
 
-### 3. Forgot Password was a dead end (app fixed; two Supabase settings to check)
+### 3. Forgot Password was a dead end (fixed)
 
 `resetPasswordForEmail` sends people to `financetherapygroup://reset-password`
 (`src/context/AuthContext.tsx:276-278`), an app link that nothing handles: the
@@ -56,6 +56,11 @@ people: **Authentication → URL Configuration** must list the app's address
 under Redirect URLs (or as the Site URL), and **Authentication → Emails** needs
 custom SMTP, since Supabase's own sender only mails the project's team. The
 SOPs keep saying "ask FTG" until a real reset email has been seen to arrive.
+
+Fixed 2026-10-26: Supabase's Send Email hook hands every sign-in email to
+`supabase/functions/auth-email`, which sends it from info@ through n8n
+(`automation/n8n/ftg-account-email.json`), so no other mail service is needed.
+A real reset went out to info+test@ the same day, and the SOPs now describe it.
 
 SOPs: `client-forgot-password`, `internal-client-password`, `teamone-getting-started`.
 
@@ -167,7 +172,9 @@ and take the role from the profile.
 25. **Assign Role matches the email case-sensitively** (`StaffManagementScreen.tsx:159-163`),
     and its suggestions include clients, so a client can be made staff by mistake (`:135-139`).
 26. **"Client Created!" shows even if the profile details failed to save** (`ClientListScreen.tsx:217-239`).
-27. **No welcome email** for a new client. Staff send the email and password themselves. SOP: `internal-add-client`.
+27. **No welcome email** for a new client (fixed 2026-10-26). **Invite** on the client's profile, and
+    **Email them an invite** on "Client Created!", email a link from info@ to set their own password.
+    SOPs: `internal-add-client`, `internal-invite-client`.
 
 ## Questionnaire and dashboard
 
