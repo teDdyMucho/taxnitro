@@ -108,7 +108,8 @@ export interface RowMap {
 }
 
 /**
- * Uniquely Enough Behavioral Health LLC. Verified against their v4 workbook.
+ * Uniquely Enough Behavioral Health LLC. Verified against their v4 workbook,
+ * and again against v5_Sep, which keeps v4's rows.
  *
  * Re-read for v4, which is not numbered as v2 was: a third other-income line
  * (Reward Income) and an extra expense row push everything below the expense
@@ -116,8 +117,8 @@ export interface RowMap {
  * and a map left on v2's numbers would have read each figure off its
  * neighbour — quietly, because both are numbers.
  *
- * Aug 2026 reads $49,909 income against $64,839 of expense, a $14,930 loss at
- * -30% — the four figures on their own Dashboard.
+ * Sep 2026 reads $112,623 income against $126,355 of expense, a $13,732 loss
+ * at -12% — the four figures on their own Dashboard.
  */
 export const UE_ROWS: RowMap = {
   income: [33], growRow: 33, totalIncome: 34,

@@ -203,19 +203,23 @@ const TWO_G_THREE_B_ROWS: RowMap = {
 /**
  * Read again for v4, which is numbered differently from v3: a fourth revenue
  * line — Scholarship & Uncategorised Income — and more expense rows push every
- * figure below the revenue block down by one to six. Aug 2026 reads $85,975
- * against $69,576 at 19%, which is their own Dashboard.
+ * figure below the revenue block down by one to six.
+ *
+ * v5_Sep adds Gifts and Reimbursement Expense to the end of the expenses (rows
+ * 73-74), so everything from TOTAL EXPENSES down sits two rows lower, and it
+ * restates Feb-Aug: July's net income is -$4,752 where v4 had -$11,302. Sep
+ * 2026 reads $74,287 against $60,289 at 19%, which is their own Dashboard.
  */
 const FIRST_STEP_ROWS: RowMap = {
   income: [33, 34, 35, 36], totalIncome: 37,
-  headlineIncome: [37], headlineExpense: [43, 73, 83],
+  headlineIncome: [37], headlineExpense: [43, 75, 85],
   payroll: [47, 48, 49, 50],
-  opexFirst: 47, opexLast: 72, totalOpex: 73, grossProfit: 75,
-  otherIncome: [77, 78], totalOtherIncome: 79,
-  otherExpense: [81, 82], totalOtherExpense: 83, netOther: 84,
-  netIncome: 85,
-  cash: 90, currentAssets: 92, cards: 102, currentLiabilities: 103,
-  draws: 114, equity: 117,
+  opexFirst: 47, opexLast: 74, totalOpex: 75, grossProfit: 77,
+  otherIncome: [79, 80], totalOtherIncome: 81,
+  otherExpense: [83, 84], totalOtherExpense: 85, netOther: 86,
+  netIncome: 87,
+  cash: 92, currentAssets: 94, cards: 104, currentLiabilities: 105,
+  draws: 116, equity: 119,
 };
 
 /**
@@ -254,26 +258,33 @@ const DJ_TROPICAL_SNO_ROWS: RowMap = {
  * steps over. It is skipped here too, and the four rows it sums are the payroll
  * block: wages, taxes, processing fees and the contractor line.
  *
- * No credit cards on their balance sheet, so that card is absent. Aug 2026
- * reads $13,932 income against $3,564 of expense, a 74.4% margin — the three
+ * v2_Sep adds seven expense lines after Uncategorized Expense — rent, repairs,
+ * legal and professional, activity, continued education, dues and lodging,
+ * rows 61-67 — so everything from TOTAL EXPENSES down sits four rows lower
+ * than in August. The contractor line is still payroll: row 45 still sums it.
+ * Jan-Apr expenses are restated with them — February's are $4,074 where v1
+ * had $3,192 — while revenue and cash are as they were.
+ *
+ * No credit cards on their balance sheet, so that card is absent. Sep 2026
+ * reads $16,884 income against $13,254 of expense, a 21.5% margin — the three
  * figures on their own Dashboard.
  */
 const STRONG_LITTLE_HANDS_ROWS: RowMap = {
   income: [33, 34], totalIncome: 35,
-  headlineIncome: [35], headlineExpense: [65],
+  headlineIncome: [35], headlineExpense: [69],
   payroll: [40, 41, 42, 43],
-  opexFirst: 40, opexLast: 60, opexSkip: [45], totalOpex: 65, grossProfit: 67,
-  netIncome: 68,
-  cash: 72, currentAssets: 74, currentLiabilities: 80,
-  draws: 88, equity: 92,
+  opexFirst: 40, opexLast: 67, opexSkip: [45], totalOpex: 69, grossProfit: 71,
+  netIncome: 72,
+  cash: 76, currentAssets: 78, currentLiabilities: 84,
+  draws: 92, equity: 96,
 };
 
 /**
  * Tribal Indemnity, LLC.
  *
- * Four revenue lines into one total, a cost-of-services block that is nil every
- * month so far, and a long operating-expense list — the shape 1st Step to
- * Greatness has, without the other-income block.
+ * Four revenue lines into one total, a cost-of-services block, and a long
+ * operating-expense list — the shape 1st Step to Greatness has, without the
+ * other-income block.
  *
  * They employ nobody. There is no wages line, no payroll tax line: the work is
  * bought in, so the payroll block here is their contracted labour — outside
@@ -282,17 +293,21 @@ const STRONG_LITTLE_HANDS_ROWS: RowMap = {
  * single Contract Labor row, and it is what makes the payroll card and the days
  * of cover mean anything for them.
  *
- * No credit cards on the balance sheet. Aug 2026 reads $15,798 income against
- * $12,601 of cost at 20.2% — their own Dashboard's three figures.
+ * v3_Sep adds Interest Expense to the operating expenses (row 58), so Outside
+ * Services and everything below it sit a row lower, and a credit card to the
+ * balance sheet (row 92), which moves liabilities and equity down two. It also
+ * restates Jan-Aug after their books were reclassified in QBO: August now reads
+ * -$2,128 net income where v2 read $3,197. Sep 2026 reads $24,598 income
+ * against $17,383 of cost at 29.3% — their own Dashboard's three figures.
  */
 const TRIBAL_INDEMNITY_ROWS: RowMap = {
   income: [33, 34, 35, 36], totalIncome: 37,
-  headlineIncome: [37], headlineExpense: [43, 74],
-  payroll: [41, 54, 63],
-  opexFirst: 48, opexLast: 73, totalOpex: 74, grossProfit: 76,
-  netIncome: 78,
-  cash: 82, currentAssets: 85, currentLiabilities: 94,
-  draws: 99, equity: 104,
+  headlineIncome: [37], headlineExpense: [43, 75],
+  payroll: [41, 54, 64],
+  opexFirst: 48, opexLast: 74, totalOpex: 75, grossProfit: 77,
+  netIncome: 79,
+  cash: 83, currentAssets: 86, cards: 92, currentLiabilities: 96,
+  draws: 101, equity: 106,
 };
 
 /**
@@ -342,8 +357,10 @@ const ENTRIES: Entry[] = [
       // revenue and 34% above their own net income. Staff would have been
       // reading figures the workbook Paul sends them does not contain.
       forecast: 'workbook',
-      // v4 closes August; the forecast runs Sep–Dec.
-      lastActual: 7,
+      // v5 closes September; the forecast runs Oct–Dec. It restates August,
+      // which v4 had at $49,790 of revenue, to $106,259 — v4's August was not
+      // yet fully booked.
+      lastActual: 8,
     },
   },
   {
@@ -358,8 +375,10 @@ const ENTRIES: Entry[] = [
       loadNotes: () => import('../data/firstStepSheetsNotes').then(m => m.FIRST_STEP_NOTES),
       rows: FIRST_STEP_ROWS,
       forecast: 'workbook',
-      // v4 closes August; the workbook forecasts Sep-Dec 2026.
-      lastActual: 7,
+      // v5 closes September; the workbook forecasts Oct-Dec 2026. Their
+      // Dashboard's chart note still says Sep-Dec is forecast; its own
+      // statements say actuals run through September.
+      lastActual: 8,
     },
   },
   {
@@ -387,8 +406,10 @@ const ENTRIES: Entry[] = [
       loadNotes: () => import('../data/accessGrantedSheetsNotes').then(m => m.ACCESS_GRANTED_NOTES),
       rows: ACCESS_GRANTED_ROWS,
       forecast: 'workbook',
-      // v3.1 closes August; the workbook forecasts Sep–Dec 2026.
-      lastActual: 7,
+      // v4 closes September; the workbook forecasts Oct–Dec 2026. Same rows
+      // as v3.1, but Feb, Apr, May, Jul and Aug are restated after their books
+      // were reclassified: February's revenue is $49,355 where v3.1 had $168,355.
+      lastActual: 8,
     },
   },
   {
@@ -403,8 +424,10 @@ const ENTRIES: Entry[] = [
       loadNotes: () => import('../data/battleProtectionSheetsNotes').then(m => m.BATTLE_PROTECTION_NOTES),
       rows: BATTLE_PROTECTION_ROWS,
       forecast: 'workbook',
-      // v8 closes August; the workbook forecasts Sep-Dec 2026.
-      lastActual: 7,
+      // v9 closes September; the workbook forecasts Oct-Dec 2026. Same rows as
+      // v8; Feb, Apr and Aug expenses are restated. Their own roadmap is back:
+      // Paul removed the Access Granted one that had been sitting in its place.
+      lastActual: 8,
     },
   },
   {
@@ -438,8 +461,8 @@ const ENTRIES: Entry[] = [
       loadNotes: () => import('../data/tribalIndemnitySheetsNotes').then(m => m.TRIBAL_INDEMNITY_NOTES),
       rows: TRIBAL_INDEMNITY_ROWS,
       forecast: 'workbook',
-      // Their actuals run to August; the workbook forecasts Sep–Dec 2026.
-      lastActual: 7,
+      // v3_Sep closes September; the workbook forecasts Oct–Dec 2026.
+      lastActual: 8,
     },
   },
   {
@@ -455,8 +478,8 @@ const ENTRIES: Entry[] = [
       loadNotes: () => import('../data/strongLittleHandsDaycareSheetsNotes').then(m => m.STRONG_LITTLE_HANDS_DAYCARE_NOTES),
       rows: STRONG_LITTLE_HANDS_ROWS,
       forecast: 'workbook',
-      // Their actuals run to August; the workbook forecasts Sep–Dec 2026.
-      lastActual: 7,
+      // v2_Sep closes September; the workbook forecasts Oct–Dec 2026.
+      lastActual: 8,
     },
   },
   {
@@ -486,8 +509,9 @@ const ENTRIES: Entry[] = [
       loadNotes: () => import('../data/steerSheetsNotes').then(m => m.STEER_NOTES),
       rows: STEER_ROWS,
       forecast: 'workbook',
-      // v3 closes August; the workbook forecasts Sep-Dec 2026.
-      lastActual: 7,
+      // v4 closes September; the workbook forecasts Oct-Dec 2026. Same rows as
+      // v3; August's expenses are restated $4,500 lower, at $106,097.
+      lastActual: 8,
     },
   },
 ];
