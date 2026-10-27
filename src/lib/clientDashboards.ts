@@ -357,7 +357,7 @@ const ENTRIES: Entry[] = [
       // revenue and 34% above their own net income. Staff would have been
       // reading figures the workbook Paul sends them does not contain.
       forecast: 'workbook',
-      // v5 closes September; the forecast runs Oct–Dec. It restates August,
+      // v6 closes September; the forecast runs Oct–Dec. v5 restated August,
       // which v4 had at $49,790 of revenue, to $106,259 — v4's August was not
       // yet fully booked.
       lastActual: 8,
@@ -375,9 +375,7 @@ const ENTRIES: Entry[] = [
       loadNotes: () => import('../data/firstStepSheetsNotes').then(m => m.FIRST_STEP_NOTES),
       rows: FIRST_STEP_ROWS,
       forecast: 'workbook',
-      // v5 closes September; the workbook forecasts Oct-Dec 2026. Their
-      // Dashboard's chart note still says Sep-Dec is forecast; its own
-      // statements say actuals run through September.
+      // v6 closes September; the workbook forecasts Oct-Dec 2026.
       lastActual: 8,
     },
   },
@@ -424,9 +422,10 @@ const ENTRIES: Entry[] = [
       loadNotes: () => import('../data/battleProtectionSheetsNotes').then(m => m.BATTLE_PROTECTION_NOTES),
       rows: BATTLE_PROTECTION_ROWS,
       forecast: 'workbook',
-      // v9 closes September; the workbook forecasts Oct-Dec 2026. Same rows as
+      // v10 closes September; the workbook forecasts Oct-Dec 2026. Same rows as
       // v8; Feb, Apr and Aug expenses are restated. Their own roadmap is back:
       // Paul removed the Access Granted one that had been sitting in its place.
+      // v10's FS-A fills Oct-Dec with 0, which the FS-A tab leaves blank.
       lastActual: 8,
     },
   },
@@ -478,7 +477,8 @@ const ENTRIES: Entry[] = [
       loadNotes: () => import('../data/strongLittleHandsDaycareSheetsNotes').then(m => m.STRONG_LITTLE_HANDS_DAYCARE_NOTES),
       rows: STRONG_LITTLE_HANDS_ROWS,
       forecast: 'workbook',
-      // v2_Sep closes September; the workbook forecasts Oct–Dec 2026.
+      // v3_Sep closes September; the workbook forecasts Oct–Dec 2026. It
+      // corrects Net Operating Income, which v2 read above revenue less expenses.
       lastActual: 8,
     },
   },

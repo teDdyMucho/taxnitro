@@ -122,9 +122,19 @@ const cellText = (v: StatementCell): string => {
 const ACCOUNT_W = 240;
 const MONTH_W = 104;
 
-export function UeStatement({ rows, forecastFrom }: { rows: StatementRow[]; forecastFrom?: number | null }) {
+export function UeStatement({ rows, forecastFrom, actualsTo }: {
+  rows: StatementRow[];
+  forecastFrom?: number | null;
+  /**
+   * For a statement of actuals only (FS-A): the 2026 months after this one are
+   * not closed, so they show nothing, whatever the workbook leaves in the cell.
+   * Battle Protection's v10 fills them with 0, which read as a month of $0.
+   */
+  actualsTo?: number | null;
+}) {
   const scrollRef = useWheelScroll();
   const isFc = (i: number) => forecastFrom != null && i > forecastFrom;
+  const notClosed = (i: number) => actualsTo != null && i > actualsTo;
   const total = ACCOUNT_W + MONTH_W * 26;
 
   return (
@@ -161,7 +171,7 @@ export function UeStatement({ rows, forecastFrom }: { rows: StatementRow[]; fore
                     key={`c${i}`}
                     style={[s.cell, s.num, bold && s.strong, isFc(i) && s.fc, { width: MONTH_W }]}
                   >
-                    {cellText(v)}
+                    {notClosed(i) ? '' : cellText(v)}
                   </Text>
                 ))}
                 <Text style={[s.cell, s.num, bold && s.strong, { width: MONTH_W }]}>

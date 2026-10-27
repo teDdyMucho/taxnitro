@@ -616,7 +616,7 @@ export function ClientDashboardScreen({
           <>
             {subhead('FS-A — Actuals',
               'Actuals only, with no forecast. This is the historical basis the scenario model averages from.')}
-            <View style={s.pad}><UeStatement rows={sheets['FS-A']} /></View>
+            <View style={s.pad}><UeStatement rows={sheets['FS-A']} actualsTo={lastActual} /></View>
           </>
         );
       case 'fsr':

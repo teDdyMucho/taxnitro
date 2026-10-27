@@ -109,7 +109,7 @@ export interface RowMap {
 
 /**
  * Uniquely Enough Behavioral Health LLC. Verified against their v4 workbook,
- * and again against v5_Sep, which keeps v4's rows.
+ * and again against v6_Sep, which keeps v4's rows.
  *
  * Re-read for v4, which is not numbered as v2 was: a third other-income line
  * (Reward Income) and an extra expense row push everything below the expense
