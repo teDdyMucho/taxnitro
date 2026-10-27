@@ -104,7 +104,7 @@ number — no file names — so nobody can use it to send their own words as FTG
 
 **Set up:** import `automation/n8n/ftg-upload-email.json`, connect
 
-  - **Microsoft Outlook** — signed in as accounting@financetherapygroup.com
+  - **Microsoft Outlook** — signed in as info@financetherapygroup.com ("FTG n8n Outlook")
   - **Supabase** — the service role key, as the documents flow uses
 
 and activate it. Until it is active the app's calls fail quietly and uploads
@@ -165,3 +165,24 @@ mails the project's team, so it sends nothing itself once the hook is on.
 5. Run `database/client_invites.sql` (when each client was last invited).
 6. Authentication → Email → "Email OTP Expiration": 86400, so an invite's link
    lasts a day rather than an hour.
+
+---
+
+# Client messages
+
+Camaree: when a client writes to FTG in the app, FTG should hear about it by
+email too, not only in the staff bell.
+
+    a client sends a message on a file        (FileConversationPanel)
+    or rejects a file, giving their reason     (DocumentsScreen)
+      → POST .../webhook/ftg-client-message   (src/lib/uploadEmail.ts, emailAboutMessage)
+      → Write the email   (escapes everything it is sent)
+      → Email FTG, at accounting@
+
+Like the upload emails, the webhook is open, so the flow only ever writes to
+accounting@ and escapes every field. Staff replies send nothing. A note a
+client adds to an upload goes in the "uploaded a file" email, under its files.
+
+**Set up:** import `automation/n8n/ftg-client-message.json`, pick the info@
+Outlook credential ("FTG n8n Outlook") on **Email FTG**, and publish. Until it
+is published the app's calls fail quietly and messages send as before.

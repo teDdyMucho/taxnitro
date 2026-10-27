@@ -517,10 +517,12 @@ Accept and Reject also show on our own files that are waiting for the client. Le
  $t$Answering a client's message on a file (the reply bell)$t$,
  $b$The bell in the **Documents** header lists unread client messages and new client uploads. **Mark all read** clears it, and the ✓✓ on a row marks one. Read state is shared by all staff, and the rows do not open the file.
 
+Each client message also emails accounting@: "{client} sent a message about {file}", with their words. A rejection arrives as "{client} rejected {file}", with the reason, and a note on an upload is in the "uploaded a file" email.
+
 To reply, find the file in **Documents** and press its chat icon. Type in "Type your reply…" (500 characters) and send. The client sees "FTG replied on {file}" on their dashboard; no email is sent.
 
 When a client rejects a file we sent, their reason arrives here as "Rejected this file: …".$b$,
- 'internal', 'messages', array['reply', 'message', 'client message', 'conversation', 'bell', 'notifications', 'unread', 'rejected this file'], array[]::text[], true),
+ 'internal', 'messages', array['reply', 'message', 'client message', 'conversation', 'bell', 'notifications', 'unread', 'rejected this file', 'email', 'accounting'], array[]::text[], true),
 ('internal-move-rename-delete',
  $t$Moving, renaming and deleting files and folders$t$,
  $b$**Moving files** is done in **Documents → Browse** (the folder icon): category → folder → client → file → **Move to Subfolder** or **Move to Another Folder**. For several files, **Select**, then **Move** or **Delete**. A moved file lands at the top of its new folder.

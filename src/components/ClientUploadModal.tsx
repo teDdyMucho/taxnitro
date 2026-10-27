@@ -471,6 +471,7 @@ export function ClientUploadModal({
         clientName: user.name ?? null,
         uploadedBy: user.email ?? null,
         files: uploaded.map(({ doc, folder }) => ({ name: doc.name, table: folder })),
+        note: trimmed || null,
       });
 
       if (failed.length > 0) {

@@ -55,6 +55,7 @@ import {
 
 const WEBHOOK_URL = 'https://primary-production-6722.up.railway.app/webhook/fileupload-mobileapp-ghl-ftg';
 import { supabase } from '../../lib/supabase';
+import { emailAboutMessage } from '../../lib/uploadEmail';
 import { clientMoveDestinations, folderLabel, isStaffDeliveryFolder } from '../../lib/folderCatalog';
 
 // ── Folder structure ──────────────────────────────────────────────────────────
@@ -890,6 +891,14 @@ function DocDetailPage({ doc, sf, root, fileOwnerId, userEmail, services, onClos
         is_read:       false,
       });
       if (error) console.error('rejection message:', error.message);
+      void emailAboutMessage({
+        kind: 'rejected',
+        clientEmail: userEmail,
+        clientName: user?.name ?? null,
+        fileName: displayName(doc),
+        table: doc.document_type,
+        message: reason,
+      });
     }
     setReviewBusy(false);
     if (ok) { setRejectOpen(false); setRejectReason(''); onApprovalChange('rejected', reason); }

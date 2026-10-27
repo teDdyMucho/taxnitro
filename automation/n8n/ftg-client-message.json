@@ -1,0 +1,89 @@
+{
+  "name": "FTG client messages",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ftg-client-message",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "24b9c98a-0af4-4cfa-b2ef-ea0598eeccd6",
+      "name": "Client wrote to FTG",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -320,
+        300
+      ],
+      "webhookId": "6350bb69-6aee-4dd3-8860-c034af1d53dc",
+      "notes": "The app calls this when a client sends a message on a file, or rejects one with a reason (src/lib/uploadEmail.ts, emailAboutMessage). Open, like the upload emails: the flow only ever writes to FTG's own inbox."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Write FTG's email about a client's message on a file: in its chat, or as the\n// reason they rejected it. It only ever goes to FTG's own inbox, and anyone can\n// call this webhook, so everything taken from the request is escaped here.\nconst APP = 'https://financetherapygroup.netlify.app';\nconst esc = s => String(s ?? '').replace(/[&<>\"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '\"': '&quot;', \"'\": '&#39;' }[c]));\nconst line = (s, max) => String(s ?? '').replace(/[\\r\\n\\t]+/g, ' ').trim().slice(0, max);\n\nconst b = $input.first().json.body || {};\nconst message = String(b.message ?? '').trim().slice(0, 4000);\nif (!message) throw new Error('No message.');\nconst email = line(b.client_email, 200);\nconst who = line(b.client_name, 120) || email || 'A client';\nconst file = line(b.file_name, 200) || 'a file';\nconst folder = line(b.folder, 80);\nconst rejected = b.kind === 'rejected';\n\nconst subject = rejected ? `${who} rejected ${file}` : `${who} sent a message about ${file}`;\nconst html =\n  `<p><b>${esc(who)}</b>${email && email !== who ? ' (' + esc(email) + ')' : ''} `\n  + (rejected ? 'rejected a file in the FTG portal. Their reason:' : 'sent a message in the FTG portal.') + '</p>'\n  + `<p><b>File:</b> ${esc(file)}${folder ? ' <span style=\"color:#6B5E52\">(' + esc(folder) + ')</span>' : ''}</p>`\n  + `<div style=\"margin:12px 0;padding:10px 14px;border-left:3px solid #E8B923;background:#FBF7EE;white-space:pre-wrap\">${esc(message)}</div>`\n  + `<p>To reply, open the file in <b>Documents</b> and press its chat icon.</p>`\n  + `<p><a href=\"${APP}\">Open the portal</a></p>`;\n\nreturn [{ json: { subject, html } }];\n"
+      },
+      "id": "bd5c27ea-b6a0-418b-965d-b350ef3b84d3",
+      "name": "Write the email",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -80,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "toRecipients": "accounting@financetherapygroup.com",
+        "subject": "={{ $json.subject }}",
+        "bodyContent": "={{ $json.html }}",
+        "additionalFields": {
+          "bodyContentType": "html"
+        }
+      },
+      "id": "c89ab5a8-fa02-418d-a143-61fe03a7bdba",
+      "name": "Email FTG",
+      "type": "n8n-nodes-base.microsoftOutlook",
+      "typeVersion": 2,
+      "position": [
+        160,
+        300
+      ],
+      "credentials": {
+        "microsoftOutlookOAuth2Api": {
+          "id": "REPLACE",
+          "name": "FTG n8n Outlook"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Client wrote to FTG": {
+      "main": [
+        [
+          {
+            "node": "Write the email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write the email": {
+      "main": [
+        [
+          {
+            "node": "Email FTG",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

@@ -8,6 +8,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabase } from '../lib/supabase';
+import { emailAboutMessage } from '../lib/uploadEmail';
 import { useAuth } from '../context/AuthContext';
 import { Colors } from '../constants/colors';
 import type { Document } from '../db/documents';
@@ -145,6 +146,16 @@ export function FileConversationPanel({ visible, doc, fileOwnerId, onClose }: Pr
       console.error('file_conversations insert failed:', error);
       setText(msg); // restore so the reply isn't lost
       Alert.alert('Could not send', error.message || 'Something went wrong sending your reply.');
+    } else if (currentRole === 'client') {
+      // FTG hears about it by email as well as in the staff bell.
+      void emailAboutMessage({
+        kind: 'message',
+        clientEmail: user.email,
+        clientName: user.name ?? null,
+        fileName: (doc.file_name || doc.name || 'a file') as string,
+        table: doc.document_type,
+        message: msg,
+      });
     }
   };
 
