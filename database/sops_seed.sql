@@ -278,7 +278,7 @@ A contract you just signed online can take a while to appear. If one is missing,
  $t$Why was I signed out?$t$,
  $b$For your security, after 5 minutes with no activity we ask **Still there?**. Press **Yes, keep me signed in** to carry on. If nobody answers within a minute you are signed out and see "Signed out for your security". Press **Sign in again**.
 
-Anything you already uploaded is saved. A message or upload you had not sent yet is lost. Reading a long document in the preview may not count as activity, so move the mouse or scroll now and then.$b$,
+Anything you already uploaded is saved. A message or upload you had not sent yet is lost. Using the portal in any of your browser tabs counts as activity, and so does reading a document preview, for up to 15 minutes. Being signed out for this ends that browser only, not your other devices.$b$,
  'client', 'account', array['signed out', 'logged out', 'still there', 'timeout', 'session expired', 'kicked out', 'idle'], array[]::text[], true),
 ('client-profile',
  $t$How do I change my name, photo or password?$t$,
@@ -392,6 +392,8 @@ There is no Notifications page and no email for Team One; this number, the tab c
  $t$Why was I signed out?$t$,
  $b$After 5 minutes with no activity the app asks **Still there?**. Press **Yes, keep me signed in**. With no answer within a minute you are signed out for security; press **Sign in again**.
 
+Working in any tab of the app counts as activity, and so does reading a document preview, for up to 15 minutes.
+
 Anything already sent is saved. An update or chat message you had not sent yet is lost.$b$,
  'team_one', 'account', array['signed out', 'logged out', 'still there', 'timeout', 'idle', 'session'], array[]::text[], true),
 ('teamone-help',
@@ -438,7 +440,7 @@ Two tiles count pending files: **Documents pending FTG approval** (client upload
 Afterwards:
 - **Client Created!** offers **Email them an invite**: the client gets an email from info@ with a link to set their own password. Or share the email and password it shows yourself. You can also invite them later from their profile (see "Inviting a client to the portal").
 - The app pulls the client's files and paid invoices from Tax Nitro straight away, matching on the email.
-- Bookkeeping clients get **Query Sheet**, **P&L Statement** and **Balance Sheet** folders under For Client Review; TAX clients get **P&L Statement** and **Balance Sheet** under Other Tax Docs.$b$,
+- Bookkeeping and CFO clients get **Query Sheet**, **P&L Statement** and **Balance Sheet** folders under For Client Review; TAX clients get **P&L Statement** and **Balance Sheet** under Other Tax Docs.$b$,
  'internal', 'clients', array['add client', 'new client', 'create client', 'onboard client', 'client account', 'password', 'welcome email'], array[]::text[], true),
 ('internal-invite-client',
  $t$Inviting a client to the portal$t$,
@@ -492,27 +494,27 @@ Approving or rejecting a client's upload is done on the **Documents** page, not 
  $t$Uploading a file for a client, or sending one for review$t$,
  $b$1. On the client's profile press **Upload File** (or **Documents → Upload** and pick the client).
 2. Pick the **Folder**. Only the client's services are offered.
-3. In delivery folders, answer **What is this document?** (for example Query Sheet, P&L Statement, Balance Sheet; FINAL P&L Statement in Final Statements). The label goes in front of the file name.
+3. In delivery folders, answer **What is this document?** (for example Query Sheet, P&L Statement, Balance Sheet; FINAL P&L Statement in Final Statements). The label goes in front of the file name, and the file goes in the client's folder of that name when they have one; every BK and CFO client has Query Sheet, P&L Statement and Balance Sheet.
 4. Pick the **Month**, and a **Subfolder** if you want one ("Folder root", an existing one, or a new name).
 5. Drag in the files or click to browse, then press **Upload**.
 
 **To have the client check something, upload it to Monthly Reporting (For Client Review).** It appears on their dashboard as "From FTG. Please review and approve", and they approve or reject it. A rejection reason reaches you as a message on the file.
 
-Every file staff upload starts as pending on the client, in any folder, so clients also see Approve and Reject on contracts and final statements.$b$,
+Every file staff upload starts as pending on the client, in any folder, so clients also see Approve and Reject on contracts and final statements. On **Documents** they show as **Pending client**.$b$,
  'internal', 'documents', array['upload for client', 'send to client', 'for client review', 'deliver report', 'p&l', 'balance sheet', 'query sheet', 'final statements'], array[]::text[], true),
 ('internal-approve-reject-upload',
  $t$Approving or rejecting a client's upload$t$,
  $b$Use the **Documents** page; the client profile has no approve or reject.
 
-1. Find the client's file: search, then open the client's card, or switch to the list view, which opens on **Pending**.
+1. Find the client's file: search, then open the client's card, or switch to the list view, which opens on **Pending FTG**: client uploads waiting on us.
 2. Press **Accept**. The **Approve Upload** window shows the client's note.
    - If the client chose a monthly item when uploading, press **Approve**.
    - If not, pick the item it answers and press **Approve & Tag**, or **Approve only**.
    The item turns green on the client's dashboard.
 3. Or press **Reject**, write the reason, then **Reject**. The client sees "Sent back by FTG. Please upload it again" and your reason on the file. The reason is optional, but always write one; it is all the client gets.
 
-Accept and Reject also show on our own files that are waiting for the client. Leave those for the client.$b$,
- 'internal', 'documents', array['approve', 'accept', 'reject', 'decline', 'review upload', 'pending', 'checklist', 'tag'], array[]::text[], true),
+Our own files waiting for the client are under **Pending client**, marked "Pending client", with no Accept or Reject: the client approves those on their side.$b$,
+ 'internal', 'documents', array['approve', 'accept', 'reject', 'decline', 'review upload', 'pending', 'pending ftg', 'pending client', 'checklist', 'tag'], array[]::text[], true),
 ('internal-file-messages',
  $t$Answering a client's message on a file (the reply bell)$t$,
  $b$The bell in the **Documents** header lists unread client messages and new client uploads. **Mark all read** clears it, and the ✓✓ on a row marks one. Read state is shared by all staff, and the rows do not open the file.
