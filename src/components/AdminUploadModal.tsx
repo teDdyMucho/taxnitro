@@ -507,7 +507,16 @@ export function AdminUploadModal({ visible, onClose, onUploaded, fixedClient }: 
                           <TouchableOpacity
                             key={opt}
                             style={[s.subChip, on && s.subChipOn]}
-                            onPress={() => setDocLabel(on ? null : opt)}
+                            onPress={() => {
+                              setDocLabel(on ? null : opt);
+                              // A Query Sheet goes in the client's Query Sheet
+                              // folder when they have one, as every BK and CFO
+                              // client now does; any other folder can still
+                              // be picked below.
+                              const home = on ? null : subfolders.find(sf =>
+                                !sf.parent_subfolder_id && sf.name.trim().toLowerCase() === opt.toLowerCase());
+                              if (home) setSubfolder(home);
+                            }}
                             activeOpacity={0.8}
                           >
                             <Ionicons
