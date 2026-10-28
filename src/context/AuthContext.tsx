@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useCallback, useEffect } fr
 import { View, Platform, AppState } from 'react-native';
 import { supabase, openedFromResetLink, resetLinkError } from '../lib/supabase';
 import { BankAccount, normalizeBankAccounts } from '../db/requirements';
-import { useIdleLogout, IDLE_TIMEOUT_MS, IDLE_GRACE_MS } from '../hooks/useIdleLogout';
+import { useIdleLogout, lastActivityElsewhere, IDLE_TIMEOUT_MS, IDLE_GRACE_MS } from '../hooks/useIdleLogout';
 
 // team_one: an outside team that sees only the clients assigned to it
 // (database/team_one_access.sql).
@@ -256,11 +256,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   //
   // Daja: ask "Still there?" first rather than signing straight out. The
   // session ends only if nobody answers in time.
+  //
+  // Only this browser's session ends. signOut() on its own is 'global': it
+  // ended every session the person had, so a phone left open signed them out
+  // of the laptop they were working on (Belly, 2026-10-28).
   const signOutIdle = useCallback(async () => {
     setUser(null);
     setIsAuthenticated(false);
     setSignOutReason('idle');   // the signed-out screen explains what happened
-    await supabase.auth.signOut();
+    await supabase.auth.signOut({ scope: 'local' });
   }, []);
 
   const [idlePromptUntil, setIdlePromptUntil] = useState<number | null>(null);
@@ -285,7 +289,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!isAuthenticated) { setIdlePromptUntil(null); return; }
     if (idlePromptUntil == null) return;
+    const opened = idlePromptUntil - IDLE_GRACE_MS;
     const check = () => {
+      // Someone is working in another tab: nobody saw this tab's question, and
+      // the session is in use.
+      if (lastActivityElsewhere() > opened) { setIdlePromptUntil(null); rearm({ silent: true }); return; }
       if (Date.now() >= idlePromptUntil) { setIdlePromptUntil(null); signOutIdle(); }
     };
     const timer = setInterval(check, 1000);
@@ -297,7 +305,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (Platform.OS === 'web' && typeof document !== 'undefined') document.removeEventListener('visibilitychange', onVisible);
       sub.remove();
     };
-  }, [isAuthenticated, idlePromptUntil, signOutIdle]);
+  }, [isAuthenticated, idlePromptUntil, signOutIdle, rearm]);
 
   // The link used to point at financetherapygroup://reset-password, an app
   // address nothing answered, so it led nowhere. It now comes back to this web
