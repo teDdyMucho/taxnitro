@@ -383,7 +383,8 @@ const at = StyleSheet.create({
 
 const FOLDERS = [
   { key: 'all',                    label: 'All',            color: '#2C2320' },
-  { key: 'pending',                label: 'Pending',        color: '#F59E0B' },
+  { key: 'pending_ftg',            label: 'Pending FTG',    color: '#F59E0B' },
+  { key: 'pending_client',         label: 'Pending client', color: '#64748B' },
   { key: 'unsorted_uploads',       label: 'Unsorted Uploads', color: '#D64541' },
   { key: 'tax_identification',     label: 'Identification', color: '#B5905B' },
   { key: 'tax_irs_notices',        label: 'IRS Notices',    color: '#E8B923' },
@@ -419,9 +420,17 @@ const getExt   = (name: string) => name.split('.').pop()?.toLowerCase() ?? 'file
 const folderOf = (key: string)  => FOLDERS.find(f => f.key === key) ?? FOLDERS[0];
 const fmtDate  = (iso: string)  => new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 
+// Who a pending document is waiting on. Camaree: "please separate the approvals
+// so that in staff side we can see what documents are pending staff vs client
+// approval. This will be crucial to prevent mixups." FTG's own uploads wait on
+// the client, who approves them on their side, and staff were being offered
+// Accept on those as well. A client's uploads wait on FTG. Rows from before
+// uploaded_by_role existed were all client uploads.
+const waitsOnClient = (d: Document) => d.uploaded_by_role === 'staff' || d.uploaded_by_role === 'admin';
+
 // ── Approval status pill ───────────────────────────────────────────────────────
 
-function ApprovalPill({ status }: { status: string }) {
+function ApprovalPill({ status, onClient = false }: { status: string; onClient?: boolean }) {
   if (status === 'approved') {
     return (
       <View style={[ap.pill, { backgroundColor: '#D1FAE5' }]}>
@@ -430,11 +439,19 @@ function ApprovalPill({ status }: { status: string }) {
       </View>
     );
   }
+  if (status === 'pending' && onClient) {
+    return (
+      <View style={[ap.pill, { backgroundColor: '#E2E8F0' }]}>
+        <Ionicons name="person-outline" size={10} color="#334155" />
+        <Text style={[ap.text, { color: '#334155' }]}>Pending client</Text>
+      </View>
+    );
+  }
   if (status === 'pending') {
     return (
       <View style={[ap.pill, { backgroundColor: '#FEF3C7' }]}>
         <Ionicons name="time-outline" size={10} color="#92400E" />
-        <Text style={[ap.text, { color: '#92400E' }]}>Pending</Text>
+        <Text style={[ap.text, { color: '#92400E' }]}>Pending FTG</Text>
       </View>
     );
   }
@@ -485,7 +502,7 @@ export function AdminDocumentsScreen() {
   // Delete sitting on them. Typing still matches loosely; a card means exactly
   // that client.
   const [clientExact, setClientExact] = useState(false);
-  const [filter, setFilter]         = useState('pending'); // default: show pending first
+  const [filter, setFilter]         = useState('pending_ftg'); // default: what FTG has to act on
   const monthBarRef = useWheelScroll();     // a mouse wheel moves it too
   const [viewerDoc, setViewerDoc]   = useState<Document | null>(null);
   const [convDoc, setConvDoc]       = useState<Document | null>(null);
@@ -531,7 +548,8 @@ export function AdminDocumentsScreen() {
 
   useEffect(() => { if (!authLoading && user?.id) load(); }, [authLoading, user?.id]);
 
-  const pendingCount = documents.filter(d => (d.approval_status ?? 'approved') === 'pending').length;
+  // The badge counts FTG's queue: client uploads still to accept or reject.
+  const pendingFtgCount = documents.filter(d => (d.approval_status ?? 'approved') === 'pending' && !waitsOnClient(d)).length;
 
   /** The month a document covers, falling back to when it arrived. */
   const periodOf = (d: Document) => d.period || monthOf(d.created_at);
@@ -545,8 +563,9 @@ export function AdminDocumentsScreen() {
 
   const filtered = documents.filter(d => {
     const approval = d.approval_status ?? 'approved';
-    if (filter === 'pending' && approval !== 'pending') return false;
-    if (filter !== 'all' && filter !== 'pending' && d.document_type !== filter) return false;
+    if (filter === 'pending_ftg' && (approval !== 'pending' || waitsOnClient(d))) return false;
+    if (filter === 'pending_client' && (approval !== 'pending' || !waitsOnClient(d))) return false;
+    if (filter !== 'all' && filter !== 'pending_ftg' && filter !== 'pending_client' && d.document_type !== filter) return false;
     if (period !== 'all' && periodOf(d) !== period) return false;
     if (!query.trim()) return true;
     const q = query.trim().toLowerCase();
@@ -614,13 +633,16 @@ export function AdminDocumentsScreen() {
       counts.set(k, (counts.get(k) ?? 0) + 1);
     });
 
-    const pending = scope.filter(d => (d.approval_status ?? 'approved') === 'pending').length;
+    const pending = scope.filter(d => (d.approval_status ?? 'approved') === 'pending');
+    const onFtg = pending.filter(d => !waitsOnClient(d)).length;
+    const onClient = pending.length - onFtg;
 
     return [
       { key: 'all', label: 'All', count: scope.length },
-      ...(pending > 0 ? [{ key: 'pending', label: 'Pending', count: pending }] : []),
+      ...(onFtg > 0 ? [{ key: 'pending_ftg', label: 'Pending FTG', count: onFtg }] : []),
+      ...(onClient > 0 ? [{ key: 'pending_client', label: 'Pending client', count: onClient }] : []),
       ...FOLDERS
-        .filter(f => f.key !== 'all' && f.key !== 'pending' && (counts.get(f.key) ?? 0) > 0)
+        .filter(f => f.key !== 'all' && f.key !== 'pending_ftg' && f.key !== 'pending_client' && (counts.get(f.key) ?? 0) > 0)
         .map(f => ({ key: f.key, label: f.label, count: counts.get(f.key) ?? 0 })),
     ];
   }, [documents, query, period, clientExact]);
@@ -727,6 +749,7 @@ export function AdminDocumentsScreen() {
     const folder   = folderOf(item.document_type ?? '');
     const approval = item.approval_status ?? 'approved';
     const isBusy   = actionBusy === item.id;
+    const onClient = approval === 'pending' && waitsOnClient(item);
 
     return (
       <View style={[
@@ -734,7 +757,7 @@ export function AdminDocumentsScreen() {
         // On a phone the action column is wider than the space left for the
         // text, so the card stacks: details on top, actions on their own row.
         isPhone && s.cardPhone,
-        approval === 'pending' && s.cardPending,
+        approval === 'pending' && (onClient ? s.cardWaitingClient : s.cardPending),
         approval === 'rejected' && s.cardRejected,
       ]}>
         <View style={isPhone ? s.cardPhoneTop : s.cardTopContents}>
@@ -769,12 +792,12 @@ export function AdminDocumentsScreen() {
 
           {/* The status pill rides with the text on a phone; the buttons drop
               to their own row below. */}
-          {isPhone && <ApprovalPill status={approval} />}
+          {isPhone && <ApprovalPill status={approval} onClient={onClient} />}
         </View>
 
         {/* Actions */}
         <View style={isPhone ? s.actionsPhone : s.actions}>
-          {!isPhone && <ApprovalPill status={approval} />}
+          {!isPhone && <ApprovalPill status={approval} onClient={onClient} />}
 
           {/* The three the design puts first: read it, then decide. Labelled
               rather than icon-only, because accept and reject are not
@@ -784,7 +807,9 @@ export function AdminDocumentsScreen() {
               <Text style={s.viewWideText}>View</Text>
             </TouchableOpacity>
 
-            {approval === 'pending' && (
+            {/* Only what waits on FTG. A file FTG sent is the client's to
+                approve, so staff are not offered the client's decision. */}
+            {approval === 'pending' && !onClient && (
               <>
                 <TouchableOpacity
                   style={[s.acceptWideBtn, isBusy && { opacity: 0.5 }]}
@@ -833,11 +858,15 @@ export function AdminDocumentsScreen() {
         <Ionicons name="documents-outline" size={40} color="#E8B923" />
       </LinearGradient>
       <Text style={s.emptyTitle}>
-        {filter === 'pending' ? 'No pending documents' : 'No documents found'}
+        {filter === 'pending_ftg' ? 'Nothing pending FTG'
+          : filter === 'pending_client' ? 'Nothing pending clients'
+          : 'No documents found'}
       </Text>
       <Text style={s.emptyText}>
-        {filter === 'pending'
-          ? 'All uploads have been reviewed. Nothing waiting for approval.'
+        {filter === 'pending_ftg'
+          ? 'Every client upload has been accepted or rejected.'
+          : filter === 'pending_client'
+          ? 'Clients have reviewed everything FTG sent them.'
           : query
           ? `No results for "${query}"`
           : filter !== 'all'
@@ -879,10 +908,10 @@ export function AdminDocumentsScreen() {
         {/* Six controls beside a title leave it a few pixels wide on a phone,
             so there they sit on their own row under it. */}
         <View style={isPhone ? s.headerActionsPhone : s.headerActions}>
-          {pendingCount > 0 && (
+          {pendingFtgCount > 0 && (
             <View style={s.pendingBadge}>
               <Ionicons name="time-outline" size={13} color="#92400E" />
-              <Text style={s.pendingBadgeText}>{pendingCount}</Text>
+              <Text style={s.pendingBadgeText}>{pendingFtgCount}</Text>
             </View>
           )}
           {/* Upload a document (admin/staff → any client, any folder) */}
@@ -1530,6 +1559,8 @@ const s = StyleSheet.create({
     borderTopWidth: 1, borderTopColor: 'rgba(0,0,0,0.06)', paddingTop: 11,
   },
   cardPending:  { borderColor: '#F59E0B', borderLeftWidth: 3, backgroundColor: '#FFFBEB' },
+  // Waiting on the client: quieter than FTG's own queue.
+  cardWaitingClient: { borderColor: '#CBD5E1', borderLeftWidth: 3, backgroundColor: '#F8FAFC' },
   cardRejected: { borderColor: '#EF4444', borderLeftWidth: 3, backgroundColor: '#FFF5F5' },
 
   fileBadge:    { width: 52, height: 52, borderRadius: 16, alignItems: 'center', justifyContent: 'center', gap: 3 },
