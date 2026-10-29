@@ -161,3 +161,23 @@ export function isAnswerComplete(q: Question, a: Answer | undefined): boolean {
 export function unfinishedQuestions(answers: Answers): Question[] {
   return QUESTIONS.filter(q => !isAnswerComplete(q, answers[q.key]));
 }
+
+/**
+ * Every question with its answer, and what came with a YES: the accounts, the
+ * explanation, the documents by name (never their links). FTG's email when a
+ * client submits, so the answers can be read without opening the app.
+ */
+export function answerLines(answers: Answers): { question: string; answer: string; details: string[] }[] {
+  const account = (a: BankAccount) => `${a.bank?.trim() || 'Bank'}${a.last4?.trim() ? ` ••••${a.last4.trim()}` : ''}`;
+  return QUESTIONS.map(q => {
+    const a = answers[q.key];
+    const details: string[] = [];
+    if (a?.value === 'yes') {
+      for (const acct of a.accounts ?? []) details.push(`New account: ${account(acct)}`);
+      for (const acct of a.closedAccounts ?? []) details.push(`Closed: ${account(acct)}`);
+      if (a.text?.trim()) details.push(a.text.trim());
+      for (const f of a.files ?? []) details.push(`Document: ${f.name}`);
+    }
+    return { question: q.text, answer: a?.value === 'yes' ? 'Yes' : a?.value === 'no' ? 'No' : 'Not answered', details };
+  });
+}

@@ -169,20 +169,29 @@ mails the project's team, so it sends nothing itself once the hook is on.
 
 ---
 
-# Client messages
+# Client messages and actions
 
 Camaree: when a client writes to FTG in the app, FTG should hear about it by
-email too, not only in the staff bell.
+email too, not only in the staff bell. Then: "let's add all client actions so
+that we never miss anything."
 
-    a client sends a message on a file        (FileConversationPanel)
-    or rejects a file, giving their reason     (DocumentsScreen)
-      → POST .../webhook/ftg-client-message   (src/lib/uploadEmail.ts, emailAboutMessage)
+    a client sends a message on a file          (FileConversationPanel)
+    or rejects a file, giving their reason       (DocumentsScreen)
+      → emailAboutMessage
+    a client approves a file FTG sent            (DocumentsScreen)
+    submits their monthly questionnaire          (MonthlyQuestionnaireModal: every answer)
+    changes their name, photo or password        (ProfileScreen)
+    or sets a password from an invite or reset   (SetPasswordScreen)
+      → emailAboutClientAction
+      → POST .../webhook/ftg-client-message   (src/lib/uploadEmail.ts)
       → Write the email   (escapes everything it is sent)
       → Email FTG, at accounting@
 
 Like the upload emails, the webhook is open, so the flow only ever writes to
-accounting@ and escapes every field. Staff replies send nothing. A note a
-client adds to an upload goes in the "uploaded a file" email, under its files.
+accounting@ and escapes every field. Staff and Team One changing their own
+account send nothing, and a staff reply reaches the client through the
+activity emails. A note a client adds to an upload goes in the "uploaded a
+file" email, under its files. Help-chat tickets go to Slack, not here.
 
 **Set up:** import `automation/n8n/ftg-client-message.json`, pick the info@
 Outlook credential ("FTG n8n Outlook") on **Email FTG**, and publish. Until it

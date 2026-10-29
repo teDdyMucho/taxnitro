@@ -55,7 +55,7 @@ import {
 
 const WEBHOOK_URL = 'https://primary-production-6722.up.railway.app/webhook/fileupload-mobileapp-ghl-ftg';
 import { supabase } from '../../lib/supabase';
-import { emailAboutMessage } from '../../lib/uploadEmail';
+import { emailAboutMessage, emailAboutClientAction } from '../../lib/uploadEmail';
 import { clientMoveDestinations, folderLabel, isStaffDeliveryFolder } from '../../lib/folderCatalog';
 
 // ── Folder structure ──────────────────────────────────────────────────────────
@@ -864,7 +864,17 @@ function DocDetailPage({ doc, sf, root, fileOwnerId, userEmail, services, onClos
     setReviewBusy(true);
     const ok = await approveDocument(doc.id, doc.document_type ?? '', userEmail);
     setReviewBusy(false);
-    if (ok) onApprovalChange('approved', null);
+    if (ok) {
+      onApprovalChange('approved', null);
+      // FTG hears the client approved it, as they do a rejection.
+      void emailAboutClientAction({
+        kind: 'approved',
+        clientEmail: userEmail,
+        clientName: user?.name ?? null,
+        fileName: displayName(doc),
+        table: doc.document_type,
+      });
+    }
     else Alert.alert('Error', 'Could not approve this file.');
   };
 

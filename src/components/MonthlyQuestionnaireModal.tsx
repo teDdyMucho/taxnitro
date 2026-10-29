@@ -15,8 +15,9 @@ import { formatMonthLabel } from '../db/requirements';
 import type { BankAccount } from '../db/requirements';
 import {
   QUESTIONS, Answer, Answers, Question, emptyAnswers, isAnswerComplete,
-  unfinishedQuestions, getQuestionnaire, saveQuestionnaire, AnswerFile,
+  unfinishedQuestions, getQuestionnaire, saveQuestionnaire, AnswerFile, answerLines,
 } from '../db/questionnaire';
+import { emailAboutClientAction } from '../lib/uploadEmail';
 
 // The monthly questionnaire, asked before a bookkeeping or CFO client starts
 // uploading for the month.
@@ -115,6 +116,14 @@ export function MonthlyQuestionnaireModal({
         await removeBankAccounts(user.id, closed);
         await refreshProfile();
       }
+      // FTG hears they submitted, with every answer.
+      void emailAboutClientAction({
+        kind: 'questionnaire',
+        clientEmail: email,
+        clientName: user?.name ?? null,
+        month: formatMonthLabel(month),
+        answers: answerLines(answers),
+      });
     }
 
     setBusy(null);

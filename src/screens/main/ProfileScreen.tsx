@@ -27,6 +27,12 @@ import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../lib/supabase';
 import { dashboardForClient } from '../../lib/clientDashboards';
 import { getDocumentsByEmail, FOLDER_TABLES } from '../../db/documents';
+import { emailAboutClientAction } from '../../lib/uploadEmail';
+
+/** FTG hears when a client changes their account. Staff and Team One changing theirs send nothing. */
+const tellFtg = (user: { email: string; name: string; role: string } | null | undefined, change: string, name?: string) => {
+  if (user?.role === 'client') void emailAboutClientAction({ kind: 'account', clientEmail: user.email, clientName: name ?? user.name, change });
+};
 
 const BIOMETRIC_KEY = 'biometric_enabled';
 const BIOMETRIC_EMAIL_KEY = 'biometric_email';
@@ -141,6 +147,7 @@ function EditProfileModal({
       return;
     }
     onSaved(name.trim());
+    if (name.trim() !== currentName) tellFtg(user, `changed their name to "${name.trim()}"`, currentName);
     // The name is shown from the auth profile all over the app — the sidebar,
     // the greeting, the avatar initials. Without this the save looks to have
     // done nothing everywhere except this screen.
@@ -211,6 +218,7 @@ function ChangePasswordModal({ visible, onClose }: { visible: boolean; onClose: 
     const { error } = await supabase.auth.updateUser({ password: next });
     setLoading(false);
     if (error) { Alert.alert('Error', error.message); return; }
+    tellFtg(user, 'changed their password in Profile');
     Alert.alert('Success', 'Password changed successfully.');
     reset();
     onClose();
@@ -524,7 +532,8 @@ export function ProfileScreen({ onLogout, onOpenDashboard, onOpenHowTo }: Props)
           if (uploadError) { Alert.alert('Upload failed', uploadError.message); return; }
           const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(fileName);
           const publicUrl = `${urlData.publicUrl}?t=${Date.now()}`;
-          await supabase.from('profiles').update({ avatar_url: publicUrl }).eq('id', user!.id);
+          const { error: photoErr } = await supabase.from('profiles').update({ avatar_url: publicUrl }).eq('id', user!.id);
+          if (!photoErr) tellFtg(user, 'changed their profile photo');
           setProfile(prev => prev ? { ...prev, avatar_url: publicUrl } : prev);
         } catch (e: any) {
           Alert.alert('Error', e.message ?? 'Failed to upload photo.');
@@ -563,7 +572,8 @@ export function ProfileScreen({ onLogout, onOpenDashboard, onOpenHowTo }: Props)
       if (uploadError) { Alert.alert('Upload failed', uploadError.message); return; }
       const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(fileName);
       const publicUrl = `${urlData.publicUrl}?t=${Date.now()}`;
-      await supabase.from('profiles').update({ avatar_url: publicUrl }).eq('id', user!.id);
+      const { error: photoErr } = await supabase.from('profiles').update({ avatar_url: publicUrl }).eq('id', user!.id);
+      if (!photoErr) tellFtg(user, 'changed their profile photo');
       setProfile(prev => prev ? { ...prev, avatar_url: publicUrl } : prev);
     } catch (e: any) {
       Alert.alert('Error', e.message ?? 'Failed to upload photo.');

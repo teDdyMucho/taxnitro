@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth } from '../../context/AuthContext';
 import { openedFromInvite } from '../../lib/supabase';
+import { emailAboutClientAction } from '../../lib/uploadEmail';
 
 // After a password-reset link. The link signs the person in; here they choose
 // the new password before reaching their portal. Forgot Password used to send
@@ -60,6 +61,15 @@ export function SetPasswordScreen() {
     const r = await finishRecovery(password);
     setBusy(false);
     if (!r.success) { setProblem(r.error ?? 'It could not be saved. Please try again.'); return; }
+    // FTG hears a client is in: an invite taken up, or a password reset.
+    if (user?.role === 'client') {
+      void emailAboutClientAction({
+        kind: 'account',
+        clientEmail: user.email,
+        clientName: user.name,
+        change: openedFromInvite ? 'accepted their invite and set a password' : 'set a new password with Forgot Password',
+      });
+    }
     // The invite's ?welcome=1 has done its job; a reload should not repeat it.
     if (typeof window !== 'undefined' && window.location?.search) window.history.replaceState(null, '', window.location.pathname);
   };

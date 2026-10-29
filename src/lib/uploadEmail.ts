@@ -14,7 +14,8 @@ import { folderTableLabel } from '../db/requirements';
 // the number of files.
 
 const WEBHOOK_URL = 'https://primary-production-6722.up.railway.app/webhook/ftg-upload-email';
-// A client writing to FTG on a file (automation/n8n/ftg-client-message.json).
+// A client writing to FTG on a file, or doing anything else FTG should hear
+// of (automation/n8n/ftg-client-message.json).
 const MESSAGE_WEBHOOK_URL = 'https://primary-production-6722.up.railway.app/webhook/ftg-client-message';
 
 const escapeHtml = (t: string) =>
@@ -95,5 +96,50 @@ export async function emailAboutMessage(args: {
     });
   } catch (e: any) {
     console.warn('Message email notify failed (non-fatal):', e?.message);
+  }
+}
+
+/** One questionnaire answer as it reads in FTG's email. */
+export interface AnswerLine { question: string; answer: string; details: string[] }
+
+/**
+ * Tell FTG about anything else a client does in the portal: approving a file
+ * FTG sent, submitting their monthly questionnaire, or a change to their
+ * account. Camaree: "let's add all client actions so that we never miss
+ * anything." The same flow and rule as a message: only FTG's inbox, every
+ * field escaped there. Never holds up or fails what it is about.
+ */
+export async function emailAboutClientAction(args: {
+  kind: 'approved' | 'questionnaire' | 'account';
+  clientEmail: string | null | undefined;
+  clientName?: string | null;
+  /** approved: the file, and the folder table it is in. */
+  fileName?: string;
+  table?: string | null;
+  /** questionnaire: the month as it reads ("September 2026"), and every answer. */
+  month?: string;
+  answers?: AnswerLine[];
+  /** account: what they did, as it reads after their name ("changed their password"). */
+  change?: string;
+}): Promise<void> {
+  if (!args.clientEmail) return;
+  try {
+    await fetch(MESSAGE_WEBHOOK_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        kind: args.kind,
+        client_email: args.clientEmail,
+        client_name: args.clientName ?? '',
+        file_name: args.fileName ?? '',
+        folder: args.table ? folderTableLabel(args.table) : '',
+        month: args.month ?? '',
+        answers: args.answers ?? [],
+        change: args.change ?? '',
+        sent_at: new Date().toISOString(),
+      }),
+    });
+  } catch (e: any) {
+    console.warn('Client action email notify failed (non-fatal):', e?.message);
   }
 }
