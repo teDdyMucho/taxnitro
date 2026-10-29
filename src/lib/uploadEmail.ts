@@ -9,8 +9,9 @@ import { folderTableLabel } from '../db/requirements';
 //
 // The webhook is open to anyone, so the flow trusts little of what it is sent:
 // a client upload only ever goes to FTG's own inbox, and the email to a client
-// goes only to an address n8n finds on a client profile, with nothing from
-// this request in it but the number of files.
+// goes only to an address n8n finds itself, of a client who has signed in or
+// been invited (email_ready_clients), with nothing from this request in it but
+// the number of files.
 
 const WEBHOOK_URL = 'https://primary-production-6722.up.railway.app/webhook/ftg-upload-email';
 // A client writing to FTG on a file (automation/n8n/ftg-client-message.json).

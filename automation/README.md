@@ -95,12 +95,13 @@ email, and when a client uploads FTG gets one at accounting@financetherapygroup.
     an upload batch finishes in the app      (src/lib/uploadEmail.ts)
       → POST .../webhook/ftg-upload-email    one call per batch, not per file
       → client uploaded  → email to accounting@, with the file list
-      → FTG uploaded     → find the client's profile → email to that client
+      → FTG uploaded     → find the client (email_ready_clients) → email to that client
 
 The webhook is open to anyone, so the flow decides where mail goes, not the
 request. FTG's email only ever goes to accounting@. The client's goes only to
-an address found on a client profile, and holds nothing from the request but a
-number — no file names — so nobody can use it to send their own words as FTG.
+a client who has signed in or been invited, at the address on their profile,
+and holds nothing from the request but a number — no file names — so nobody
+can use it to send their own words as FTG.
 
 **Set up:** import `automation/n8n/ftg-upload-email.json`, connect
 
@@ -227,6 +228,6 @@ One's words, escaped.
 Email steps and "Supabase (service role)" on the three Find steps, and
 publish. Until it is published the app's calls fail quietly.
 
-The upload email's **Find the client** can read `email_ready_clients` instead
-of `profiles`, with the same filter, so "New documents" also waits until a
-client has been invited.
+The upload email's **Find the client** reads `email_ready_clients` too, on the
+email alone (the view has no role column; it holds only clients), so "New
+documents" also waits until a client has signed in or been invited.

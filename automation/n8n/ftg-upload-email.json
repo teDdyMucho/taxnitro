@@ -84,14 +84,13 @@
     {
       "parameters": {
         "operation": "getAll",
-        "tableId": "profiles",
+        "tableId": "email_ready_clients",
         "limit": 1,
         "filterType": "manual",
         "matchType": "allFilters",
         "filters": {
           "conditions": [
-            { "keyName": "email", "condition": "eq", "keyValue": "={{ $json.body.client_email }}" },
-            { "keyName": "role", "condition": "eq", "keyValue": "client" }
+            { "keyName": "email", "condition": "eq", "keyValue": "={{ $json.body.client_email }}" }
           ]
         }
       },
@@ -103,7 +102,7 @@
       "credentials": {
         "supabaseApi": { "id": "REPLACE", "name": "Supabase (service role)" }
       },
-      "notes": "Only an address on a client profile is emailed. No match, no email — the flow stops here."
+      "notes": "Only a client who has signed in or been sent an invite is emailed (email_ready_clients, database/activity_emails.sql). No match, no email — the flow stops here."
     },
     {
       "parameters": {
