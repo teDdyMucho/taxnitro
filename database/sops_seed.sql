@@ -15,7 +15,10 @@
 -- Updated 2026-10-26 for invites and Forgot Password, which now email from
 -- info@ (supabase/functions/auth-email, and admin-users' invite_client).
 --
--- 28 for clients, 10 for Team One, 25 internal. The audience is a security
+-- Updated 2026-10-29 for the activity emails (src/lib/activityEmail.ts): what
+-- clients, Team One and staff are emailed about, listed in internal-emails.
+--
+-- 28 for clients, 10 for Team One, 26 internal. The audience is a security
 -- boundary, enforced by RLS (sops.sql, sops_team_one.sql), not a label.
 --
 -- Run database/sops.sql and database/sops_team_one.sql first.
@@ -182,11 +185,11 @@ You will see "Your document has been sent for review." Your files show **Pending
 - **Rejected** (red): the file could not be used. The reason is shown underneath. See "My upload was sent back".
 - **New**: not opened yet. **Viewed**: it has been opened.
 
-On your dashboard a monthly document counts as sent as soon as you upload it, and as accepted once we approve it.$b$,
+On your dashboard a monthly document counts as sent as soon as you upload it, and as accepted once we approve it. We email you when we accept or send back something you uploaded.$b$,
  'client', 'uploads', array['pending', 'pending approval', 'rejected', 'new', 'viewed', 'status', 'labels', 'badge'], array[]::text[], true),
 ('client-upload-declined',
  $t$My upload was sent back. What do I do?$t$,
- $b$A **Rejected** label, or "Sent back by FTG. Please upload it again" on your dashboard, means we could not use the file. Usually a page is missing, the scan is unreadable, or it is the wrong month.
+ $b$A **Rejected** label, or "Sent back by FTG. Please upload it again" on your dashboard, means we could not use the file. We email you when it happens, too. Usually a page is missing, the scan is unreadable, or it is the wrong month.
 
 1. Open the file and read our note under **Admin Feedback**. Press **Reply to Feedback** if you want to ask us about it.
 2. Send a corrected file with the gold **Upload** button, choosing the same document type and month.
@@ -207,7 +210,7 @@ Neither choice can be undone, so read the document first. To ask a question with
  $t$How do I message FTG about a file?$t$,
  $b$Open the file and press **Message FTG about this file**. Type your message (up to 500 characters) and send it. One check means sent; two gold checks mean we have read it.
 
-Our replies appear in the same conversation, and on your dashboard under **What's New** as "FTG replied on …". A note you add when uploading becomes the first message on each file in that upload.
+Our replies appear in the same conversation, and on your dashboard under **What's New** as "FTG replied on …". We also email you that we replied; sign in to read it. A note you add when uploading becomes the first message on each file in that upload.
 
 For anything not about a particular file, use the gold chat bubble at the bottom right.$b$,
  'client', 'messages', array['message', 'question about a file', 'contact', 'reply', 'conversation', 'chat with accountant', 'comment'], array[]::text[], true),
@@ -256,8 +259,10 @@ Messages you write on a file are read by our team and answered on the same file.
 - Press a notification to mark it read, or **Mark all read** for all of them.
 - The trash icon deletes one.
 
-Replies on your files show on your dashboard under **What's New**, not here.$b$,
- 'client', 'messages', array['notifications', 'alerts', 'bell', 'unread', 'note from ftg', 'new document'], array[]::text[], true),
+Replies on your files show on your dashboard under **What's New**, not here.
+
+We also email you, a few minutes later, when we accept or send back a file you uploaded, reply on one of your files, or leave you a note. The email says only what happened; sign in to see the rest.$b$,
+ 'client', 'messages', array['notifications', 'alerts', 'bell', 'unread', 'note from ftg', 'new document', 'email', 'email notification'], array[]::text[], true),
 ('client-invoices',
  $t$Where are my invoices?$t$,
  $b$Invoices you have **paid in full** appear in your **Invoices** folder for that service (**Tax Invoices**, **BK Invoices** or **CFO Invoices**) as a PDF marked **PAID IN FULL**. They are added automatically within the hour after you pay.
@@ -354,7 +359,7 @@ Your access is **view and download only**: you cannot upload into the client's f
    - **Query Sheet (link)**: a web link starting with http:// or https://,
    - **P&L**: upload the P&L file,
    - **Balance Sheet**: upload the balance sheet.
-5. Press **Send for Review**. You will see "Sent for review".
+5. Press **Send for Review**. You will see "Sent for review", and FTG gets an email with what you sent.
 
 Each link and file is reviewed separately. Your files are kept apart from the client's folders until FTG approves them. Tapping outside the form throws the draft away, and if a send fails partway, check **My Updates** before sending again so nothing goes twice.$b$,
  'team_one', 'updates', array['add update', 'send for review', 'query sheet', 'p&l', 'balance sheet', 'completion date', 'submit work', 'report'], array[]::text[], true),
@@ -368,7 +373,7 @@ Each link and file is reviewed separately. Your files are kept apart from the cl
 
 Each card shows the item (Query Sheet, P&L or Balance Sheet), the service, its status, the due date, when it was sent, and FTG's note. Above the cards, "New messages from FTG" lists clients with unread chat; below them, "Estimated completion" lists the latest date per client and service.
 
-You are not emailed about decisions; check here and watch the red number on **My Updates**.$b$,
+We also email you a few minutes after FTG decides: approved, sent back to fix, passed to Daja, or answered with a note to the client. The email names the client; the details are here.$b$,
  'team_one', 'updates', array['my updates', 'status', 'approved', 'denied', 'needs fixing', 'waiting', 'done', 'escalated', 'decision'], array[]::text[], true),
 ('teamone-fix-sent-back',
  $t$Fixing something FTG sent back$t$,
@@ -380,14 +385,16 @@ The old item stays under Needs fixing; that is expected. If something is unclear
  $t$Messaging FTG about a client$t$,
  $b$Open the client. At the top of their folders is **Chat with FTG** ("Only FTG and Team One see this"). Type in "Message FTG…" and press the send arrow; Enter only starts a new line.
 
-Messages are labelled "You", "FTG · name" or "Team One · name", and new ones appear as they arrive. There is one thread per client, shared by all FTG staff and all Team One logins. **The client never sees it.** The chat does not show inside a folder.$b$,
+Messages are labelled "You", "FTG · name" or "Team One · name", and new ones appear as they arrive. There is one thread per client, shared by all FTG staff and all Team One logins. **The client never sees it.** The chat does not show inside a folder.
+
+FTG gets your messages by email too, and we email you when FTG writes.$b$,
  'team_one', 'messages', array['chat', 'message ftg', 'question', 'communicate', 'chat with ftg', 'contact ftg'], array[]::text[], true),
 ('teamone-alerts',
  $t$What the red number on My Updates means$t$,
  $b$The red number on **My Updates** counts items FTG sent back (Denied or Revise) plus unread chat messages from FTG. It refreshes about every minute, or when you change menu item.
 
-There is no Notifications page and no email for Team One; this number, the tab counts and "New messages from FTG" are how you know something changed.$b$,
- 'team_one', 'updates', array['badge', 'red number', 'notification', 'alerts', 'unread', 'count'], array[]::text[], true),
+There is no Notifications page. You get an email when FTG writes in a client's chat, decides on what you sent, or gives you a new client. The email names the client; this number, the tab counts and "New messages from FTG" show the rest.$b$,
+ 'team_one', 'updates', array['badge', 'red number', 'notification', 'alerts', 'unread', 'count', 'email'], array[]::text[], true),
 ('teamone-signed-out',
  $t$Why was I signed out?$t$,
  $b$After 5 minutes with no activity the app asks **Still there?**. Press **Yes, keep me signed in**. With no answer within a minute you are signed out for security; press **Sign in again**.
@@ -513,6 +520,8 @@ Every file staff upload starts as pending on the client, in any folder, so clien
    The item turns green on the client's dashboard.
 3. Or press **Reject**, write the reason, then **Reject**. The client sees "Sent back by FTG. Please upload it again" and your reason on the file. The reason is optional, but always write one; it is all the client gets.
 
+A few minutes later the client gets one email for what you did, such as "We accepted 2 of your files" or that a file was sent back. It never holds your reason; they sign in to read it.
+
 Our own files waiting for the client are under **Pending client**, marked "Pending client", with no Accept or Reject: the client approves those on their side.$b$,
  'internal', 'documents', array['approve', 'accept', 'reject', 'decline', 'review upload', 'pending', 'pending ftg', 'pending client', 'checklist', 'tag'], array[]::text[], true),
 ('internal-file-messages',
@@ -521,10 +530,27 @@ Our own files waiting for the client are under **Pending client**, marked "Pendi
 
 Each client message also emails accounting@: "{client} sent a message about {file}", with their words. A rejection arrives as "{client} rejected {file}", with the reason, and a note on an upload is in the "uploaded a file" email.
 
-To reply, find the file in **Documents** and press its chat icon. Type in "Type your reply…" (500 characters) and send. The client sees "FTG replied on {file}" on their dashboard; no email is sent.
+To reply, find the file in **Documents** and press its chat icon. Type in "Type your reply…" (500 characters) and send. The client sees "FTG replied on {file}" on their dashboard, and a few minutes later an email that we sent them a message, without your words.
 
 When a client rejects a file we sent, their reason arrives here as "Rejected this file: …".$b$,
  'internal', 'messages', array['reply', 'message', 'client message', 'conversation', 'bell', 'notifications', 'unread', 'rejected this file', 'email', 'accounting'], array[]::text[], true),
+('internal-emails',
+ $t$Which emails the app sends$t$,
+ $b$Every email notification the app sends comes from info@.
+
+**To the client**
+- When we upload files for them: "New documents in your Finance Therapy Group portal", with the number of files.
+- When we accept or send back their upload, reply on one of their files, or leave them a note: one email a few minutes later for everything done together. It says only what happened, never our words; they sign in to read the rest. Only clients who have signed in, or were sent an invite, get these.
+- Their invite, and the link when they press **Forgot Password?**.
+
+**To Team One**, about a client they have: FTG wrote in its Team One chat, decided on what they sent, or gave them the client. One email a few minutes later, naming the client.
+
+**To FTG, at accounting@**
+- A client uploaded files (with their note), wrote on a file, or rejected one (with the reason).
+- Team One sent an update (each service, its date and what came with it), or wrote in a client's Team One chat (with their words).
+
+Not emailed: files and paid invoices that come in from Tax Nitro, and escalations to Daja, who sees them under **Team One → Escalated**.$b$,
+ 'internal', 'messages', array['email', 'emails', 'email notification', 'who gets an email', 'notifications', 'accounting', 'info@'], array[]::text[], true),
 ('internal-move-rename-delete',
  $t$Moving, renaming and deleting files and folders$t$,
  $b$**Moving files** is done in **Documents → Browse** (the folder icon): category → folder → client → file → **Move to Subfolder** or **Move to Another Folder**. For several files, **Select**, then **Move** or **Delete**. A moved file lands at the top of its new folder.
@@ -545,7 +571,7 @@ The client sees it on their dashboard under **What's Missing** as "Requested by 
  'internal', 'requirements', array['request document', 'request doc', 'ask client', 'missing document', 'need from client'], array[]::text[], true),
 ('internal-client-notes',
  $t$Writing a note for a client$t$,
- $b$On the client's profile, use the **Notes for the client** panel. The client sees the note on their dashboard under **What's Next** ("Note from {your name}") and gets the notification "A note from FTG".
+ $b$On the client's profile, use the **Notes for the client** panel. The client sees the note on their dashboard under **What's Next** ("Note from {your name}") and gets the notification "A note from FTG", and an email that there is a note (not what it says).
 
 Editing a note does not notify them again. **Business details**, the panel beside it, is internal and never shown to the client.$b$,
  'internal', 'messages', array['note', 'note for client', 'shared note', 'message client', 'announcement'], array[]::text[], true),
@@ -555,7 +581,8 @@ Editing a note does not notify them again. **Business details**, the panel besid
 
 - Team One sees the folders of the ticked services, plus Unsorted Uploads and our subfolders. They can view and download only: no uploads, renames, moves or deletes.
 - Access is per client: every Team One login sees the same clients.
-- Untick to take a client away; their updates and chat disappear for Team One at once.$b$,
+- Untick to take a client away; their updates and chat disappear for Team One at once.
+- Team One gets an email when you give them a client, or more of its services; not when you take it away.$b$,
  'internal', 'team-one', array['team one', 'assign', 'team one access', 'share client', 'outsource', 'give access'], array[]::text[], true),
 ('internal-team-one-review',
  $t$Reviewing what Team One sends$t$,
@@ -567,13 +594,15 @@ Editing a note does not notify them again. **Business details**, the panel besid
 
 **Escalated** items: Daja and admins decide with **Revise** (back to Team One with a note) or **Note to client** (the note goes on the client's dashboard). Everyone else sees "Waiting on Daja."
 
-Team One gets no email about any of this, only the count in their app.$b$,
+A few minutes later Team One gets one email for what was decided (approved, denied or revised, escalated, or a note to the client), naming the client but not your note.$b$,
  'internal', 'team-one', array['team one', 'review', 'approve', 'deny', 'escalate', 'daja', 'waiting', 'query sheet', 'p&l', 'balance sheet'], array[]::text[], true),
 ('internal-team-one-chat',
  $t$Chatting with Team One about a client$t$,
  $b$On the client's profile, use the **Team One chat** panel ("Only FTG and Team One see this"). Type in "Message Team One…" and send. It shows when the client is assigned to Team One or already has messages.
 
-There is one thread per client, shared by all FTG staff and all Team One logins. The client never sees it. New Team One messages are listed on the **Team One** page under "New messages from Team One" and counted on its menu badge.$b$,
+There is one thread per client, shared by all FTG staff and all Team One logins. The client never sees it. New Team One messages are listed on the **Team One** page under "New messages from Team One" and counted on its menu badge.
+
+Team One's messages also email accounting@, with their words, and Team One gets an email when we write, without ours.$b$,
  'internal', 'team-one', array['team one chat', 'message team one', 'chat', 'internal chat', 'communicate'], array[]::text[], true),
 ('internal-staff-onboarding',
  $t$Adding a staff member, admin or Team One login$t$,
