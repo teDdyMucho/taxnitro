@@ -455,7 +455,7 @@ Afterwards:
 2. Press **Invite**, beside **Upload File** and **Request Doc**.
 3. The box asks "Invite {first name} to the portal?" and shows their email. Check it, then press **Send invite**. "Invite sent" confirms it, and the button now reads **Invite again**.
 
-The client gets a welcome email, "Your Finance Therapy Group portal is ready", from info@financetherapygroup.com. **Set your password** signs them in and asks them to choose a password; from then on they sign in with their email and that password.
+The client gets a welcome email, "Your Finance Therapy Group portal is ready", from info@financetherapygroup.com. **Set your password** signs them in and asks them to choose a password; from then on they sign in with their email and that password. When they do, accounting@ gets "{client} accepted their invite and set a password".
 
 - Right after **Create Client**, **Email them an invite** on "Client Created!" sends the same email.
 - The link works once and lasts 24 hours. If it expires, press **Invite again**: it sends a new link and the old one stops working. The client can also use **Forgot Password?** themselves.
@@ -477,7 +477,7 @@ Tap a card to open the profile. On each card, the checklist icon shows that clie
 
 - **Service tabs** (TAX, YER, BK, CFO) show that service's folders. A service the client no longer takes still shows, marked archived, while it holds files.
 - CFO clients have two tabs: **CFO** (panels, **CFO DOCUMENTS** and **ENTER CFO SUITE**) and **CFO DOCS** (their folders).
-- Panels above the folders: **Business details** (internal only), **Notes for the client** (the client sees these), the **Team One chat**, and the **Monthly questionnaire**.
+- Panels above the folders: **Business details** (internal only), **Notes for the client** (the client sees these), the **Team One chat**, and the **Monthly questionnaire**. When a client submits their questionnaire, accounting@ gets an email with every answer.
 - Inside a folder, each file has view (marks it viewed), download, rename and delete. **Download all** saves everything.
 
 Approving or rejecting a client's upload is done on the **Documents** page, not here.$b$,
@@ -528,7 +528,7 @@ Our own files waiting for the client are under **Pending client**, marked "Pendi
  $t$Answering a client's message on a file (the reply bell)$t$,
  $b$The bell in the **Documents** header lists unread client messages and new client uploads. **Mark all read** clears it, and the ✓✓ on a row marks one. Read state is shared by all staff, and the rows do not open the file.
 
-Each client message also emails accounting@: "{client} sent a message about {file}", with their words. A rejection arrives as "{client} rejected {file}", with the reason, and a note on an upload is in the "uploaded a file" email.
+Each client message also emails accounting@: "{client} sent a message about {file}", with their words. A rejection arrives as "{client} rejected {file}", with the reason, an approval as "{client} approved {file}", and a note on an upload is in the "uploaded a file" email.
 
 To reply, find the file in **Documents** and press its chat icon. Type in "Type your reply…" (500 characters) and send. The client sees "FTG replied on {file}" on their dashboard, and a few minutes later an email that we sent them a message, without your words.
 
@@ -546,7 +546,7 @@ When a client rejects a file we sent, their reason arrives here as "Rejected thi
 **To Team One**, about a client they have: FTG wrote in its Team One chat, decided on what they sent, or gave them the client. One email a few minutes later, naming the client.
 
 **To FTG, at accounting@**
-- A client uploaded files (with their note), wrote on a file, or rejected one (with the reason).
+- A client uploaded files (with their note), wrote on a file, rejected one (with the reason) or approved one, submitted their monthly questionnaire (with every answer), changed their name, photo or password, or set a password from their invite or a Forgot Password link.
 - Team One sent an update (each service, its date and what came with it), or wrote in a client's Team One chat (with their words).
 
 Not emailed: files and paid invoices that come in from Tax Nitro, and escalations to Daja, who sees them under **Team One → Escalated**.$b$,
