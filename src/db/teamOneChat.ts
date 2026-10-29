@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase';
+import { emailFtgTeamOneMessage, emailTeamOneAbout } from '../lib/activityEmail';
 
 // The chat between Team One and FTG on a client's profile
 // (database/team_one_chat.sql). Daja, through Camaree: "a chat inside of each
@@ -38,10 +39,12 @@ export async function listChat(clientEmail: string): Promise<ChatMessage[]> {
   return (data ?? []) as ChatMessage[];
 }
 
+/** Send it, and tell the other side by email: Team One's words go to FTG's inbox. */
 export async function sendChat(
   clientEmail: string,
   message: string,
   me: { id: string; name?: string | null; role: string },
+  clientName?: string | null,
 ): Promise<ChatMessage | null> {
   const text = message.trim();
   if (!text) return null;
@@ -57,6 +60,8 @@ export async function sendChat(
     .select('*')
     .single();
   if (error) { console.error('sendChat:', error.message); return null; }
+  if (me.role === 'team_one') emailFtgTeamOneMessage(clientEmail, clientName, text);
+  else emailTeamOneAbout(clientEmail, 'messages');
   return data as ChatMessage;
 }
 

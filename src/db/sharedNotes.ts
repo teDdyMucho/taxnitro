@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase';
+import { emailClientAbout } from '../lib/activityEmail';
 import type { ClientNote } from './clientNotes';
 
 // Notes FTG leaves for a client, which the client reads — Camaree: "Profile Note
@@ -36,7 +37,7 @@ export async function listSharedNotes(clientEmail: string): Promise<ClientNote[]
   return (data ?? []).map(asNote);
 }
 
-/** Leave the client a note, and tell them it is there. */
+/** Leave the client a note, and tell them it is there: in the app and by email. */
 export async function createSharedNote(
   clientEmail: string,
   body: string,
@@ -61,6 +62,7 @@ export async function createSharedNote(
     p_title: 'A note from FTG',
     p_message: text.length > 140 ? `${text.slice(0, 137)}…` : text,
   });
+  emailClientAbout(clientEmail, 'notes');
   return asNote(data);
 }
 

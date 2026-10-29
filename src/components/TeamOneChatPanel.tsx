@@ -21,7 +21,7 @@ import { listChat, sendChat, markChatRead, otherSide, type ChatMessage } from '.
 const when = (iso: string) =>
   new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 
-export function TeamOneChatPanel({ clientEmail }: { clientEmail: string }) {
+export function TeamOneChatPanel({ clientEmail, clientName }: { clientEmail: string; clientName?: string | null }) {
   const { user } = useAuth();
   const isTeamOne = user?.role === 'team_one';
   const email = clientEmail.trim().toLowerCase();
@@ -77,7 +77,7 @@ export function TeamOneChatPanel({ clientEmail }: { clientEmail: string }) {
     const text = draft.trim();
     if (!text || sending || !user) return;
     setSending(true);
-    const row = await sendChat(email, text, { id: user.id, name: user.name, role: user.role });
+    const row = await sendChat(email, text, { id: user.id, name: user.name, role: user.role }, clientName);
     setSending(false);
     if (!row) { Alert.alert('Could not send', 'Please try again.'); return; }
     setDraft('');

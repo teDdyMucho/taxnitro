@@ -24,6 +24,7 @@ import {
 } from './BankAccountsField';
 import { useAuth } from '../context/AuthContext';
 import { TEAM_ONE_SERVICES, getTeamOneServices, setTeamOneServices } from '../db/teamOne';
+import { emailTeamOneAbout } from '../lib/activityEmail';
 import { setClientPassword } from '../lib/adminUsers';
 import { pullFromTaxNitro, describePull } from '../lib/taxNitro';
 
@@ -216,7 +217,11 @@ export function ClientManageModal({
     const teamOneChanged = [...teamOne].sort().join() !== [...teamOneSaved].sort().join();
     const teamOneOk = !ok || !teamOneChanged
       || await setTeamOneServices(client.email, teamOne, me?.email ?? null);
-    if (ok && teamOneChanged && teamOneOk) setTeamOneSaved(teamOne);
+    if (ok && teamOneChanged && teamOneOk) {
+      // Team One hears when it is given a client, or more of one; not when access is taken away.
+      if (teamOne.some(s => !teamOneSaved.includes(s))) emailTeamOneAbout(client.email, 'access');
+      setTeamOneSaved(teamOne);
+    }
     setSaving(false);
     if (ok && !teamOneOk) {
       showToast('Client updated, but Team One access did not save');

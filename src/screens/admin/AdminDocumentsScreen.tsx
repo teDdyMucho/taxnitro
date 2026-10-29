@@ -58,6 +58,7 @@ import {
   serviceLabel,
 } from '../../db/requirements';
 import { useWheelScroll } from '../../hooks/useWheelScroll';
+import { emailClientAbout } from '../../lib/activityEmail';
 
 // ── Viewer Modal ───────────────────────────────────────────────────────────────
 
@@ -702,6 +703,8 @@ export function AdminDocumentsScreen() {
         });
       }
       setDocuments(prev => prev.map(d => d.id === doc.id ? { ...d, approval_status: 'approved', approved_by: approver } : d));
+      // The client hears their upload was accepted. FTG's own files are theirs to approve.
+      if (doc.uploaded_by_role === 'client') emailClientAbout(doc.email, 'accepted');
     }
     setActionBusy(null);
   };
@@ -715,6 +718,7 @@ export function AdminDocumentsScreen() {
       // Declining marks the client's requirement slot 'rejected' → dashboard radio turns RED ("Declined").
       await rejectRequirementForDocument(doc.id, rejecter);
       setDocuments(prev => prev.map(d => d.id === doc.id ? { ...d, approval_status: 'rejected', approval_note: note || null } : d));
+      if (doc.uploaded_by_role === 'client') emailClientAbout(doc.email, 'declined');
     }
     setActionBusy(null);
   };

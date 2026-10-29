@@ -3,6 +3,7 @@ import type { ClientService } from '../context/AuthContext';
 import type { Profile } from './profiles';
 import { uploadDocumentToStorage, createDocumentRecord } from './documents';
 import { emailAboutUploads } from '../lib/uploadEmail';
+import { emailClientAbout, emailFtgTeamOneUpdate, emailTeamOneAbout, type TeamOneNews } from '../lib/activityEmail';
 
 // Team One — Camaree's "special user" on the staff side.
 //
@@ -128,18 +129,32 @@ export interface UpdateEntry {
   balance?: PickedDoc | null;
 }
 
+/** How a service reads in FTG's email about an update. */
+const SERVICE_NAME: Record<UpdateService, string> = { TAX: 'Tax', BK: 'Bookkeeping', CFO: 'CFO' };
+
+const shortDate = (ymd: string) => {
+  const d = new Date(`${ymd}T00:00:00`);
+  return isNaN(d.getTime()) ? ymd : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+};
+
+const andList = (xs: string[]) => xs.length < 2 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`;
+
 /**
  * Send Team One's update for one client: an update per service, and an item
  * per link or file. Files go to documents/team_one/<client email>/, the one
- * place in storage Team One may write. Returns what could not be sent.
+ * place in storage Team One may write. Returns what could not be sent, and
+ * emails FTG what was.
  */
 export async function submitTeamOneUpdate(
   clientEmail: string,
   entries: UpdateEntry[],
   submittedBy: string | null,
+  clientName?: string | null,
 ): Promise<{ ok: boolean; failed: string[] }> {
   const email = key(clientEmail);
   const failed: string[] = [];
+  // FTG's email: a line per service that went through.
+  const lines: string[] = [];
 
   for (const e of entries) {
     const { data: up, error } = await supabase
@@ -152,7 +167,8 @@ export async function submitTeamOneUpdate(
       failed.push(`${e.service} update`);
       continue;
     }
-    if (!hasStatements(e.service)) continue;
+    const line = `${SERVICE_NAME[e.service]}: estimated completion ${shortDate(e.estCompletion)}`;
+    if (!hasStatements(e.service)) { lines.push(line); continue; }
 
     const items: Omit<TeamOneItem, 'id' | 'status' | 'review_note' | 'reviewed_by' | 'reviewed_at' | 'filed_table' | 'filed_document_id' | 'created_at'>[] = [];
     const base = { update_id: up.id as string, client_email: email, service: e.service };
@@ -166,14 +182,19 @@ export async function submitTeamOneUpdate(
       if (!url) { failed.push(`${e.service} ${KIND_LABEL[kind]}`); continue; }
       items.push({ ...base, kind, url, file_name: doc.name });
     }
+    let sent = items;
     if (items.length) {
       const { error: itemErr } = await supabase.from('team_one_items').insert(items);
       if (itemErr) {
         console.error('submitTeamOneUpdate items:', itemErr.message);
         failed.push(`${e.service} links and files`);
+        sent = [];
       }
     }
+    const what = sent.map(i => i.kind === 'query_sheet' ? 'the query sheet link' : `the ${KIND_LABEL[i.kind]} (${i.file_name})`);
+    lines.push(what.length ? `${line}, with ${andList(what)}` : line);
   }
+  emailFtgTeamOneUpdate(email, clientName, lines);
   return { ok: failed.length === 0, failed };
 }
 
@@ -217,22 +238,24 @@ export async function countTeamOneItems(statuses: TeamOneStatus[]): Promise<numb
 
 interface Reviewer { email: string | null; name?: string | null; role?: string | null }
 
-async function setStatus(id: string, status: TeamOneStatus, note: string | null, me: Reviewer, extra: Record<string, unknown> = {}) {
+/** Set the item's status, and tell Team One by email what became of it. */
+async function setStatus(id: string, status: TeamOneStatus, note: string | null, me: Reviewer, tell: TeamOneNews, extra: Record<string, unknown> = {}) {
   const { data, error } = await supabase
     .from('team_one_items')
     .update({ status, review_note: note, reviewed_by: me.email, reviewed_at: new Date().toISOString(), ...extra })
     .eq('id', id)
-    .select('id');
+    .select('id, client_email');
   if (error) { console.error('team one review:', error.message); return false; }
+  if (data?.length) emailTeamOneAbout(data[0].client_email as string, tell);
   return !!data?.length;
 }
 
 /** Back to Team One, with what to fix. */
-export const denyItem = (id: string, note: string, me: Reviewer) => setStatus(id, 'denied', note.trim() || null, me);
+export const denyItem = (id: string, note: string, me: Reviewer) => setStatus(id, 'denied', note.trim() || null, me, 'sent_back');
 /** To Daja. */
-export const escalateItem = (id: string, note: string, me: Reviewer) => setStatus(id, 'escalated', note.trim() || null, me);
+export const escalateItem = (id: string, note: string, me: Reviewer) => setStatus(id, 'escalated', note.trim() || null, me, 'escalated');
 /** Daja sends it back to Team One. */
-export const reviseItem = (id: string, note: string, me: Reviewer) => setStatus(id, 'revise', note.trim() || null, me);
+export const reviseItem = (id: string, note: string, me: Reviewer) => setStatus(id, 'revise', note.trim() || null, me, 'sent_back');
 
 /** What the client sees the item called once it is filed. */
 export function filedName(item: TeamOneItem): string {
@@ -259,7 +282,7 @@ export async function approveItem(item: TeamOneItem, table: string, client: Prof
     uploadedBy: me.email ?? 'staff',
   });
   if (!doc) return false;
-  const ok = await setStatus(item.id, 'approved', null, me, { filed_table: table, filed_document_id: doc.id });
+  const ok = await setStatus(item.id, 'approved', null, me, 'approved', { filed_table: table, filed_document_id: doc.id });
   if (!ok) return false;
   await supabase.rpc('notify_client', {
     p_email: client.email,
@@ -291,11 +314,12 @@ export async function noteToClient(item: TeamOneItem, body: string, client: Prof
     source: 'escalation',
   });
   if (error) { console.error('noteToClient:', error.message); return false; }
-  const ok = await setStatus(item.id, 'noted', text, me);
+  const ok = await setStatus(item.id, 'noted', text, me, 'noted');
   await supabase.rpc('notify_client', {
     p_email: client.email,
     p_title: 'A note from FTG',
     p_message: text.length > 140 ? `${text.slice(0, 137)}…` : text,
   });
+  emailClientAbout(client.email, 'notes');
   return ok;
 }

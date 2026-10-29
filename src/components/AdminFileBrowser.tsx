@@ -28,6 +28,7 @@ import { approveRequirementForDocument, rejectRequirementForDocument } from '../
 import { getClientServicesByEmail } from '../db/profiles';
 import { moveDestinations, folderLabel } from '../lib/folderCatalog';
 import type { Document } from '../db/documents';
+import { emailClientAbout } from '../lib/activityEmail';
 import { useAuth } from '../context/AuthContext';
 import { FileConversationPanel } from './FileConversationPanel';
 import {
@@ -118,6 +119,7 @@ interface FileRow {
   approval_status: string; approval_note: string | null;
   document_url: string; created_at: string; email: string;
   subfolder_id?: string | null;
+  uploaded_by_role?: 'client' | 'staff' | 'admin';
   convCount?: number; latestReply?: ConvPreview | null; unreadCount?: number;
 }
 
@@ -297,7 +299,7 @@ export function AdminFileBrowser({ visible, onClose }: Props) {
     // Subfolders belong to a client, so this list is theirs plus the legacy
     // shared ones — see database/subfolders_per_client.sql.
     listSubfolders(folder.table, client.email).then(subs => { if (mountedRef.current) setSubfolders(subs); });
-    const base = supabase.from(folder.table).select('id, name, status, approval_status, approval_note, document_url, created_at, email, subfolder_id').order('created_at', { ascending: false });
+    const base = supabase.from(folder.table).select('id, name, status, approval_status, approval_note, document_url, created_at, email, subfolder_id, uploaded_by_role').order('created_at', { ascending: false });
     const { data } = client.user_id ? await base.eq('user_id', client.user_id) : await base.eq('email', client.email);
     const rawFiles = (data ?? []) as FileRow[];
     const fileIds = rawFiles.map(f => f.id);
@@ -342,6 +344,8 @@ export function AdminFileBrowser({ visible, onClose }: Props) {
       setNav(prev => prev.kind === 'detail' && prev.file.id === file.id
         ? { ...prev, file: { ...prev.file, approval_status: 'approved' } }
         : prev);
+      // The client hears their upload was accepted. FTG's own files are theirs to approve.
+      if (file.uploaded_by_role === 'client') emailClientAbout(file.email, 'accepted');
     }
     setActionBusy(null);
   };
@@ -361,6 +365,7 @@ export function AdminFileBrowser({ visible, onClose }: Props) {
       setNav(prev => prev.kind === 'detail' && prev.file.id === rejectTarget.id
         ? { ...prev, file: { ...prev.file, approval_status: 'rejected', approval_note: note || null } }
         : prev);
+      if (rejectTarget.uploaded_by_role === 'client') emailClientAbout(rejectTarget.email, 'declined');
     }
     setRejectTarget(null);
     setActionBusy(null);

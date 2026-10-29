@@ -1,0 +1,426 @@
+{
+  "name": "FTG activity emails",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ftg-activity-email",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "826a9ada-7530-4074-915a-cd4b129c5990",
+      "name": "Activity in the app",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -560,
+        300
+      ],
+      "webhookId": "d0d84eb6-695d-48a4-8a70-d2ab5a404535",
+      "notes": "The app calls this when FTG, a client's file or Team One did something someone should hear about (src/lib/activityEmail.ts). Open, like the upload emails: a client or Team One is only ever told how many of each, at an address this flow finds itself."
+    },
+    {
+      "parameters": {
+        "jsCode": "// What the app says happened (src/lib/activityEmail.ts), and who hears of it.\n// Anyone can call this webhook. For a client or Team One only known kinds and\n// whole counts go on: the next steps find the address themselves and write\n// every word. FTG's own email is written here, with everything from the\n// request escaped, and it only ever goes to accounting@.\nconst APP = 'https://financetherapygroup.netlify.app';\nconst esc = s => String(s ?? '').replace(/[&<>\"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '\"': '&quot;', \"'\": '&#39;' }[c]));\nconst line = (s, max) => String(s ?? '').replace(/[\\r\\n\\t]+/g, ' ').trim().slice(0, max);\n\nconst b = $input.first().json.body || {};\nconst audience = String(b.audience ?? '');\nconst email = line(b.client_email, 200).toLowerCase();\nif (!/^[^\\s@<>\"']+@[^\\s@<>\"']+\\.[^\\s@<>\"']+$/.test(email)) return [];\n\nif (audience === 'ftg') {\n  const who = line(b.client_name, 120) || email;\n  const list = (v, max) => (Array.isArray(v) ? v : []).map(x => String(x ?? '').trim().slice(0, max)).filter(Boolean).slice(0, 20);\n  const updates = list(b.updates, 400).map(u => line(u, 400));\n  const messages = list(b.messages, 4000);\n  if (!updates.length && !messages.length) return [];\n  const both = updates.length && messages.length;\n  const subject = both ? `Team One sent an update and wrote about ${who}`\n    : updates.length ? `Team One sent an update for ${who}` : `Team One wrote about ${who}`;\n  const did = both ? 'sent an update and wrote in the Team One chat for'\n    : updates.length ? 'sent an update for' : 'wrote in the Team One chat for';\n  let html = `<p><b>Team One</b> ${did} <b>${esc(who)}</b>${who !== email ? ' (' + esc(email) + ')' : ''}.</p>`;\n  if (updates.length) {\n    html += `<ul>${updates.map(u => `<li>${esc(u)}</li>`).join('')}</ul>`\n      + '<p>Review it under <b>Team One</b> in the app.</p>';\n  }\n  if (messages.length) {\n    html += messages.map(m => `<div style=\"margin:12px 0;padding:10px 14px;border-left:3px solid #E8B923;background:#FBF7EE;white-space:pre-wrap\">${esc(m)}</div>`).join('')\n      + \"<p>To reply, open the client's profile and use <b>Team One chat</b>.</p>\";\n  }\n  html += `<p><a href=\"${APP}\">Open the portal</a></p>`;\n  return [{ json: { audience, client_email: email, subject, html } }];\n}\n\nconst kinds = audience === 'client' ? ['accepted', 'declined', 'replies', 'notes']\n  : audience === 'team_one' ? ['access', 'messages', 'approved', 'sent_back', 'escalated', 'noted']\n  : null;\nif (!kinds) return [];\nconst counts = {};\nfor (const k of kinds) {\n  const n = Math.floor(Number(b.counts?.[k]));\n  if (n > 0) counts[k] = Math.min(n, 99);\n}\nif (!Object.keys(counts).length) return [];\nreturn [{ json: { audience, client_email: email, counts } }];\n"
+      },
+      "id": "54f1b623-e71f-44ec-899d-354a72a23f2d",
+      "name": "Check it",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -320,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "version": 2
+                },
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.audience }}",
+                    "rightValue": "ftg",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "FTG"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "version": 2
+                },
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.audience }}",
+                    "rightValue": "client",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "client"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "version": 2
+                },
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.audience }}",
+                    "rightValue": "team_one",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "Team One"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "5d0a4345-c5b6-44d9-b558-773a5e1c70f5",
+      "name": "Who is it for?",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        -80,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "toRecipients": "accounting@financetherapygroup.com",
+        "subject": "={{ $json.subject }}",
+        "bodyContent": "={{ $json.html }}",
+        "additionalFields": {
+          "bodyContentType": "html"
+        }
+      },
+      "id": "d52cc757-ce10-483e-b3e4-12a544470c31",
+      "name": "Email FTG",
+      "type": "n8n-nodes-base.microsoftOutlook",
+      "typeVersion": 2,
+      "position": [
+        180,
+        100
+      ],
+      "credentials": {
+        "microsoftOutlookOAuth2Api": {
+          "id": "REPLACE",
+          "name": "FTG n8n Outlook"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "email_ready_clients",
+        "limit": 1,
+        "filterType": "manual",
+        "matchType": "allFilters",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "email_key",
+              "condition": "eq",
+              "keyValue": "={{ $json.client_email }}"
+            }
+          ]
+        }
+      },
+      "id": "30a033f9-5efe-49b8-b768-8956527d37e2",
+      "name": "Find the client",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        180,
+        300
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "REPLACE",
+          "name": "Supabase (service role)"
+        }
+      },
+      "notes": "Clients who have signed in or been invited (database/activity_emails.sql). Anyone else is not emailed: the flow stops here."
+    },
+    {
+      "parameters": {
+        "jsCode": "// The email to a client about what FTG did in their portal. Every word is\n// written here: the request said only how many of each (\"Check it\"), and the\n// address and name come from email_ready_clients (\"Find the client\"), so only\n// a client who has signed in or been invited ever gets one.\nconst APP = 'https://financetherapygroup.netlify.app';\nconst esc = s => String(s ?? '').replace(/[&<>\"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '\"': '&quot;', \"'\": '&#39;' }[c]));\n\nconst c = $input.first().json;\nconst counts = $('Check it').first().json.counts || {};\nconst n = k => counts[k] || 0;\n// [the sentence, the subject when it is the only news]\nconst news = [];\nif (n('accepted')) news.push(n('accepted') === 1\n  ? ['We accepted your file.', 'We accepted your file']\n  : [`We accepted ${n('accepted')} of your files.`, `We accepted ${n('accepted')} of your files`]);\nif (n('declined')) news.push(n('declined') === 1\n  ? ['We sent a file back to you. Sign in to see why, then upload it again.', 'We sent a file back to you']\n  : [`We sent ${n('declined')} files back to you. Sign in to see why, then upload them again.`, `We sent ${n('declined')} files back to you`]);\nif (n('replies')) news.push(n('replies') === 1\n  ? ['We sent you a message about one of your files.', 'New message from Finance Therapy Group']\n  : [`We sent you ${n('replies')} messages about your files.`, `${n('replies')} new messages from Finance Therapy Group`]);\nif (n('notes')) news.push(n('notes') === 1\n  ? ['We left you a note.', 'A note from Finance Therapy Group']\n  : [`We left you ${n('notes')} notes.`, `${n('notes')} notes from Finance Therapy Group`]);\nif (!news.length || !c.email) return [];\n\nconst first = c.first_name || String(c.full_name || '').trim().split(/\\s+/)[0] || 'there';\nconst subject = news.length === 1 ? news[0][1] : 'Updates in your Finance Therapy Group portal';\nconst body = news.length === 1 ? `<p>${news[0][0]}</p>`\n  : `<p>Here's what's new in your Finance Therapy Group portal:</p><ul>${news.map(x => `<li>${x[0]}</li>`).join('')}</ul>`;\nconst html = `<p>Hi ${esc(first)},</p>${body}`\n  + `<p><a href=\"${APP}\">Sign in to the portal</a></p>`\n  + '<p>Thank you,<br>Finance Therapy Group</p>';\nreturn [{ json: { to: c.email, subject, html } }];\n"
+      },
+      "id": "9f006674-9217-4b14-b033-5729189a5cc3",
+      "name": "Write the client's email",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        420,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "toRecipients": "={{ $json.to }}",
+        "subject": "={{ $json.subject }}",
+        "bodyContent": "={{ $json.html }}",
+        "additionalFields": {
+          "bodyContentType": "html"
+        }
+      },
+      "id": "02c4893c-5cdd-46df-9ad6-87e17e93d0e8",
+      "name": "Email the client",
+      "type": "n8n-nodes-base.microsoftOutlook",
+      "typeVersion": 2,
+      "position": [
+        660,
+        300
+      ],
+      "credentials": {
+        "microsoftOutlookOAuth2Api": {
+          "id": "REPLACE",
+          "name": "FTG n8n Outlook"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "team_one_clients",
+        "limit": 1,
+        "filterType": "manual",
+        "matchType": "allFilters",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "email_key",
+              "condition": "eq",
+              "keyValue": "={{ $json.client_email }}"
+            }
+          ]
+        }
+      },
+      "id": "746a5267-76ce-4b44-bd6c-0934e80fd471",
+      "name": "Is it Team One's client?",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        180,
+        500
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "REPLACE",
+          "name": "Supabase (service role)"
+        }
+      },
+      "notes": "Only a client Team One has (database/activity_emails.sql). Any other: the flow stops here."
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "email_ready_team_one",
+        "limit": 20,
+        "filterType": "manual",
+        "matchType": "allFilters",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "role",
+              "condition": "eq",
+              "keyValue": "team_one"
+            }
+          ]
+        }
+      },
+      "id": "c903c40d-47a2-4478-aa1a-9b89fb1d53bb",
+      "name": "Find Team One",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        420,
+        500
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "REPLACE",
+          "name": "Supabase (service role)"
+        }
+      },
+      "notes": "Team One's logins that are switched on, not FTG's preview logins."
+    },
+    {
+      "parameters": {
+        "jsCode": "// The email to Team One about one of its clients. Every word is written here:\n// the request said only how many of each (\"Check it\"), the client's name comes\n// from team_one_clients, so only a client Team One has, and the addresses from\n// email_ready_team_one (\"Find Team One\"). One email per Team One login.\nconst APP = 'https://financetherapygroup.netlify.app';\nconst esc = s => String(s ?? '').replace(/[&<>\"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '\"': '&quot;', \"'\": '&#39;' }[c]));\n\nconst counts = $('Check it').first().json.counts || {};\nconst client = $(\"Is it Team One's client?\").first().json;\nconst who = String(client.name || client.email_key || 'a client').replace(/[\\r\\n\\t]+/g, ' ').trim();\nconst W = esc(who);\nconst n = k => counts[k] || 0;\nconst say = (k, one, many) => n(k) === 1 ? one : many.replace('#', n(k));\n// [the sentence, the subject when it is the only news]\nconst news = [];\nif (n('access')) news.push([`FTG gave you access to <b>${W}</b> in the Finance Therapy Group app.`, `You now have ${who} in the FTG app`]);\nif (n('messages')) news.push([say('messages', `FTG sent you a message in ${W}'s Team One chat.`, `FTG sent you # messages in ${W}'s Team One chat.`), `${who}: new message from FTG`]);\nif (n('approved')) news.push([say('approved', 'FTG approved one of your items and filed it for the client.', 'FTG approved # of your items and filed them for the client.'), `${who}: FTG approved your work`]);\nif (n('sent_back')) news.push([say('sent_back', 'FTG sent an item back to you to fix. Their note says what to change.', 'FTG sent # items back to you to fix. Their notes say what to change.'), `${who}: an item needs fixing`]);\nif (n('escalated')) news.push([say('escalated', 'An item went to Daja for a second look.', '# items went to Daja for a second look.'), `${who}: an item went to Daja`]);\nif (n('noted')) news.push([say('noted', 'Daja answered an item with a note to the client.', 'Daja answered # items with a note to the client.'), `${who}: Daja left the client a note`]);\nif (!news.length) return [];\n\nconst subject = news.length === 1 ? news[0][1] : `${who}: updates from FTG`;\nconst body = news.length === 1 ? `<p>${news[0][0]}</p>`\n  : `<p>Here's what's new for <b>${W}</b>:</p><ul>${news.map(x => `<li>${x[0]}</li>`).join('')}</ul>`;\nreturn $input.all().filter(i => i.json.email).map(i => {\n  const first = i.json.first_name || String(i.json.full_name || '').trim().split(/\\s+/)[0] || 'Team One';\n  return { json: {\n    to: i.json.email,\n    subject,\n    html: `<p>Hi ${esc(first)},</p>${body}<p><a href=\"${APP}\">Open the app</a></p><p>Thank you,<br>Finance Therapy Group</p>`,\n  } };\n});\n"
+      },
+      "id": "b8b79202-a156-417d-a424-2f39a00370c3",
+      "name": "Write Team One's email",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "toRecipients": "={{ $json.to }}",
+        "subject": "={{ $json.subject }}",
+        "bodyContent": "={{ $json.html }}",
+        "additionalFields": {
+          "bodyContentType": "html"
+        }
+      },
+      "id": "f67af4d4-01fb-419c-9133-93c23ed5b876",
+      "name": "Email Team One",
+      "type": "n8n-nodes-base.microsoftOutlook",
+      "typeVersion": 2,
+      "position": [
+        900,
+        500
+      ],
+      "credentials": {
+        "microsoftOutlookOAuth2Api": {
+          "id": "REPLACE",
+          "name": "FTG n8n Outlook"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Activity in the app": {
+      "main": [
+        [
+          {
+            "node": "Check it",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check it": {
+      "main": [
+        [
+          {
+            "node": "Who is it for?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Who is it for?": {
+      "main": [
+        [
+          {
+            "node": "Email FTG",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Find the client",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Is it Team One's client?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find the client": {
+      "main": [
+        [
+          {
+            "node": "Write the client's email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write the client's email": {
+      "main": [
+        [
+          {
+            "node": "Email the client",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is it Team One's client?": {
+      "main": [
+        [
+          {
+            "node": "Find Team One",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find Team One": {
+      "main": [
+        [
+          {
+            "node": "Write Team One's email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write Team One's email": {
+      "main": [
+        [
+          {
+            "node": "Email Team One",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

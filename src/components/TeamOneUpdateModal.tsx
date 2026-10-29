@@ -90,7 +90,7 @@ export function TeamOneUpdateModal({ visible, client, services, onClose, onSent 
         ? { service: svc, estCompletion: d.date, querySheetUrl: d.link, pnl: d.pnl, balance: d.balance }
         : { service: svc, estCompletion: d.date };
     });
-    const res = await submitTeamOneUpdate(client.email, entries, user?.email ?? null);
+    const res = await submitTeamOneUpdate(client.email, entries, user?.email ?? null, client.full_name);
     setBusy(false);
     if (res.ok) {
       setDone(true);

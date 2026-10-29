@@ -1103,7 +1103,7 @@ export function ClientDocumentsScreen({
             <ClientDetailsPanel clientEmail={client.email} clientName={client.full_name} />
             {/* What FTG tells the client — it shows on their dashboard. */}
             <ClientDetailsPanel shared clientEmail={client.email} clientName={client.full_name} />
-            <TeamOneChatPanel clientEmail={client.email} />
+            <TeamOneChatPanel clientEmail={client.email} clientName={client.full_name} />
             <ClientQuestionnairePanel
               clientEmail={client.email}
               accounts={normalizeBankAccounts(client.bank_accounts)}
@@ -1162,14 +1162,14 @@ export function ClientDocumentsScreen({
                     {/* What FTG tells the client — it shows on their dashboard. */}
                     <ClientDetailsPanel shared clientEmail={client.email} clientName={client.full_name} />
                     {/* Team One and FTG talking about this client — never the client. */}
-                    <TeamOneChatPanel clientEmail={client.email} />
+                    <TeamOneChatPanel clientEmail={client.email} clientName={client.full_name} />
                     <ClientQuestionnairePanel
                       clientEmail={client.email}
                       accounts={normalizeBankAccounts(client.bank_accounts)}
                     />
                   </>
                 )}
-                {isTeamOne && <TeamOneChatPanel clientEmail={client.email} />}
+                {isTeamOne && <TeamOneChatPanel clientEmail={client.email} clientName={client.full_name} />}
                 {folders.length > 0 && (
                   <>
                     <Text style={s.sectionLabel}>Folders</Text>

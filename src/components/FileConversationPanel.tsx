@@ -9,6 +9,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabase } from '../lib/supabase';
 import { emailAboutMessage } from '../lib/uploadEmail';
+import { emailClientAbout } from '../lib/activityEmail';
 import { useAuth } from '../context/AuthContext';
 import { Colors } from '../constants/colors';
 import type { Document } from '../db/documents';
@@ -156,6 +157,9 @@ export function FileConversationPanel({ visible, doc, fileOwnerId, onClose }: Pr
         table: doc.document_type,
         message: msg,
       });
+    } else if (isStaffOrAdmin) {
+      // And the client hears FTG replied; the email says only that.
+      emailClientAbout(doc.email, 'replies');
     }
   };
 

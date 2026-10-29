@@ -186,3 +186,47 @@ client adds to an upload goes in the "uploaded a file" email, under its files.
 **Set up:** import `automation/n8n/ftg-client-message.json`, pick the info@
 Outlook credential ("FTG n8n Outlook") on **Email FTG**, and publish. Until it
 is published the app's calls fail quietly and messages send as before.
+
+# Activity emails
+
+Camaree: "email notifications for all activity and updates for Team One,
+Clients, and Staff". Everything the app did not email yet:
+
+    FTG accepts or sends back a client's upload   (Documents, Browse)
+    FTG replies on a client's file                (FileConversationPanel)
+    FTG leaves the client a note                  (Notes for the client, Daja's note)
+      → the client: "We accepted 2 of your files", "We sent a file back to you", ...
+    FTG writes in a client's Team One chat, reviews Team One's items,
+    or gives Team One a client
+      → Team One: "{client}: new message from FTG", "{client}: FTG approved your work", ...
+    Team One sends an update, or writes in a client's Team One chat
+      → FTG, at accounting@: each service, its date and what came with it,
+        or their messages
+
+      → POST .../webhook/ftg-activity-email   (src/lib/activityEmail.ts)
+      → Check it → Who is it for?
+          FTG      → Email FTG, at accounting@
+          client   → Find the client (email_ready_clients) → Write the client's email → Email the client
+          Team One → Is it Team One's client? (team_one_clients) → Find Team One (email_ready_team_one)
+                     → Write Team One's email → Email Team One
+
+The app holds what happens for the same person until a minute passes with
+nothing new, five at most, so ten approvals make one email. Leaving the page
+sends what is waiting.
+
+The webhook is open, like the others. So an email to a client or to Team One
+carries nothing from the request but how many of each: n8n finds the address
+itself, in views only its service-role credential can read
+(database/activity_emails.sql), and writes every word. A client is emailed
+only once they have signed in or been sent an invite; Team One only about a
+client it has, and never at FTG's own preview login. FTG's email carries Team
+One's words, escaped.
+
+**Set up:** run `database/activity_emails.sql`. Import
+`automation/n8n/ftg-activity-email.json`, pick "FTG n8n Outlook" on the three
+Email steps and "Supabase (service role)" on the three Find steps, and
+publish. Until it is published the app's calls fail quietly.
+
+The upload email's **Find the client** can read `email_ready_clients` instead
+of `profiles`, with the same filter, so "New documents" also waits until a
+client has been invited.
