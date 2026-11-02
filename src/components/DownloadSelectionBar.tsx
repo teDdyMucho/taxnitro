@@ -55,8 +55,11 @@ export function useDownloadSelection<T extends { id: string }>(
       } else if (Platform.OS === 'web' && items.length > 1) {
         setNotice(`${result.saved} files saved as ${zipName}.zip`);
       }
-    } catch {
-      setNotice('Download failed. Check your connection and try again.');
+    } catch (err) {
+      console.error('download:', err);
+      setNotice(Platform.OS === 'web'
+        ? 'Download failed. Reload the page and try again.'
+        : 'Download failed. Check your connection and try again.');
     } finally {
       setBusy(false);
       setProgress(null);

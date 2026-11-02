@@ -12,6 +12,19 @@ import { Platform, Linking } from 'react-native';
  * time — see `downloadMany`.
  */
 
+/**
+ * The zip library, fetched when the app opens on the web, not on the first
+ * "Download all". It is a file of its own, named for the build it came with,
+ * and every push replaces the build: a tab left open across one asked for a
+ * file the site no longer had, and each Download all in it failed (Belly,
+ * 2026-11-02). Fetched along with the rest of the app, it is always there.
+ * Native never zips, so never fetches it.
+ */
+const jszipModule: Promise<any> | null = Platform.OS === 'web' ? Promise.resolve(import('jszip')) : null;
+// Promise.resolve: Expo's import() hands back a bare thenable, with no .catch.
+// Should the fetch fail (offline as the app opened), the download tries again.
+jszipModule?.catch(() => {});
+
 export interface DownloadableFile {
   /** Public storage URL. */
   url: string;
@@ -109,11 +122,10 @@ export async function downloadZip(
 ): Promise<BulkResult> {
   if (files.length === 0) return { saved: 0, failed: [] };
 
-  // Loaded lazily so the ~100KB library only reaches users who download in bulk.
   // jszip is CommonJS: under interop the constructor is `.default`, without it
   // the module object IS the constructor. Accept either rather than gamble on
   // the bundler — getting it wrong only surfaces when a user clicks download.
-  const mod: any = await import('jszip');
+  const mod: any = (await jszipModule?.catch(() => null)) ?? await import('jszip');
   const JSZip = mod?.default ?? mod;
   const zip = new JSZip();
   const taken = new Set<string>();
