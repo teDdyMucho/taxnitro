@@ -11,6 +11,7 @@ import type { ClientDashboard } from '../../lib/clientDashboards';
 import { UeBarChart } from '../../components/ue/UeBarChart';
 import { UeGridTable, UeStatement } from '../../components/ue/UeTables';
 import { UeRoadmap } from '../../components/ue/UeRoadmap';
+import { UeBudget } from '../../components/ue/UeBudget';
 import { useWheelScroll } from '../../hooks/useWheelScroll';
 import {
   MONTHS, LAST_ACTUAL, SCENARIOS, DEFAULT_ASSUMPTIONS, LEVERS, SHARED_INPUTS,
@@ -30,18 +31,21 @@ import {
 // Findings for Review and TL;DR are internal working notes: they appear for
 // staff and admin, and never in a client's view.
 
-type TabKey = 'dash' | 'roadmap' | 'findings' | 'tldr' | 'assum' | 'fsr' | 'fsa' | 'bs' | 'pl';
+type TabKey = 'dash' | 'roadmap' | 'budget' | 'findings' | 'tldr' | 'assum' | 'fsr' | 'fsa' | 'bs' | 'pl';
 
 interface TabDef { key: TabKey; label: string; staffOnly?: boolean }
 
 // Camaree's confirmed order: Dashboard, Profit & Loss, Balance, Financial
 // Roadmap, Assumptions, TLDR, FS-A, FS-R. Findings for Review was not in her
-// list; it stays beside TL;DR, the other internal note.
+// list; it stays beside TL;DR, the other internal note. The budget came after
+// her list (November 2026) and sits with the roadmap, the other look ahead.
 const NAV: TabDef[] = [
   { key: 'dash', label: 'Dashboard' },
   { key: 'pl', label: 'Profit & Loss' },
   { key: 'bs', label: 'Balance Sheet' },
   { key: 'roadmap', label: 'Financial Roadmap' },
+  // Not marked staffOnly: who sees it follows which module holds it (below).
+  { key: 'budget', label: 'Budget' },
   { key: 'assum', label: 'Assumptions' },
   { key: 'findings', label: 'Findings for Review', staffOnly: true },
   { key: 'tldr', label: 'TL;DR', staffOnly: true },
@@ -106,16 +110,25 @@ export function ClientDashboardScreen({
   // client has a Financial Roadmap, and a workbook can withdraw a tab — Paul hid
   // Findings for Review in Access Granted Education's v3, so it should not be
   // sitting here empty for them while it is still real for everyone else.
+  //
+  // The budget is staff only while it rides with the notes, which a client's
+  // browser never loads. Once it is cleared for clients it moves to the sheets,
+  // and the same tab appears for them with no change here.
+  const budget = sheets?.Budget ?? notes?.Budget ?? null;
+  const budgetStaffOnly = !sheets?.Budget;
   const tabs = useMemo(() => {
     const has: Partial<Record<TabKey, boolean>> = {
       roadmap: (sheets?.['Financial Roadmap']?.length ?? 0) > 0,
+      budget: (budget?.grid.length ?? 0) > 0,
       findings: (notes?.['Findings for Review']?.length ?? 0) > 0,
       tldr: (notes?.['TL;DR']?.length ?? 0) > 0,
     };
     return NAV
       .filter(t => staffView || !t.staffOnly)
-      .filter(t => has[t.key] !== false);
-  }, [staffView, sheets, notes]);
+      .filter(t => has[t.key] !== false)
+      // Named as the workbook names it: "FY2027 Budget".
+      .map(t => (t.key === 'budget' && budget ? { ...t, label: budget.title } : t));
+  }, [staffView, sheets, notes, budget]);
 
   // A client landing on a staff tab (say, from a stale link) is put back on the
   // dashboard rather than shown an empty page.
@@ -595,6 +608,15 @@ export function ClientDashboardScreen({
               came out as a wall of digits — Paul: "parang naka binary ba hehe."
             */}
             <UeRoadmap grid={sheets['Financial Roadmap'] ?? []} />
+          </>
+        );
+      case 'budget':
+        return budget && (
+          <>
+            {subhead(budget.title,
+              'Budget, break-even and cost structure for the year ahead — from the client’s own workbook.'
+              + (budgetStaffOnly ? ' Staff only: the client does not see this tab yet.' : ''))}
+            <View style={s.pad}><UeBudget tab={budget} /></View>
           </>
         );
       case 'findings':

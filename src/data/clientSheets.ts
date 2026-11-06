@@ -25,6 +25,25 @@ export type GridRow = GridCell[];
  */
 export type StatementCell = number | string | null;
 
+/**
+ * A budget tab, kept as the workbook displays it — "FY2027 Budget", which Paul
+ * added to every CFO workbook in November 2026.
+ *
+ * Its figures are of every kind on one sheet: dollars, rates, a month count, a
+ * break-even head count, an "OK" check. Stored as bare numbers they would need
+ * a format guessed for each, so they arrive as text in the cell's own number
+ * format, and automation/lib/convert.py reads every one back against the
+ * workbook before it is written.
+ */
+export interface BudgetTab {
+  /** The tab's name, "FY2027 Budget". The year moves on; the key does not. */
+  title: string;
+  /** Rows of grid, counted from 0, whose label the workbook sets in bold. */
+  bold: number[];
+  /** The tab from cell A1, figures as displayed ("$1,097,407", "3.0%", "(22.2%)"). */
+  grid: (string | null)[][];
+}
+
 /** A line of a financial statement, keyed by its row number in the workbook. */
 export interface StatementRow {
   /** Row number in the source workbook — formulas address these. */
@@ -56,6 +75,11 @@ export interface ClientSheets {
   'Profit and Loss': GridRow[];
   'FS-R': StatementRow[];
   'FS-A': StatementRow[];
+  /**
+   * Here once Paul clears the budget for clients. Until then it travels in
+   * ClientNotes, so a client's browser never receives it.
+   */
+  Budget?: BudgetTab;
 }
 
 /**
@@ -82,4 +106,11 @@ export interface ClientNotes {
    */
   'Findings for Review'?: GridRow[];
   'TL;DR'?: GridRow[];
+  /**
+   * The budget, while it is staff only. It closes with Paul's "Notes for
+   * review" — things to put right "before the budget is finalized", and a
+   * pointer to Findings for Review — so it is FTG's draft until he says
+   * otherwise. BUDGET_FOR_CLIENTS in automation/lib/convert.py moves it.
+   */
+  Budget?: BudgetTab;
 }

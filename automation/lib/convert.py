@@ -16,6 +16,7 @@ into producing different files from the same workbook.
 import datetime
 import json
 import re
+from decimal import ROUND_HALF_UP, Decimal
 
 import openpyxl
 
@@ -138,12 +139,181 @@ def statement(wb, tab):
     return out
 
 
+# ── The budget tab, kept as the workbook shows it ─────────────────────────────
+#
+# Paul added "FY2027 Budget" to every CFO workbook in November 2026. Its
+# figures are of every kind on one sheet: dollars, rates, a month count, a
+# break-even head count, an "OK" check. Stored as bare numbers, the app could
+# only guess which is which — it does guess, on the grid tabs, by the label —
+# so these are stored as the workbook displays them, in each cell's own number
+# format, and the check further down reads every figure back off its text.
+#
+# Staff only for now. The tab closes with "Notes for review" that list things to
+# put right "before the budget is finalized" and point at Findings for Review,
+# which clients never see. Once Paul clears it for clients, set this and
+# re-sync: the budget then moves to the module the client's browser loads.
+BUDGET_FOR_CLIENTS = False
+
+_BUDGET_TAB = re.compile(r'^FY\s?(\d{4}) Budget$', re.I)
+
+
+def budget_tab(wb):
+    """The latest year's budget tab on show, or None."""
+    found = []
+    for ws in wb.worksheets:
+        m = _BUDGET_TAB.match(ws.title.strip())
+        if m and ws.sheet_state == 'visible':
+            found.append((int(m.group(1)), ws.title))
+    return max(found)[1] if found else None
+
+
+_COLOUR = re.compile(r'\[(?:black|blue|cyan|green|magenta|red|white|yellow|colou?r\s*\d+)\]', re.I)
+_CURRENCY = re.compile(r'\[\$([^\]-]*)(?:-[0-9A-Fa-f]+)?\]')     # [$$-409] is "$"
+
+
+def _sections(fmt):
+    """A number format split at its unquoted semicolons."""
+    out, cur, quoted, i = [], '', False, 0
+    while i < len(fmt):
+        ch = fmt[i]
+        if ch == '\\' and not quoted and i + 1 < len(fmt):
+            cur += fmt[i:i + 2]
+            i += 2
+            continue
+        if ch == '"':
+            quoted = not quoted
+        if ch == ';' and not quoted:
+            out.append(cur)
+            cur = ''
+        else:
+            cur += ch
+        i += 1
+    out.append(cur)
+    return out
+
+
+def _section_text(section, value):
+    """One section of a number format, applied to a value it does not sign."""
+    section = _CURRENCY.sub(lambda m: '"' + m.group(1).replace('"', '') + '"',
+                            _COLOUR.sub('', section))
+    toks, scale, i = [], False, 0          # toks: (is a digit placeholder, text)
+    while i < len(section):
+        ch = section[i]
+        if ch == '"':
+            end = section.find('"', i + 1)
+            end = len(section) if end < 0 else end
+            toks.append((False, section[i + 1:end]))
+            i = end + 1
+        elif ch == '\\' and i + 1 < len(section):
+            toks.append((False, section[i + 1]))
+            i += 2
+        elif ch in '_*' and i + 1 < len(section):
+            # _x leaves the width of x; *x repeats x across the cell. Spacing only.
+            toks.append((False, ' ' if ch == '_' else ''))
+            i += 2
+        elif ch in '0#?.,':
+            toks.append((True, ch))
+            i += 1
+        else:
+            scale = scale or ch == '%'
+            toks.append((False, ch))
+            i += 1
+    places = [k for k, (p, _) in enumerate(toks) if p]
+    if not places:
+        return ''.join(t for _, t in toks).strip()    # a section of words only: "OK", "-"
+    lo, hi = places[0], places[-1]
+    pattern = ''.join(t for p, t in toks[lo:hi + 1] if p)
+    whole, _, frac = pattern.partition('.')
+    decimals = sum(ch in '0#?' for ch in frac)
+    grouped = ',' in whole.rstrip(',')
+    if scale:
+        value *= 100
+    # Excel rounds a displayed half away from zero; float rounding would not.
+    q = Decimal(repr(float(value))).quantize(Decimal(1).scaleb(-decimals),
+                                             rounding=ROUND_HALF_UP)
+    figure = format(q, (',' if grouped else '') + f'.{decimals}f')
+    return (''.join(t for _, t in toks[:lo]) + figure
+            + ''.join(t for _, t in toks[hi + 1:])).strip()
+
+
+def excel_text(value, fmt):
+    """A number as Excel shows it under a cell's number format."""
+    if not fmt or fmt.lower() == 'general' or re.search(r'\[[<>=]', fmt):
+        # General, or a conditional format this does not read: plain digits.
+        r = round(float(value), 10)
+        return str(int(r)) if r == int(r) else format(Decimal(repr(r)).normalize(), 'f')
+    secs = _sections(fmt)
+    if value < 0 and len(secs) > 1:
+        return _section_text(secs[1], -value)     # that section writes its own sign
+    if value == 0 and len(secs) > 2:
+        return _section_text(secs[2], 0)
+    text = _section_text(secs[0], abs(value))
+    return '-' + text if value < 0 else text
+
+
+def display(cell):
+    """A cell as the workbook shows it: words as written, a figure in its format."""
+    v = cell.value
+    if v is None:
+        return None
+    if isinstance(v, str):
+        return v.strip() or None
+    if isinstance(v, bool):
+        return 'TRUE' if v else 'FALSE'
+    if isinstance(v, (datetime.datetime, datetime.date)):
+        return v.strftime('%b %Y')
+    if isinstance(v, (int, float)):
+        return excel_text(v, cell.number_format)
+    return str(v)
+
+
+def budget(wb, tab):
+    """The budget tab as displayed, from A1, and which rows the workbook bolds."""
+    ws = wb[tab]
+    rows = [[display(c) for c in row] for row in ws.iter_rows()]
+    while rows and not any(x is not None for x in rows[-1]):
+        rows.pop()
+    width = max((max((i + 1 for i, x in enumerate(r) if x is not None), default=0)
+                 for r in rows), default=0)
+    grid = [r[:width] + [None] * (width - len(r)) for r in rows]
+    bold = []
+    for ri, row in enumerate(ws.iter_rows(max_row=len(grid))):
+        label = next((c for c in row if display(c) is not None), None)
+        if label is not None and label.font is not None and label.font.b:
+            bold.append(ri)
+    return {'title': tab, 'bold': bold, 'grid': grid}
+
+
+def _reads_back(text, value):
+    """Whether a figure's text, read the way a person reads it, is the figure.
+
+    The formatter agreeing with itself would prove nothing, so the text is read
+    back on its own terms: a minus or parentheses for the sign, a percentage
+    scaled back, and agreement to within half of the last decimal shown.
+    """
+    digits = re.sub(r'[^0-9.]', '', text)
+    if not re.search(r'\d', digits):
+        return True                      # words only: "OK", or "-" for nil
+    shown = float(digits)
+    if text.lstrip().startswith(('-', '(')):
+        shown = -shown
+    want = value * 100 if '%' in text else value
+    places = len(digits.partition('.')[2])
+    return abs(shown - want) <= 0.5 * 10 ** -places + 1e-9
+
+
 def _j(v):
     return json.dumps(v, ensure_ascii=False)
 
 
 def _fmt_grid(rows):
     return '[\n' + '\n'.join('  ' + _j(r) + ',' for r in rows) + '\n]'
+
+
+def _fmt_budget(b):
+    grid = _fmt_grid(b['grid']).replace('\n', '\n  ')
+    return (f'{{\n  title: {_j(b["title"])},\n  bold: {_j(b["bold"])},\n'
+            f'  grid: {grid},\n}}')
 
 
 def _fmt_stmt(rows):
@@ -175,7 +345,7 @@ def build_modules(path, export, name, bs, pl):
         ("'FS-R'", _fmt_stmt(statement(wb, 'FS-R'))),
         ("'FS-A'", _fmt_stmt(statement(wb, 'FS-A'))),
     ]
-    report = {'roadmap': False, 'findings': False, 'tldr': False}
+    report = {'roadmap': False, 'findings': False, 'tldr': False, 'budget': False}
 
     # Only where the workbook has one, and only while it is on show.
     roadmap, roadmap_warning = roadmap_tab(wb)
@@ -184,6 +354,16 @@ def build_modules(path, export, name, bs, pl):
         report['roadmap'] = True
     if roadmap_warning:
         report['roadmapWarning'] = roadmap_warning
+
+    # The budget goes with the notes, so to staff only, until it is cleared for
+    # clients (BUDGET_FOR_CLIENTS above).
+    budget_part = None
+    budget_name = budget_tab(wb)
+    if budget_name:
+        budget_part = ('Budget', _fmt_budget(budget(wb, budget_name)))
+        report['budget'] = budget_name + ('' if BUDGET_FOR_CLIENTS else ' (staff only)')
+        if BUDGET_FOR_CLIENTS:
+            sheet_parts.append(budget_part)
 
     head = (
         "import type { ClientSheets } from './clientSheets';\n\n"
@@ -202,6 +382,8 @@ def build_modules(path, export, name, bs, pl):
         if present(wb, tab):
             notes_parts.append((f"'{tab}'", _fmt_grid(grid(wb, tab))))
             report[key] = True
+    if budget_part and not BUDGET_FOR_CLIENTS:
+        notes_parts.append(budget_part)
 
     notes_head = (
         "import type { ClientNotes } from './clientSheets';\n\n"
@@ -314,5 +496,20 @@ def verify_against_workbook(path, sheets_ts, notes_ts, bs, pl):
                 if not _same(want, got):
                     mismatches += 1
                     problems.append(f'{key} [{ri},{ci}]: {want!r} vs {got!r}')
+
+    # The budget holds text, so each cell is checked twice: that it is what the
+    # workbook displays there, and that the figure read back off it is the value.
+    if 'Budget' in data:
+        ws = wb[data['Budget']['title']]
+        for ri, row in enumerate(data['Budget']['grid'], start=1):
+            for ci, got in enumerate(row, start=1):
+                cell = ws.cell(ri, ci)
+                ok = display(cell) == got
+                if ok and isinstance(cell.value, (int, float)) and not isinstance(cell.value, bool):
+                    ok = _reads_back(got, cell.value)
+                checked += 1
+                if not ok:
+                    mismatches += 1
+                    problems.append(f'Budget [{ri},{ci}]: {cell.value!r} shown as {got!r}')
 
     return {'figures': checked, 'mismatches': mismatches, 'problems': problems[:20]}
