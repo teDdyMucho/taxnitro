@@ -76,8 +76,8 @@ export interface ClientSheets {
   'FS-R': StatementRow[];
   'FS-A': StatementRow[];
   /**
-   * Here once Paul clears the budget for clients. Until then it travels in
-   * ClientNotes, so a client's browser never receives it.
+   * The budget, which clients see. Paul cleared it, notes for review and all,
+   * on 9 Nov 2026: "oo pre, initial budget naman kasi siya".
    */
   Budget?: BudgetTab;
 }
@@ -107,10 +107,9 @@ export interface ClientNotes {
   'Findings for Review'?: GridRow[];
   'TL;DR'?: GridRow[];
   /**
-   * The budget, while it is staff only. It closes with Paul's "Notes for
-   * review" — things to put right "before the budget is finalized", and a
-   * pointer to Findings for Review — so it is FTG's draft until he says
-   * otherwise. BUDGET_FOR_CLIENTS in automation/lib/convert.py moves it.
+   * Where a budget goes instead while it is staff only, which a client's
+   * browser never loads. Empty since clients were cleared to see it;
+   * BUDGET_FOR_CLIENTS in automation/lib/convert.py moves it back.
    */
   Budget?: BudgetTab;
 }

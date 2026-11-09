@@ -148,11 +148,12 @@ def statement(wb, tab):
 # so these are stored as the workbook displays them, in each cell's own number
 # format, and the check further down reads every figure back off its text.
 #
-# Staff only for now. The tab closes with "Notes for review" that list things to
-# put right "before the budget is finalized" and point at Findings for Review,
-# which clients never see. Once Paul clears it for clients, set this and
-# re-sync: the budget then moves to the module the client's browser loads.
-BUDGET_FOR_CLIENTS = False
+# Clients see it, notes for review and all. It went out to staff first because
+# those notes list things to put right "before the budget is finalized"; asked
+# whether clients could read them too, Paul (9 Nov 2026): "oo pre, initial
+# budget naman kasi siya". Turned off, the budget goes back to the notes module,
+# which only staff load.
+BUDGET_FOR_CLIENTS = True
 
 _BUDGET_TAB = re.compile(r'^FY\s?(\d{4}) Budget$', re.I)
 
@@ -355,8 +356,8 @@ def build_modules(path, export, name, bs, pl):
     if roadmap_warning:
         report['roadmapWarning'] = roadmap_warning
 
-    # The budget goes with the notes, so to staff only, until it is cleared for
-    # clients (BUDGET_FOR_CLIENTS above).
+    # With the statements, for clients to see; or with the notes, for staff
+    # only (BUDGET_FOR_CLIENTS above).
     budget_part = None
     budget_name = budget_tab(wb)
     if budget_name:
