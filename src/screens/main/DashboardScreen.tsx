@@ -202,7 +202,7 @@ function Column({ title, icon, accent, items, count, empty, loading, phone, head
 
 // ── main screen ───────────────────────────────────────────────────────────────
 
-export function DashboardScreen({ onGo, onUpload, onOpenQuestionnaire, questionnaireDone }: {
+export function DashboardScreen({ onGo, onUpload, onOpenQuestionnaire, questionnaireDone, onOpenReports }: {
   /** Switch tab. Without it, rows do not lead anywhere. */
   onGo?: (tab: 'Documents') => void;
   /** Start an upload: the app's own flow, questionnaire first if it is due. */
@@ -211,6 +211,13 @@ export function DashboardScreen({ onGo, onUpload, onOpenQuestionnaire, questionn
   /** What the app already knows about this month's questionnaire (null while
    *  unknown). Left out, the screen reads it itself. */
   questionnaireDone?: boolean | null;
+  /**
+   * Open the client's own financial report. Passed only for a client whose
+   * dashboard has been built, so it is also what decides whether the card
+   * shows. Belly: "would it be possible to add an option for Financial Reports
+   * directly to the dashboard?" It was only under Profile.
+   */
+  onOpenReports?: () => void;
 } = {}) {
   const insets = useSafeAreaInsets();
   const { user, isLoading: authLoading } = useAuth();
@@ -508,6 +515,22 @@ export function DashboardScreen({ onGo, onUpload, onOpenQuestionnaire, questionn
           </Animated.View>
         </LinearGradient>
 
+        {/* ── FINANCIAL REPORTS ───────────────────────────────────────────── */}
+        {onOpenReports && (
+          <View style={phone ? c.reportsWrapPhone : c.reportsWrap}>
+            <TouchableOpacity style={c.reports} onPress={onOpenReports} activeOpacity={0.85}>
+              <View style={c.reportsIcon}>
+                <Ionicons name="stats-chart" size={18} color="#3A3131" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={c.reportsTitle}>Financial Reports</Text>
+                <Text style={c.reportsSub}>Your financial dashboard and statements, prepared by FTG</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={Colors.primaryDark} />
+            </TouchableOpacity>
+          </View>
+        )}
+
         {/* ── THE THREE COLUMNS ───────────────────────────────────────────── */}
         <View style={phone ? c.columnsPhone : c.columns}>
           <Column
@@ -584,6 +607,16 @@ const c = StyleSheet.create({
   progressTrack: { height: 6, borderRadius: 3, backgroundColor: Colors.bgMid, overflow: 'hidden' },
   progressFill: { height: '100%', borderRadius: 3 },
   progressText: { color: Colors.textMuted, fontSize: 11.5, fontWeight: '600' },
+  // The Financial Reports card, above the columns and spaced as they are.
+  reportsWrap: { paddingHorizontal: 20, paddingTop: 24 },
+  reportsWrapPhone: { paddingHorizontal: 16, paddingTop: 20 },
+  reports: { ...card, flexDirection: 'row', alignItems: 'center', gap: 12 },
+  reportsIcon: {
+    width: 38, height: 38, borderRadius: 12, backgroundColor: Colors.primary,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  reportsTitle: { color: Colors.textPrimary, fontSize: 15, fontWeight: '800' },
+  reportsSub: { color: Colors.textSecondary, fontSize: 12.5, lineHeight: 17, marginTop: 2 },
 });
 
 const styles = StyleSheet.create({

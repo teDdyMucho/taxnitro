@@ -63,7 +63,8 @@ function WebLayout({ onLogout }: { onLogout: () => void }) {
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [uploadOpen, setUploadOpen] = useState(false);
-  // Opened from the client's own profile, and closed by the screen's back button.
+  // The client's own financial report, opened from their Dashboard or their
+  // Profile and drawn in that tab; its back button, or any tab, closes it.
   const [showDashboard, setShowDashboard] = useState(false);
 
   // ── The monthly questionnaire ──────────────────────────────────────────────
@@ -112,19 +113,29 @@ function WebLayout({ onLogout }: { onLogout: () => void }) {
 
   const mkInitials = (name: string) => name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
 
-  // Leaving Profile closes the dashboard, so coming back lands on the profile
-  // itself rather than wherever the last visit left off.
+  // Changing tab closes the report, so coming back lands on the tab itself
+  // rather than wherever the last visit left off.
   const goTab = (name: TabName) => { setActiveTab(name); setShowDashboard(false); };
 
   const renderScreen = () => {
     switch (activeTab) {
       case 'Dashboard':
+        if (showDashboard && myDashboard) {
+          return (
+            <ClientDashboardScreen
+              dashboard={myDashboard}
+              onBack={() => setShowDashboard(false)}
+              backLabel="Back to Dashboard"
+            />
+          );
+        }
         return (
           <DashboardScreen
             onGo={goTab}
             onUpload={startUpload}
             onOpenQuestionnaire={() => setQuestionnaireOpen(true)}
             questionnaireDone={questionnaireDone}
+            onOpenReports={myDashboard ? () => setShowDashboard(true) : undefined}
           />
         );
       case 'Documents':     return <DocumentsScreen />;
