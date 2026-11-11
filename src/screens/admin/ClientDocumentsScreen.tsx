@@ -29,13 +29,15 @@ import {
   deleteDocumentWithReason,
   renameDocument,
   updateDocumentStatus,
+  moveDocumentToFolder,
   Document,
 } from '../../db/documents';
 import { createCustomRequest } from '../../db/customRequests';
 import {
   useDownloadSelection, DownloadSelectionBar, DownloadNotice, SelectCheckbox,
 } from '../../components/DownloadSelectionBar';
-import { listSubfoldersForClient, createSubfolder, renameSubfolder, deleteSubfolder, nestSubfolder, descendantIds, subfolderPath, Subfolder } from '../../db/subfolders';
+import { listSubfoldersForClient, createSubfolder, renameSubfolder, deleteSubfolder, nestSubfolder, moveDocumentToSubfolder, descendantIds, subfolderPath, Subfolder } from '../../db/subfolders';
+import { moveDestinations } from '../../lib/folderCatalog';
 import { dashboardForClient } from '../../lib/clientDashboards';
 import { useResponsive } from '../../hooks/useResponsive';
 import { getTeamOneServices } from '../../db/teamOne';
@@ -388,6 +390,118 @@ function MoveFolderSheet({ sub, subfolders, onClose, onMove }: {
   );
 }
 
+// ── Move a document into another folder ────────────────────────────────────────
+
+/** Where a file can be moved: a folder table, or one of the client's subfolders. */
+type MoveDest =
+  | { kind: 'table'; table: string; label: string }
+  | { kind: 'sub';   sub: Subfolder; label: string };
+
+/**
+ * Belly Jane: "gusto ko siya move right folder yung statement." A file dumped in
+ * Unsorted (or filed anywhere) can be sent to the right place — one of this
+ * client's own folders (Balance Sheet, P&L, Query Sheet…) or one of the service
+ * sections (Monthly Reporting, Additional Docs…). Not the required-info items,
+ * which are the client's own tagged uploads, nor the folder it is already in.
+ */
+function MoveDocSheet({ doc, displayName, subfolders, services, onClose, onMove }: {
+  doc: Document;
+  displayName: string;
+  subfolders: Subfolder[];
+  services: string[];
+  onClose: () => void;
+  /** Resolves to the reason it failed, or null when it moved. */
+  onMove: (dest: MoveDest) => Promise<string | null>;
+}) {
+  const sheet = useSheetStyles('md');
+  const fromTable = doc.document_type ?? '';
+  const fromSub   = doc.subfolder_id ?? null;
+
+  // The client's own folders, each shown with the section it sits in, minus the
+  // one the file is already in.
+  const subDests = subfolders
+    .filter(sf => sf.id !== fromSub)
+    .map(sf => ({
+      key:   `sub:${sf.id}`,
+      dest:  { kind: 'sub' as const, sub: sf, label: subfolderPath(subfolders, sf.id).map(p => p.name).join(' › ') || sf.name },
+      where: folderTableLabel(sf.parent_table),
+    }))
+    .sort((a, b) => a.dest.label.localeCompare(b.dest.label));
+
+  // The service sections the client takes, minus the folder it is already at the
+  // root of.
+  const tableGroups = moveDestinations(fromTable, services).map(g => ({
+    title: g.title,
+    rows:  g.folders.map(f => ({ key: `tbl:${f.key}`, dest: { kind: 'table' as const, table: f.key, label: f.label } })),
+  }));
+
+  const byKey = new Map<string, MoveDest>();
+  subDests.forEach(d => byKey.set(d.key, d.dest));
+  tableGroups.forEach(g => g.rows.forEach(r => byKey.set(r.key, r.dest)));
+
+  const [pick, setPick] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr]   = useState<string | null>(null);
+
+  const nothing = subDests.length === 0 && tableGroups.length === 0;
+
+  const row = (key: string, label: string, where: string | null, icon: keyof typeof Ionicons.glyphMap) => {
+    const on = pick === key;
+    return (
+      <TouchableOpacity key={key} style={[su.folderRow, on && su.folderRowActive]} onPress={() => setPick(key)} activeOpacity={0.8}>
+        <Ionicons name={icon} size={18} color={on ? Colors.primary : Colors.textMuted} />
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text style={[su.folderText, on && { color: Colors.textPrimary, fontWeight: '700' }]} numberOfLines={1}>{label}</Text>
+          {where ? <Text style={s.moveWhere} numberOfLines={1}>{where}</Text> : null}
+        </View>
+      </TouchableOpacity>
+    );
+  };
+
+  return (
+    <Modal visible transparent animationType="slide" onRequestClose={busy ? undefined : onClose}>
+      <Pressable style={[su.overlay, sheet.overlay]} onPress={busy ? undefined : onClose}>
+        <Pressable style={[su.sheet, sheet.sheet]} onPress={() => {}}>
+          <View style={su.handle} />
+          <Text style={su.title} numberOfLines={1}>Move “{displayName}”</Text>
+          <Text style={su.sub}>Pick the folder to move this file into.</Text>
+          <ScrollView style={{ maxHeight: 360 }}>
+            {subDests.length > 0 && <Text style={su.label}>This client’s folders</Text>}
+            {subDests.map(d => row(d.key, d.dest.label, d.where, 'folder'))}
+            {tableGroups.map(g => (
+              <React.Fragment key={g.title}>
+                <Text style={su.label}>{g.title}</Text>
+                {g.rows.map(r => row(r.key, r.dest.label, null, 'folder-outline'))}
+              </React.Fragment>
+            ))}
+            {nothing && <Text style={su.sub}>There is no other folder to move this into.</Text>}
+          </ScrollView>
+          {err && <Text style={s.moveErr}>{err}</Text>}
+          <View style={su.row}>
+            <TouchableOpacity style={su.cancelBtn} onPress={onClose} disabled={busy}>
+              <Text style={su.cancelText}>Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[su.sendBtn, (!pick || busy) && { opacity: 0.5 }]}
+              disabled={!pick || busy}
+              onPress={async () => {
+                const dest = pick ? byKey.get(pick) : null;
+                if (!dest) return;
+                setBusy(true); setErr(null);
+                const reason = await onMove(dest);
+                setBusy(false);
+                if (reason) setErr(reason);
+              }}
+            >
+              {busy ? <ActivityIndicator color="#3A3131" size="small" /> : <Text style={su.sendText}>Move Here</Text>}
+            </TouchableOpacity>
+          </View>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
 // ── Main Screen ───────────────────────────────────────────────────────────────
 
 /**
@@ -451,6 +565,8 @@ export function ClientDocumentsScreen({
   const [viewerUrl, setViewerUrl] = useState<string | null>(null);
   const [renameDoc, setRenameDoc] = useState<Document | null>(null);
   const [deleteDoc, setDeleteDoc] = useState<Document | null>(null);
+  // Belly: the file she wants to move to the right folder.
+  const [moveDoc, setMoveDoc] = useState<DocRow | null>(null);
   const [uploadOpen, setUploadOpen] = useState(false);
   const [requestOpen, setRequestOpen] = useState(false);
   // null → the folder list; otherwise the folder being looked inside.
@@ -553,6 +669,41 @@ export function ClientDocumentsScreen({
       setDocuments(prev => prev.map(d => d.id === doc.id ? { ...d, status: 'viewed' } : d));
     }
     setViewerUrl(doc.document_url);
+  };
+
+  // Move the open file to another folder. A folder is a table, so a different
+  // section is a row moved between tables (the same database function the file
+  // browser uses); a subfolder is that plus filing it in. The local copy is
+  // repointed so it re-buckets without a reload.
+  const handleMoveDoc = async (dest: MoveDest): Promise<string | null> => {
+    if (!moveDoc) return 'No file selected.';
+    const id        = moveDoc.id;
+    const fromTable = moveDoc.document_type ?? '';
+
+    if (dest.kind === 'sub') {
+      const toTable = dest.sub.parent_table;
+      if (fromTable !== toTable) {
+        const r = await moveDocumentToFolder(id, fromTable, toTable);
+        if (!r.ok) return r.error;
+      }
+      const ok = await moveDocumentToSubfolder(toTable, id, dest.sub.id);
+      if (!ok) return 'Could not file it into that folder.';
+      setDocuments(prev => prev.map(d => d.id === id ? { ...d, document_type: toTable, subfolder_id: dest.sub.id } : d));
+    } else {
+      const toTable = dest.table;
+      if (fromTable !== toTable) {
+        const r = await moveDocumentToFolder(id, fromTable, toTable);
+        if (!r.ok) return r.error;
+        setDocuments(prev => prev.map(d => d.id === id ? { ...d, document_type: toTable, subfolder_id: null } : d));
+      } else if (moveDoc.subfolder_id) {
+        // Same section, but in a subfolder of it — bring it out to the root.
+        const ok = await moveDocumentToSubfolder(toTable, id, null);
+        if (!ok) return 'Could not move it to the folder root.';
+        setDocuments(prev => prev.map(d => d.id === id ? { ...d, subfolder_id: null } : d));
+      }
+    }
+    setMoveDoc(null);
+    return null;
   };
 
   const fmtDate = (iso: string) => new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
@@ -833,6 +984,9 @@ export function ClientDocumentsScreen({
         </TouchableOpacity>
         {!isTeamOne && (
           <>
+            <TouchableOpacity style={s.actionBtn} onPress={() => setMoveDoc(item)}>
+              <Ionicons name="swap-horizontal" size={16} color={Colors.primary} />
+            </TouchableOpacity>
             <TouchableOpacity style={s.actionBtn} onPress={() => setRenameDoc(item)}>
               <Ionicons name="pencil-outline" size={16} color={Colors.textMuted} />
             </TouchableOpacity>
@@ -1317,6 +1471,17 @@ export function ClientDocumentsScreen({
         onConfirm={() => { if (deleteDoc) { handleDelete(deleteDoc); setDeleteDoc(null); } }}
         onCancel={() => setDeleteDoc(null)}
       />
+
+      {moveDoc && (
+        <MoveDocSheet
+          doc={moveDoc}
+          displayName={moveDoc.displayName || moveDoc.name}
+          subfolders={subfolders}
+          services={taken}
+          onClose={() => setMoveDoc(null)}
+          onMove={handleMoveDoc}
+        />
+      )}
 
       {/* The same upload used from the Documents tab — drag and drop, several
           files at once, queued by where each one is going. The client is fixed
