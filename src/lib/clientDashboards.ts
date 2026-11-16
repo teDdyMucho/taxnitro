@@ -446,10 +446,11 @@ const ENTRIES: Entry[] = [
     },
   },
   {
-    // Paul, 23 Sep: "tribal indemnity = tribalinsurance@gmail.com". No portal
-    // account carries it yet; listed now so their dashboard is theirs the day
-    // one is made, rather than waiting on somebody to remember this file.
-    emails: ['tribalinsurance@gmail.com'],
+    // Their portal account is rsalas74@gmail.com, company "Tribal Indemnity",
+    // where their tax estimate and FY2027 budget went.
+    // Paul had tribalinsurance@gmail.com from Belly on 23 Sep, but no account
+    // was ever made under it. Paul, 16 Nov: "sige pre kay rsalas nalang".
+    emails: ['rsalas74@gmail.com'],
     dashboard: {
       key: 'tribal-indemnity',
       label: 'Financial Dashboard',
