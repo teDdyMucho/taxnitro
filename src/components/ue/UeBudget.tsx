@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import { Colors } from '../../constants/colors';
 import type { BudgetTab } from '../../data/clientSheets';
 import { useWheelScroll } from '../../hooks/useWheelScroll';
+import { BudgetChart } from './BudgetChart';
 
 // A client's budget tab ("FY2027 Budget"), laid out the way the workbook lays it out.
 //
@@ -44,8 +45,43 @@ function parse(tab: BudgetTab) {
   return { intro, sections };
 }
 
+/** "$17,809" → 17809 · "($4,021)" → -4021 · "-" → 0. */
+const amount = (c: Cell) => {
+  if (c == null) return 0;
+  const n = Number(c.replace(/[$,()\s]/g, ''));
+  return Number.isFinite(n) ? (/^\(.*\)$/.test(c.trim()) ? -n : n) : 0;
+};
+
+/**
+ * The workbook's chart beside section 4, "FY2027 Monthly Revenue vs Break-even",
+ * read from section 3's monthly phasing: the revenue line is the one just above
+ * "Variable costs" (Revenue, Sales, Service income, Total revenue — each client
+ * names it its own way), the line is "Break-even revenue". Null when the tab
+ * has no such rows, and then there is simply no chart.
+ */
+function chartOf(tab: BudgetTab, sections: Section[]) {
+  const monthly = sections.find(sec => /MONTHLY/.test(sec.heading));
+  if (!monthly || monthly.rows.length < 3) return null;
+  const rows = monthly.rows;
+  const months = rows[0].cells.slice(1, 13).map(c => (c ?? '').split(' ')[0]);
+  const vi = rows.findIndex(r => /^variable costs$/i.test((r.cells[0] ?? '').trim()));
+  const be = rows.find(r => /^break-even revenue$/i.test((r.cells[0] ?? '').trim()));
+  if (vi < 2 || !be || months.length !== 12 || months.some(m => !m)) return null;
+  const rev = rows[vi - 1];
+  const year = (tab.title.match(/FY\d{4}/) ?? [''])[0];
+  return {
+    title: `${year ? year + ' ' : ''}Monthly Revenue vs Break-even`,
+    months,
+    bars: rev.cells.slice(1, 13).map(amount),
+    line: be.cells.slice(1, 13).map(amount),
+    barLabel: rev.cells[0] ?? 'Revenue',
+    lineLabel: 'Break-even revenue',
+  };
+}
+
 export function UeBudget({ tab }: { tab: BudgetTab }) {
   const { intro, sections } = useMemo(() => parse(tab), [tab]);
+  const chart = useMemo(() => chartOf(tab, sections), [tab, sections]);
   // The first lines name the client, then the budget, then its basis.
   const [kicker, title, ...basis] = intro;
 
@@ -58,11 +94,20 @@ export function UeBudget({ tab }: { tab: BudgetTab }) {
           {basis.map((line, i) => <Text key={i} style={s.basis}>{line}</Text>)}
         </View>
       )}
-      {sections.map((sec, i) => (
-        /NOTES/i.test(sec.heading)
-          ? <NotesSection key={i} section={sec} />
-          : <TableSection key={i} section={sec} />
-      ))}
+      {sections.map((sec, i) => {
+        if (/NOTES/i.test(sec.heading)) return <NotesSection key={i} section={sec} />;
+        // The chart sits beside section 4, as in the workbook; on a phone the
+        // two no longer fit side by side and the chart drops under the table.
+        if (chart && /BREAK-EVEN/i.test(sec.heading)) {
+          return (
+            <View key={i} style={s.pair}>
+              <View style={s.pairTable}><TableSection section={sec} /></View>
+              <View style={s.pairChart}><BudgetChart {...chart} /></View>
+            </View>
+          );
+        }
+        return <TableSection key={i} section={sec} />;
+      })}
     </View>
   );
 }
@@ -191,6 +236,10 @@ const s = StyleSheet.create({
   cell: { paddingHorizontal: 10, paddingVertical: 7, fontSize: 11.5, color: Colors.textSecondary },
   num: { textAlign: 'right', fontVariant: ['tabular-nums'] },
   strong: { fontWeight: '700', color: Colors.textPrimary },
+  pair: { flexDirection: 'row', flexWrap: 'wrap', gap: 16, alignItems: 'flex-start' },
+  // Shrinkable: on a line of its own, each must fit a phone narrower than its basis.
+  pairTable: { flexGrow: 2, flexShrink: 1, flexBasis: 380, minWidth: 0 },
+  pairChart: { flexGrow: 3, flexShrink: 1, flexBasis: 440, minWidth: 0 },
   notes: { paddingHorizontal: 16, paddingVertical: 12, gap: 10 },
   note: { fontSize: 12.5, lineHeight: 19, color: Colors.textSecondary },
 });
