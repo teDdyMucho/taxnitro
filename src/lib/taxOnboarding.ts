@@ -40,12 +40,15 @@ export const taxYearOf = (season: string) => String(Number(season) - 1);
 export const TAX_ONBOARDING_OPEN = false;
 export const TAX_ONBOARDING_PREVIEW: string[] = [];
 
+/** Is the onboarding offered to this sign-in: to everyone, or as a preview? */
+export function taxOnboardingOpenFor(email: string | null | undefined): boolean {
+  return TAX_ONBOARDING_OPEN || TAX_ONBOARDING_PREVIEW.includes((email ?? '').trim().toLowerCase());
+}
+
 export function seesTaxOnboarding(
   user: { email?: string | null; services?: readonly string[] | null } | null | undefined,
 ): boolean {
-  if (!user?.services?.includes('TAX')) return false;
-  if (TAX_ONBOARDING_OPEN) return true;
-  return TAX_ONBOARDING_PREVIEW.includes((user.email ?? '').trim().toLowerCase());
+  return !!user?.services?.includes('TAX') && taxOnboardingOpenFor(user.email);
 }
 
 // ── The documents ────────────────────────────────────────────────────────────

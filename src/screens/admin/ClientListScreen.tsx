@@ -20,6 +20,9 @@ import {
 } from '../../db/requirements';
 import { ClientManageModal } from '../../components/ClientManageModal';
 import { createClientAccount, inviteClient } from '../../lib/adminUsers';
+import {
+  TAX_SEASON, TAX_STEPS, taxStepsDone, taxOnboardingOpenFor, listTaxOnboardings, type TaxOnboarding,
+} from '../../db/taxOnboarding';
 import { pullFromTaxNitro, describePull } from '../../lib/taxNitro';
 import { joinName } from '../../lib/personName';
 import { useResponsive } from '../../hooks/useResponsive';
@@ -913,6 +916,8 @@ export function ClientListScreen({ onSelectClient }: Props) {
   useEffect(() => () => { mountedRef.current = false; }, []);
 
   const [clients, setClients]       = useState<Profile[]>([]);
+  // This season's tax onboardings, by client email, for the chip on each card.
+  const [taxRows, setTaxRows]       = useState<Map<string, TaxOnboarding>>(new Map());
   const [query, setQuery]           = useState('');
   // Which service the list is narrowed to, or null for all of them.
   const [svcFilter, setSvcFilter]   = useState<ClientService | null>(null);
@@ -951,8 +956,13 @@ export function ClientListScreen({ onSelectClient }: Props) {
       // Just the clients. The per-requirement counts used to be fetched
       // alongside, feeding a progress bar the cards no longer draw — a
       // request per load whose answer nothing read.
-      const data = await getAllClients();
-      if (mountedRef.current) setClients(data);
+      // And the season's tax onboardings, in one read for every card. Team One
+      // reads none: the table's rules give them nothing, so nothing shows.
+      const [data, tax] = await Promise.all([getAllClients(), listTaxOnboardings(TAX_SEASON)]);
+      if (mountedRef.current) {
+        setClients(data);
+        setTaxRows(new Map(tax.map(r => [r.client_email.trim().toLowerCase(), r])));
+      }
     }
     catch (e) { console.error(e); }
     finally { clearTimeout(safetyTimer); if (mountedRef.current) { setLoading(false); setRefreshing(false); } }
@@ -1056,6 +1066,23 @@ export function ClientListScreen({ onSelectClient }: Props) {
               return (
                 <View style={[s.statusChip, { backgroundColor: look.bg }]}>
                   <Text style={[s.statusChipText, { color: look.text }]}>{look.label}</Text>
+                </View>
+              );
+            })()}
+            {(() => {
+              // How far a tax client is in this season's onboarding: once it is
+              // offered to them, or once they have started it.
+              if (!services.includes('TAX')) return null;
+              const row = taxRows.get((item.email ?? '').trim().toLowerCase()) ?? null;
+              if (!row && !taxOnboardingOpenFor(item.email)) return null;
+              const done = taxStepsDone(row);
+              const n = TAX_STEPS.filter(step => done[step.key]).length;
+              const all = n === TAX_STEPS.length;
+              return (
+                <View style={[s.statusChip, { backgroundColor: all ? '#DCFCE7' : n > 0 ? '#FEF3C7' : '#F3F4F6' }]}>
+                  <Text style={[s.statusChipText, { color: all ? '#15803D' : n > 0 ? '#92400E' : '#6B7280' }]}>
+                    {all ? 'ONBOARDED' : `ONBOARDING ${n}/${TAX_STEPS.length}`}
+                  </Text>
                 </View>
               );
             })()}

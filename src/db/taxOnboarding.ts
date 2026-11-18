@@ -60,6 +60,35 @@ export async function getTaxSlots(clientEmail: string, season: string): Promise<
   return (data ?? []).map(r => ({ ...r, status: (r.status ?? 'pending') as TaxSlotStatus })) as TaxSlot[];
 }
 
+/** The file a slot points at: the first of the latest batch sent for it. */
+export interface SlotFile {
+  name: string;
+  url: string;
+  approval_status: 'pending' | 'approved' | 'rejected';
+}
+
+/** The files these slots point at, by document id. One query per folder table. */
+export async function slotFiles(slots: TaxSlot[]): Promise<Map<string, SlotFile>> {
+  const out = new Map<string, SlotFile>();
+  const byTable = new Map<string, string[]>();
+  slots
+    .filter(sl => sl.document_id && sl.document_table)
+    .forEach(sl => byTable.set(sl.document_table!, [...(byTable.get(sl.document_table!) ?? []), sl.document_id!]));
+  await Promise.all([...byTable.entries()].map(async ([table, ids]) => {
+    const { data, error } = await supabase
+      .from(table)
+      .select('id, name, file_name, document_url, approval_status')
+      .in('id', ids);
+    if (error) { console.error('slotFiles:', error.message); return; }
+    (data ?? []).forEach((d: any) => out.set(d.id, {
+      name: d.file_name || d.name || 'Document',
+      url: d.document_url,
+      approval_status: d.approval_status ?? 'pending',
+    }));
+  }));
+  return out;
+}
+
 /**
  * The ids, among these sent-back slots, whose file is one FTG has not
  * reviewed yet: the client has already sent a new one. A declined slot stays
@@ -67,15 +96,16 @@ export async function getTaxSlots(clientEmail: string, season: string): Promise<
  * can say "sent again" instead of asking them for it twice.
  */
 export async function unreviewedFiles(slots: TaxSlot[]): Promise<Set<string>> {
-  const out = new Set<string>();
-  const byTable = new Map<string, string[]>();
-  slots
-    .filter(sl => sl.status === 'rejected' && sl.document_id && sl.document_table)
-    .forEach(sl => byTable.set(sl.document_table!, [...(byTable.get(sl.document_table!) ?? []), sl.document_id!]));
-  await Promise.all([...byTable.entries()].map(async ([table, ids]) => {
-    const { data, error } = await supabase.from(table).select('id, approval_status').in('id', ids);
-    if (error) { console.error('unreviewedFiles:', error.message); return; }
-    (data ?? []).forEach((d: any) => { if ((d.approval_status ?? 'pending') === 'pending') out.add(d.id); });
-  }));
-  return out;
+  const files = await slotFiles(slots.filter(sl => sl.status === 'rejected'));
+  return new Set([...files.entries()].filter(([, f]) => f.approval_status === 'pending').map(([id]) => id));
+}
+
+/** Every client's onboarding for a season — the staff list. */
+export async function listTaxOnboardings(season: string): Promise<TaxOnboarding[]> {
+  const { data, error } = await supabase
+    .from('tax_onboarding')
+    .select('*')
+    .eq('season', season);
+  if (error) { console.error('listTaxOnboardings:', error.message); return []; }
+  return (data ?? []) as TaxOnboarding[];
 }

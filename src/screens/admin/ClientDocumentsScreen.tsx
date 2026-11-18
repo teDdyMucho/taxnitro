@@ -47,6 +47,7 @@ import { TeamOneChatPanel } from '../../components/TeamOneChatPanel';
 import { AdminUploadModal } from '../../components/AdminUploadModal';
 import { inviteClient } from '../../lib/adminUsers';
 import { ClientQuestionnairePanel } from '../../components/ClientQuestionnairePanel';
+import { ClientTaxOnboardingPanel } from '../../components/ClientTaxOnboardingPanel';
 import {
   monthOf,
   itemsForClient, requiredItemForDocName, stripRequirementPrefix,
@@ -1262,6 +1263,7 @@ export function ClientDocumentsScreen({
               clientEmail={client.email}
               accounts={normalizeBankAccounts(client.bank_accounts)}
             />
+            <ClientTaxOnboardingPanel clientEmail={client.email} services={client.services} />
             <View style={isPhone ? s.entryRowPhone : s.entryRow}>
               <TouchableOpacity
                 style={isPhone ? s.entryCardPhone : s.entryCard}
@@ -1321,6 +1323,8 @@ export function ClientDocumentsScreen({
                       clientEmail={client.email}
                       accounts={normalizeBankAccounts(client.bank_accounts)}
                     />
+                    {/* Their tax onboarding for the season, for a tax client. */}
+                    <ClientTaxOnboardingPanel clientEmail={client.email} services={client.services} />
                   </>
                 )}
                 {isTeamOne && <TeamOneChatPanel clientEmail={client.email} clientName={client.full_name} />}
