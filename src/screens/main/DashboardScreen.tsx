@@ -28,6 +28,9 @@ import { getCustomRequests, CustomRequest } from '../../db/customRequests';
 import { isQuestionnaireDone } from '../../db/questionnaire';
 import { listSharedNotes } from '../../db/sharedNotes';
 import type { ClientNote } from '../../db/clientNotes';
+import {
+  TAX_SEASON, TAX_STEPS, taxYearOf, taxStepsDone, currentTaxStep, getTaxOnboarding, type TaxOnboarding,
+} from '../../db/taxOnboarding';
 
 // The client's dashboard — Camaree: "Their dashboard should be 3 columns of
 // different types of notifications":
@@ -202,7 +205,7 @@ function Column({ title, icon, accent, items, count, empty, loading, phone, head
 
 // ── main screen ───────────────────────────────────────────────────────────────
 
-export function DashboardScreen({ onGo, onUpload, onOpenQuestionnaire, questionnaireDone, onOpenReports }: {
+export function DashboardScreen({ onGo, onUpload, onOpenQuestionnaire, questionnaireDone, onOpenReports, onOpenTaxOnboarding }: {
   /** Switch tab. Without it, rows do not lead anywhere. */
   onGo?: (tab: 'Documents') => void;
   /** Start an upload: the app's own flow, questionnaire first if it is due. */
@@ -218,6 +221,11 @@ export function DashboardScreen({ onGo, onUpload, onOpenQuestionnaire, questionn
    * directly to the dashboard?" It was only under Profile.
    */
   onOpenReports?: () => void;
+  /**
+   * Open the season's tax onboarding. Passed only to a tax client who sees it
+   * (seesTaxOnboarding), so it is also what decides whether its card shows.
+   */
+  onOpenTaxOnboarding?: () => void;
 } = {}) {
   const insets = useSafeAreaInsets();
   const { user, isLoading: authLoading } = useAuth();
@@ -237,6 +245,7 @@ export function DashboardScreen({ onGo, onUpload, onOpenQuestionnaire, questionn
   const [pending, setPending]     = useState<Set<string>>(new Set()); // uploaded, awaiting FTG
   const [rejected, setRejected]   = useState<Set<string>>(new Set()); // declined by FTG
   const [customReqs, setCustomReqs] = useState<CustomRequest[]>([]); // one-off staff requests
+  const [taxRow, setTaxRow] = useState<TaxOnboarding | null>(null);  // this season's tax onboarding
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -256,12 +265,13 @@ export function DashboardScreen({ onGo, onUpload, onOpenQuestionnaire, questionn
   const asksQuestionnaire = (user?.services ?? []).some(sv => sv === 'BK' || sv === 'CFO');
   // Whether the app hands the questionnaire state in — the same on every render.
   const readsOwnQ = questionnaireDone === undefined;
+  const showsTax = !!onOpenTaxOnboarding;
 
   const fetchData = useCallback(async () => {
     if (!user?.id || !user.email) return;
     const email = user.email;
 
-    const [allDocs, profileRes, reqs, custom, convRes, shared, qDone] = await Promise.all([
+    const [allDocs, profileRes, reqs, custom, convRes, shared, qDone, tax] = await Promise.all([
       getDocumentsByEmail(email),
       supabase.from('profiles').select('avatar_url').eq('id', user.id).maybeSingle(),
       getFulfilledRequirements(email, month),
@@ -277,6 +287,7 @@ export function DashboardScreen({ onGo, onUpload, onOpenQuestionnaire, questionn
         .limit(200),
       listSharedNotes(email),
       asksQuestionnaire && readsOwnQ ? isQuestionnaireDone(email, month) : Promise.resolve(null),
+      showsTax ? getTaxOnboarding(email, TAX_SEASON) : Promise.resolve(null),
     ]);
 
     if (!mountedRef.current) return;
@@ -287,10 +298,11 @@ export function DashboardScreen({ onGo, onUpload, onOpenQuestionnaire, questionn
     setReplies((convRes.data ?? []) as Reply[]);
     setNotes(shared);
     setOwnQDone(qDone);
+    setTaxRow(tax);
     setFulfilled(new Set(reqs.filter(r => r.status === 'approved').map(r => reqKey(r.service, r.requirement_key))));
     setPending(new Set(reqs.filter(r => r.status === 'pending').map(r => reqKey(r.service, r.requirement_key))));
     setRejected(new Set(reqs.filter(r => r.status === 'rejected').map(r => reqKey(r.service, r.requirement_key))));
-  }, [user?.id, user?.email, month, asksQuestionnaire, readsOwnQ]);
+  }, [user?.id, user?.email, month, asksQuestionnaire, readsOwnQ, showsTax]);
 
   // Fire only after auth is fully resolved and user is available
   useEffect(() => {
@@ -465,6 +477,20 @@ export function DashboardScreen({ onGo, onUpload, onOpenQuestionnaire, questionn
     </View>
   ) : null;
 
+  // This season's tax onboarding, on its own card: where they are in it.
+  const taxDone = taxStepsDone(taxRow);
+  const taxNow = currentTaxStep(taxRow);
+  const taxAt = TAX_STEPS.findIndex(st => st.key === taxNow);
+  const taxCard = showsTax ? {
+    title: taxRow?.welcomed_at ? `Your ${TAX_SEASON} tax onboarding` : `Start your ${TAX_SEASON} tax onboarding`,
+    sub: !taxRow?.welcomed_at
+      ? `${TAX_STEPS.length} short steps to get your ${taxYearOf(TAX_SEASON)} return started`
+      : taxNow
+        ? `Step ${taxAt + 1} of ${TAX_STEPS.length}: ${TAX_STEPS[taxAt].title}`
+        : "All done. We're reviewing your documents",
+    progress: TAX_STEPS.filter(st => taxDone[st.key]).length / TAX_STEPS.length,
+  } : null;
+
   const firstName = user?.name?.split(' ')[0] ?? 'there';
   const userInitials = user?.name ? initials(user.name) : '?';
   const headerPaddingTop = Platform.OS === 'web' ? 20 : insets.top + 20;
@@ -514,6 +540,32 @@ export function DashboardScreen({ onGo, onUpload, onOpenQuestionnaire, questionn
             </View>
           </Animated.View>
         </LinearGradient>
+
+        {/* ── TAX ONBOARDING ──────────────────────────────────────────────── */}
+        {onOpenTaxOnboarding && taxCard && (
+          <View style={phone ? c.reportsWrapPhone : c.reportsWrap}>
+            <TouchableOpacity style={c.reports} onPress={onOpenTaxOnboarding} activeOpacity={0.85}>
+              <View style={c.reportsIcon}>
+                <Ionicons name="document-text" size={18} color="#3A3131" />
+              </View>
+              <View style={{ flex: 1, gap: 8 }}>
+                <View>
+                  <Text style={c.reportsTitle}>{taxCard.title}</Text>
+                  <Text style={c.reportsSub}>{taxCard.sub}</Text>
+                </View>
+                {!loading && (
+                  <View style={c.progressTrack}>
+                    <View style={[c.progressFill, {
+                      width: `${taxCard.progress * 100}%` as any,
+                      backgroundColor: taxCard.progress === 1 ? Colors.viewed : Colors.primary,
+                    }]} />
+                  </View>
+                )}
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={Colors.primaryDark} />
+            </TouchableOpacity>
+          </View>
+        )}
 
         {/* ── FINANCIAL REPORTS ───────────────────────────────────────────── */}
         {onOpenReports && (

@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase';
+import { TAX_DOCS, taxDocLabel } from '../lib/taxOnboarding';
 
 // ── Required recurring monthly uploads (the "Needs from Clients") ─────────────
 // NOTE: These are what the CLIENT provides — they drive the upload progress bar.
@@ -527,13 +528,20 @@ export async function rejectRequirementForDocument(documentId: string, rejectedB
 export async function getRequirementForDocument(documentId: string): Promise<RequiredItem | null> {
   const { data, error } = await supabase
     .from('document_requirements')
-    .select('service, requirement_key, client_email')
+    .select('service, requirement_key, client_email, month')
     .eq('document_id', documentId)
     .maybeSingle();
   if (error) { console.error('getRequirementForDocument:', error.message); return null; }
   if (!data) return null;
 
   const service = data.service as RequirementService;
+
+  // A document from the tax onboarding checklist: named as the client saw it,
+  // for the season its slot holds in the month column.
+  if (service === 'TAX') {
+    const doc = TAX_DOCS.find(d => d.key === data.requirement_key);
+    return doc ? { service, key: doc.key, label: taxDocLabel(doc, data.month) } : null;
+  }
 
   // Per-account bank item → name it from the client's configured accounts.
   const acctId = bankAccountIdOf(data.requirement_key);

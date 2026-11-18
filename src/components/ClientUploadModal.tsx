@@ -145,7 +145,7 @@ function fmtSize(bytes?: number): string {
 }
 
 export function ClientUploadModal({
-  visible, onClose, onUploaded, fixedFolder, fixedSubfolder, notify = false, notifyLabel,
+  visible, onClose, onUploaded, fixedFolder, fixedSubfolder, notify = false, notifyLabel, taxItem,
 }: {
   visible: boolean;
   onClose: () => void;
@@ -172,6 +172,13 @@ export function ClientUploadModal({
    * ••••4821" — and n8n has always been sent the folder.
    */
   notifyLabel?: string;
+  /**
+   * Opened from the tax onboarding checklist, for one of its documents: that
+   * document is the only choice, the files are named for it as required items
+   * are ("W-2 from each employer — w2.pdf"), and its slot is opened for the
+   * season rather than a month, so the checklist shows it sent.
+   */
+  taxItem?: { key: string; label: string; folder: string; season: string } | null;
 }) {
   const { user } = useAuth();
   const sheet = useSheetStyles('md');
@@ -196,6 +203,16 @@ export function ClientUploadModal({
   >(null);
 
   const groups = useMemo<OptionGroup[]>(() => {
+    if (taxItem) {
+      return [{
+        title: 'Tax documents',
+        options: [{
+          id: `tax:${taxItem.key}`, label: taxItem.label, icon: 'document-text-outline',
+          folder: taxItem.folder,
+          requirement: { service: 'TAX', key: taxItem.key, label: taxItem.label },
+        }],
+      }];
+    }
     const svcs = (user?.services && user.services.length > 0 ? user.services : ['BK']) as RequirementService[];
     const out: OptionGroup[] = [];
 
@@ -250,7 +267,7 @@ export function ClientUploadModal({
         icon: 'folder-outline', folder: fixedFolder, requirement: null,
       }],
     }];
-  }, [user?.services, user?.hasQboAccess, user?.bankAccounts, fixedFolder]);
+  }, [user?.services, user?.hasQboAccess, user?.bankAccounts, fixedFolder, taxItem]);
 
   const allOptions = useMemo(() => groups.flatMap(g => g.options), [groups]);
 
@@ -429,7 +446,8 @@ export function ClientUploadModal({
             // September turned yellow for something nobody had sent, and the
             // slot being one per month meant the back-filled file took the seat
             // of whatever September was waiting for.
-            month:          period,
+            // A tax document is asked for once a season, not monthly.
+            month:          taxItem ? taxItem.season : period,
           });
         }
       }
@@ -659,7 +677,8 @@ export function ClientUploadModal({
                   </View>
                 )}
 
-                {selected && (
+                {/* A tax document is for the season, so there is no month to ask. */}
+                {selected && !taxItem && (
                   <>
                     <Text style={s.label}>Month</Text>
                     <PeriodPicker

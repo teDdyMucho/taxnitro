@@ -18,7 +18,9 @@ import { NotificationsScreen } from '../screens/main/NotificationsScreen';
 import { HowToScreen } from '../screens/main/HowToScreen';
 import { ProfileScreen } from '../screens/main/ProfileScreen';
 import { ClientDashboardScreen } from '../screens/admin/ClientDashboardScreen';
+import { TaxOnboardingScreen } from '../screens/main/TaxOnboardingScreen';
 import { dashboardForClient } from '../lib/clientDashboards';
+import { seesTaxOnboarding } from '../lib/taxOnboarding';
 import { AdminNavigator } from './AdminNavigator';
 import { getUnreadCount } from '../db/notifications';
 import { ClientUploadModal } from '../components/ClientUploadModal';
@@ -66,6 +68,11 @@ function WebLayout({ onLogout }: { onLogout: () => void }) {
   // The client's own financial report, opened from their Dashboard or their
   // Profile and drawn in that tab; its back button, or any tab, closes it.
   const [showDashboard, setShowDashboard] = useState(false);
+  // The season's tax onboarding, opened from its card on the Dashboard and
+  // drawn in that tab, the way the financial report is. Only for a tax client
+  // who sees it yet (lib/taxOnboarding.ts).
+  const [showTaxOnboarding, setShowTaxOnboarding] = useState(false);
+  const taxOnboarding = seesTaxOnboarding(user);
 
   // ── The monthly questionnaire ──────────────────────────────────────────────
   // Bookkeeping and CFO clients answer a short set of questions before they
@@ -115,11 +122,14 @@ function WebLayout({ onLogout }: { onLogout: () => void }) {
 
   // Changing tab closes the report, so coming back lands on the tab itself
   // rather than wherever the last visit left off.
-  const goTab = (name: TabName) => { setActiveTab(name); setShowDashboard(false); };
+  const goTab = (name: TabName) => { setActiveTab(name); setShowDashboard(false); setShowTaxOnboarding(false); };
 
   const renderScreen = () => {
     switch (activeTab) {
       case 'Dashboard':
+        if (showTaxOnboarding && taxOnboarding) {
+          return <TaxOnboardingScreen onBack={() => setShowTaxOnboarding(false)} backLabel="Back to Dashboard" />;
+        }
         if (showDashboard && myDashboard) {
           return (
             <ClientDashboardScreen
@@ -136,6 +146,7 @@ function WebLayout({ onLogout }: { onLogout: () => void }) {
             onOpenQuestionnaire={() => setQuestionnaireOpen(true)}
             questionnaireDone={questionnaireDone}
             onOpenReports={myDashboard ? () => setShowDashboard(true) : undefined}
+            onOpenTaxOnboarding={taxOnboarding ? () => setShowTaxOnboarding(true) : undefined}
           />
         );
       case 'Documents':     return <DocumentsScreen />;
