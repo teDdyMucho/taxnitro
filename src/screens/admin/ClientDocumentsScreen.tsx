@@ -36,7 +36,7 @@ import { createCustomRequest } from '../../db/customRequests';
 import {
   useDownloadSelection, DownloadSelectionBar, DownloadNotice, SelectCheckbox,
 } from '../../components/DownloadSelectionBar';
-import { listSubfoldersForClient, createSubfolder, renameSubfolder, deleteSubfolder, nestSubfolder, moveDocumentToSubfolder, descendantIds, subfolderPath, Subfolder } from '../../db/subfolders';
+import { listSubfoldersForClient, createSubfolder, renameSubfolder, deleteSubfolder, nestSubfolder, moveSubfolderToFolder, moveDocumentToSubfolder, descendantIds, subfolderPath, Subfolder } from '../../db/subfolders';
 import { moveDestinations } from '../../lib/folderCatalog';
 import { dashboardForClient } from '../../lib/clientDashboards';
 import { useResponsive } from '../../hooks/useResponsive';
@@ -310,22 +310,34 @@ const rq = StyleSheet.create({
 
 // ── Move a folder into another one ─────────────────────────────────────────────
 
+/** Where a folder can be moved to. */
+type FolderDest =
+  | { kind: 'into'; id: string }        // inside another folder of theirs
+  | { kind: 'top' }                     // out to the main list
+  | { kind: 'table'; table: string };   // the top of a TAX folder, or Other Tax Docs
+
 /**
  * Belly Jane: "ma move ang isang folder para maging sub folder na siya". Any of
  * this client's own folders can take it — not the folder itself or one inside
  * it, and not the older shared folders, which belong to every client. A folder
  * already inside another can also go back out to the main list.
+ *
+ * A TAX folder of theirs can also go into any of the TAX folders. Out of one,
+ * to the main list, is into Other Tax Docs, whose folders are on that list.
  */
-function MoveFolderSheet({ sub, subfolders, onClose, onMove }: {
+function MoveFolderSheet({ sub, subfolders, taxFolders, onClose, onMove }: {
   sub: Subfolder;
   subfolders: Subfolder[];
+  /** The TAX folders on their TAX tab that can hold folders, in tab order. */
+  taxFolders: string[];
   onClose: () => void;
   /** Resolves to the reason it failed, or null when it moved. */
-  onMove: (into: string | null) => Promise<string | null>;
+  onMove: (dest: FolderDest) => Promise<string | null>;
 }) {
   const sheet = useSheetStyles('md');
   const inside = new Set([sub.id, ...descendantIds(subfolders, sub.id)]);
   const owner = (sub.owner_email ?? '').toLowerCase();
+  const nested = !!sub.parent_subfolder_id;
   const targets = subfolders
     .filter(x => !inside.has(x.id) && x.id !== sub.parent_subfolder_id
       && owner !== '' && (x.owner_email ?? '').toLowerCase() === owner)
@@ -335,19 +347,35 @@ function MoveFolderSheet({ sub, subfolders, onClose, onMove }: {
       where: folderTableLabel(x.parent_table),
     }))
     .sort((a, b) => a.label.localeCompare(b.label));
-  // undefined: nothing picked yet. null: back out to the main list.
-  const [pick, setPick] = useState<string | null | undefined>(undefined);
+
+  // Out to the main list, when it is not on it already.
+  const main: { key: string; dest: FolderDest; where: string } | null =
+    holdsFoldersInside(sub.parent_table)
+      ? { key: 'tbl:tax_additional_docs', dest: { kind: 'table', table: 'tax_additional_docs' }, where: folderTableLabel('tax_additional_docs') }
+      : nested ? { key: 'top', dest: { kind: 'top' }, where: 'Not inside another folder' }
+      : null;
+  // The TAX folders take TAX folders only, so a BK folder cannot end up in one.
+  const taxRows = sub.parent_table.startsWith('tax_')
+    ? taxFolders.filter(t => !(t === sub.parent_table && !nested))
+    : [];
+
+  const dests = new Map<string, FolderDest>();
+  if (main) dests.set(main.key, main.dest);
+  taxRows.forEach(t => dests.set(`tbl:${t}`, { kind: 'table', table: t }));
+  targets.forEach(t => dests.set(`sub:${t.id}`, { kind: 'into', id: t.id }));
+
+  const [pick, setPick] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr]   = useState<string | null>(null);
 
-  const row = (id: string | null, label: string, where: string) => {
-    const on = pick === id;
+  const row = (key: string, label: string, where: string | null, icon: keyof typeof Ionicons.glyphMap) => {
+    const on = pick === key;
     return (
-      <TouchableOpacity key={id ?? 'top'} style={[su.folderRow, on && su.folderRowActive]} onPress={() => setPick(id)} activeOpacity={0.8}>
-        <Ionicons name={id ? 'folder' : 'arrow-up-circle-outline'} size={18} color={on ? Colors.primary : Colors.textMuted} />
+      <TouchableOpacity key={key} style={[su.folderRow, on && su.folderRowActive]} onPress={() => setPick(key)} activeOpacity={0.8}>
+        <Ionicons name={icon} size={18} color={on ? Colors.primary : Colors.textMuted} />
         <View style={{ flex: 1, minWidth: 0 }}>
           <Text style={[su.folderText, on && { color: Colors.textPrimary, fontWeight: '700' }]} numberOfLines={1}>{label}</Text>
-          <Text style={s.moveWhere} numberOfLines={1}>{where}</Text>
+          {where ? <Text style={s.moveWhere} numberOfLines={1}>{where}</Text> : null}
         </View>
       </TouchableOpacity>
     );
@@ -361,9 +389,12 @@ function MoveFolderSheet({ sub, subfolders, onClose, onMove }: {
           <Text style={su.title}>Move “{sub.name}”</Text>
           <Text style={su.sub}>Everything inside it moves with it.</Text>
           <ScrollView style={{ maxHeight: 340 }}>
-            {sub.parent_subfolder_id ? row(null, 'Out to the main folder list', 'Not inside another folder') : null}
-            {targets.map(t => row(t.id, t.label, t.where))}
-            {targets.length === 0 && !sub.parent_subfolder_id && (
+            {main && row(main.key, 'Out to the main folder list', main.where, 'arrow-up-circle-outline')}
+            {taxRows.length > 0 && <Text style={su.label}>TAX folders</Text>}
+            {taxRows.map(t => row(`tbl:${t}`, folderTableLabel(t), null, 'folder-outline'))}
+            {taxRows.length > 0 && targets.length > 0 && <Text style={su.label}>Their folders</Text>}
+            {targets.map(t => row(`sub:${t.id}`, t.label, t.where, 'folder'))}
+            {dests.size === 0 && (
               <Text style={su.sub}>There is no other folder of theirs to move it into. Make one first with Add New Folder.</Text>
             )}
           </ScrollView>
@@ -373,11 +404,13 @@ function MoveFolderSheet({ sub, subfolders, onClose, onMove }: {
               <Text style={su.cancelText}>Cancel</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[su.sendBtn, (pick === undefined || busy) && { opacity: 0.5 }]}
-              disabled={pick === undefined || busy}
+              style={[su.sendBtn, (!pick || busy) && { opacity: 0.5 }]}
+              disabled={!pick || busy}
               onPress={async () => {
+                const dest = pick ? dests.get(pick) : undefined;
+                if (!dest) return;
                 setBusy(true); setErr(null);
-                const reason = await onMove(pick ?? null);
+                const reason = await onMove(dest);
                 setBusy(false);
                 if (reason) setErr(reason);
               }}
@@ -522,6 +555,23 @@ function serviceOfFolderKey(key: string): ClientService | null {
   return null;
 }
 
+/**
+ * Belly Jane: the TAX folders had no create, delete or move. They are built in,
+ * the same for every client, so they stay where they are; a folder made inside
+ * one can be renamed, moved and deleted, and it shows inside it rather than on
+ * the main list. Other Tax Docs is not one of them: its folders (P&L Statement,
+ * Balance Sheet, and what Add New Folder makes on the TAX tab) are on the main
+ * list, where staff already look for them.
+ */
+const TAX_FOLDER_TABLES = [
+  'tax_identification', 'tax_irs_notices', 'tax_ip_pins', 'tax_return_information',
+  'tax_prior_transcripts', 'tax_contracts', 'tax_invoices',
+  'tax_client_uploads', 'tax_prior_returns',
+];
+function holdsFoldersInside(table: string): boolean {
+  return TAX_FOLDER_TABLES.includes(table);
+}
+
 export function ClientDocumentsScreen({
   client, onBack, onOpenDashboard, openFolderKey = null, onFolderChange, onClientChange,
 }: Props) {
@@ -557,6 +607,8 @@ export function ClientDocumentsScreen({
   // Moving a folder into another, and making one inside the folder that is open.
   const [moveSub, setMoveSub]         = useState<Subfolder | null>(null);
   const [newFolderIn, setNewFolderIn] = useState<Subfolder | null>(null);
+  // Making one inside a TAX folder that is open: the folder's table.
+  const [newFolderInTable, setNewFolderInTable] = useState<string | null>(null);
   // The "+ Add New Folder" button under the grid.
   const [newFolderOpen, setNewFolderOpen] = useState(false);
   const insets = useSafeAreaInsets();
@@ -732,6 +784,12 @@ export function ClientDocumentsScreen({
     const buckets = new Map<string, FolderBucket>();
 
     const subById = new Map(subfolders.map(sf => [sf.id, sf]));
+    // The whole path, so a folder called "January" is not adrift from the bank
+    // and year it belongs to — and, inside a TAX folder, from that folder.
+    const subTitle = (sf: Subfolder) => [
+      ...(holdsFoldersInside(sf.parent_table) ? [folderTableLabel(sf.parent_table)] : []),
+      ...subfolderPath(subfolders, sf.id).map(p => p.name),
+    ].join(' › ') || sf.name;
 
     documents.forEach(doc => {
       const item = requiredItemForDocName(doc.name, clientItems);
@@ -742,10 +800,8 @@ export function ClientDocumentsScreen({
       let key: string, title: string, order: number;
       let icon: keyof typeof Ionicons.glyphMap;
       if (sub) {
-        // The whole path, so a folder called "January" is not adrift from the
-        // bank and year it belongs to.
         key = `sub:${sub.id}`;
-        title = subfolderPath(subfolders, sub.id).map(p => p.name).join(' › ') || sub.name;
+        title = subTitle(sub);
         order = 500; icon = 'folder';
       } else if (item) {
         key = `req:${item.service}:${item.key}`; title = item.label;
@@ -792,10 +848,22 @@ export function ClientDocumentsScreen({
       if (buckets.has(key)) return;
       buckets.set(key, {
         key,
-        title: subfolderPath(subfolders, sf.id).map(p => p.name).join(' › ') || sf.name,
+        title: subTitle(sf),
         icon: 'folder',
         order: 500,
         data: [],
+      });
+    });
+
+    // A TAX folder with a folder of theirs inside is where that folder is
+    // reached from, so it is there even with nothing filed at its own root.
+    subfolders.forEach(sf => {
+      if (!holdsFoldersInside(sf.parent_table)) return;
+      const key = `tbl:${sf.parent_table}`;
+      if (buckets.has(key)) return;
+      buckets.set(key, {
+        key, title: folderTableLabel(sf.parent_table), icon: 'folder-outline',
+        order: 1000, data: [],
       });
     });
 
@@ -807,13 +875,33 @@ export function ClientDocumentsScreen({
   const subById = useMemo(() => new Map(subfolders.map(sf => [sf.id, sf])), [subfolders]);
   const subOfKey = (key: string) => (key.startsWith('sub:') ? subById.get(key.slice(4)) : undefined);
   const isNested = (key: string) => !!subOfKey(key)?.parent_subfolder_id;
+  /** At the top of one of the TAX folders, so shown when that folder is open. */
+  const isInTaxFolder = (key: string) => {
+    const sf = subOfKey(key);
+    return !!sf && !sf.parent_subfolder_id && holdsFoldersInside(sf.parent_table);
+  };
   const childrenOf = (id: string) => folders.filter(f => subOfKey(f.key)?.parent_subfolder_id === id);
+  /** The folders of theirs at the top of a TAX folder. */
+  const childrenOfTable = (table: string) => folders.filter(f => {
+    const sf = subOfKey(f.key);
+    return !!sf && !sf.parent_subfolder_id && sf.parent_table === table && holdsFoldersInside(table);
+  });
+  /** The folders inside a folder card: a folder of theirs, or a TAX folder. */
+  const kidsOf = (key: string): FolderBucket[] => {
+    const sf = subOfKey(key);
+    if (sf) return childrenOf(sf.id);
+    return key.startsWith('tbl:') ? childrenOfTable(key.slice(4)) : [];
+  };
   /** A folder's documents, with those in every folder inside it. */
   const docsUnder = (f: FolderBucket): DocRow[] => {
     const sf = subOfKey(f.key);
-    if (!sf) return f.data;
-    const ids = new Set([sf.id, ...descendantIds(subfolders, sf.id)]);
-    return folders.filter(b => ids.has(subOfKey(b.key)?.id ?? '')).flatMap(b => b.data);
+    const tops = sf ? [sf.id] : kidsOf(f.key).map(k => k.key.slice(4));
+    if (!tops.length) return f.data;
+    const ids = new Set(tops.flatMap(id => [id, ...descendantIds(subfolders, id)]));
+    const inside = folders.filter(b => ids.has(subOfKey(b.key)?.id ?? '')).flatMap(b => b.data);
+    // A folder of theirs has its own files among those; a TAX folder's files
+    // at its root are not, so they are added.
+    return sf ? inside : [...f.data, ...inside];
   };
 
   // The services this client takes. An older record with none recorded is read
@@ -829,8 +917,11 @@ export function ClientDocumentsScreen({
       const svc = serviceOfFolderKey(`tbl:${d.document_type ?? ''}`);
       if (svc) n[svc] += 1;
     });
+    // A folder of theirs inside a TAX folder is reached from the TAX tab only,
+    // so it keeps that tab, as a file would.
+    subfolders.forEach(sf => { if (holdsFoldersInside(sf.parent_table)) n.TAX += 1; });
     return n;
-  }, [documents]);
+  }, [documents, subfolders]);
 
   // Camaree: "the folder tabs don't delete right away if a service is removed …
   // once a service is removed, the tab needs to be archived or deleted."
@@ -878,7 +969,8 @@ export function ClientDocumentsScreen({
 
   const visibleFolders = useMemo(() => {
     return folders.filter(f => {
-      if (isNested(f.key)) return false;     // shown inside the folder it is in
+      // Shown inside the folder it is in.
+      if (isNested(f.key) || isInTaxFolder(f.key)) return false;
       const svc = serviceOfFolderKey(f.key);
       // Staff-made folders carry no service, so they show under every tab.
       return svc === null || svc === shownService;
@@ -911,7 +1003,7 @@ export function ClientDocumentsScreen({
     const unread  = unreadIn(all);
     const isOwn   = item.key.startsWith('sub:');
     const subOf   = () => subfolders.find(x => `sub:${x.id}` === item.key);
-    const kids    = isOwn ? subfolders.filter(x => x.parent_subfolder_id === item.key.slice(4)).length : 0;
+    const kids    = kidsOf(item.key).length;
     // A folder's own name; the path is for the header, once it is open.
     const name    = isOwn ? (subOf()?.name ?? item.title) : item.title;
     return (
@@ -1046,9 +1138,13 @@ export function ClientDocumentsScreen({
           style={s.backBtn}
           onPress={() => {
             if (!openFolder) return onBack();
-            // Out of a folder inside a folder, to the one it is in.
-            const parent = subOfKey(openFolder.key)?.parent_subfolder_id;
-            setActiveFolderKey(parent ? `sub:${parent}` : null);
+            // Out of a folder inside a folder, to the one it is in — a TAX
+            // folder, for one at the top of it.
+            const here = subOfKey(openFolder.key);
+            setActiveFolderKey(
+              here?.parent_subfolder_id ? `sub:${here.parent_subfolder_id}`
+              : here && holdsFoldersInside(here.parent_table) ? `tbl:${here.parent_table}`
+              : null);
           }}
         >
           <Ionicons name="arrow-back" size={20} color={Colors.textPrimary} />
@@ -1201,18 +1297,26 @@ export function ClientDocumentsScreen({
                 {/* The folders inside this one — Belly: a folder opened can
                     have folders made in it, with the same move, delete and
                     download. Not inside the older shared folders, whose
-                    children would show for every client. */}
-                {subOfKey(openFolder.key) && (() => {
-                  const here = subOfKey(openFolder.key)!;
-                  const kids = childrenOf(here.id);
+                    children would show for every client. The TAX folders
+                    take them too (Belly: TAX had no create, delete or move). */}
+                {(() => {
+                  const here  = subOfKey(openFolder.key);
+                  const table = openFolder.key.startsWith('tbl:') ? openFolder.key.slice(4) : null;
+                  if (!here && !(table && holdsFoldersInside(table))) return null;
+                  const kids = kidsOf(openFolder.key);
+                  const canAdd = !isTeamOne && (here ? !!here.owner_email : true);
                   const rows: FolderBucket[][] = [];
                   for (let i = 0; i < kids.length; i += folderCols) rows.push(kids.slice(i, i + folderCols));
                   return (
                     <>
                       <View style={s.subHead}>
                         <Text style={[s.sectionLabel, { marginBottom: 0 }]}>Folders</Text>
-                        {!isTeamOne && here.owner_email && (
-                          <TouchableOpacity style={s.addFolderBtn} onPress={() => setNewFolderIn(here)} activeOpacity={0.85}>
+                        {canAdd && (
+                          <TouchableOpacity
+                            style={s.addFolderBtn}
+                            onPress={() => (here ? setNewFolderIn(here) : setNewFolderInTable(table))}
+                            activeOpacity={0.85}
+                          >
                             <Ionicons name="add" size={15} color="#F0E9DC" />
                             <Text style={s.addFolderText}>New Folder</Text>
                           </TouchableOpacity>
@@ -1241,7 +1345,7 @@ export function ClientDocumentsScreen({
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => load(true)} tintColor={Colors.primary} />}
             ListEmptyComponent={
               <Text style={s.empty}>
-                {subOfKey(openFolder.key) && childrenOf(subOfKey(openFolder.key)!.id).length
+                {kidsOf(openFolder.key).length
                   ? 'No documents in this folder itself.'
                   : 'This folder is empty.'}
               </Text>
@@ -1402,13 +1506,42 @@ export function ClientDocumentsScreen({
         onCancel={() => setNewFolderIn(null)}
       />
 
+      {/* A folder made inside the TAX folder that is open, for this client. */}
+      <RenameModal
+        visible={!!newFolderInTable}
+        title="New Folder"
+        confirmLabel="Create"
+        note={newFolderInTable ? `Inside ${folderTableLabel(newFolderInTable)}.` : undefined}
+        current=""
+        onConfirm={async name => {
+          const table = newFolderInTable;
+          setNewFolderInTable(null);
+          if (!table) return;
+          const row = await createSubfolder(table, name, user?.email ?? null, client.email);
+          if (row) setSubfolders(prev => [...prev, row]);
+          // A name is theirs once per folder, however deep, so the clash may
+          // be with a folder further in.
+          else Alert.alert('Could not make the folder', `There may already be a folder with that name in ${folderTableLabel(table)}.`);
+        }}
+        onCancel={() => setNewFolderInTable(null)}
+      />
+
       {moveSub && (
         <MoveFolderSheet
           sub={moveSub}
           subfolders={subfolders}
+          taxFolders={folders
+            .filter(f => f.key.startsWith('tbl:') && holdsFoldersInside(f.key.slice(4)))
+            .map(f => f.key.slice(4))}
           onClose={() => setMoveSub(null)}
-          onMove={async into => {
-            const res = await nestSubfolder(moveSub.id, into);
+          onMove={async dest => {
+            // Another table is move_subfolder's work; within its own table,
+            // into a folder or out to the top of it, nest_subfolder's.
+            const res =
+              dest.kind === 'into' ? await nestSubfolder(moveSub.id, dest.id)
+              : dest.kind === 'table' && dest.table !== moveSub.parent_table
+                ? await moveSubfolderToFolder(moveSub.id, dest.table)
+              : await nestSubfolder(moveSub.id, null);
             if (!res.ok) return res.error;
             setMoveSub(null);
             // Its files may have changed folder table on the way, so both lists
