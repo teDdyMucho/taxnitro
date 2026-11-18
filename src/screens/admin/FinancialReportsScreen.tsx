@@ -19,6 +19,11 @@ import { ClientDashboardScreen } from './ClientDashboardScreen';
 // into it would save a tap, but this tab used to go directly to one client's
 // report and that is the thing being fixed: the button leads to whoever has a
 // dashboard, and you pick.
+//
+// Daja asked for the list A–Z, with each client tagged Monthly or Quarterly
+// CFO. A–Z is by last name, the way the Clients list sorts and FTG's own client
+// sheet is kept ("Harris, Brayonna"); the tag is the level that sheet gives
+// them, read from the dashboard's cfoLevel.
 
 interface WithDashboard {
   /**
@@ -34,6 +39,15 @@ interface WithDashboard {
   /** The address their account will sign in under, shown until it exists. */
   emails: string[];
 }
+
+/**
+ * The Clients list's own tag colours: Monthly in its CFO gold, Quarterly in its
+ * dark brown, so the two tell apart at a glance.
+ */
+const LEVEL_COLORS: Record<NonNullable<ClientDashboard['cfoLevel']>, { bg: string; text: string }> = {
+  Monthly:   { bg: '#C9A75C', text: '#1C1713' },
+  Quarterly: { bg: '#4A3E3E', text: '#FFFFFF' },
+};
 
 const mkInitials = (name: string) =>
   (name || '?').split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
@@ -58,6 +72,12 @@ export function FinancialReportsScreen() {
         emails,
         client: clients.find(c => dashboardForClient(c)?.key === dashboard.key) ?? null,
       }));
+      // The Clients list's key (Camaree, app notes 6a): the last name, else the
+      // company, else the name the row shows.
+      const sortKey = (r: WithDashboard) =>
+        (r.client?.last_name?.trim() || r.client?.company_name?.trim()
+          || r.client?.full_name || r.dashboard.name).toLowerCase();
+      withDash.sort((a, b) => sortKey(a).localeCompare(sortKey(b)));
       setRows(withDash);
     });
     return () => { live = false; };
@@ -156,9 +176,18 @@ export function FinancialReportsScreen() {
                 </LinearGradient>
               )}
               <View style={{ flex: 1, minWidth: 0 }}>
-                <Text style={s.cardName} numberOfLines={1}>
-                  {client?.full_name || dashboard.name}
-                </Text>
+                <View style={s.nameRow}>
+                  <Text style={s.cardName} numberOfLines={1}>
+                    {client?.full_name || dashboard.name}
+                  </Text>
+                  {!!dashboard.cfoLevel && (
+                    <View style={[s.level, { backgroundColor: LEVEL_COLORS[dashboard.cfoLevel].bg }]}>
+                      <Text style={[s.levelText, { color: LEVEL_COLORS[dashboard.cfoLevel].text }]}>
+                        {dashboard.cfoLevel.toUpperCase()} CFO
+                      </Text>
+                    </View>
+                  )}
+                </View>
                 <Text style={s.cardMeta} numberOfLines={1}>
                   {client?.email
                     ?? (emails[0]
@@ -166,9 +195,13 @@ export function FinancialReportsScreen() {
                       : 'No portal account yet — staff view only')}
                 </Text>
               </View>
+              {/*
+                On a phone the button is its icon alone: with its label it took
+                most of the row, and cut the name and the CFO tag to a few letters.
+              */}
               <View style={s.pill}>
                 <Ionicons name="stats-chart-outline" size={13} color={Colors.primaryDeep} />
-                <Text style={s.pillText}>{dashboard.label}</Text>
+                {wide && <Text style={s.pillText}>{dashboard.label}</Text>}
               </View>
               <Ionicons name="chevron-forward" size={18} color={Colors.textMuted} />
             </TouchableOpacity>
@@ -214,7 +247,12 @@ const s = StyleSheet.create({
     borderWidth: 1, borderColor: Colors.border,
   },
   avatarImg: { width: '100%', height: '100%' },
-  cardName: { fontSize: 15, fontWeight: '700', color: Colors.textPrimary },
+  // Beside the name where there is room; on a phone, where the row is mostly
+  // its button, the tag drops under the name instead of over it.
+  nameRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: 8, rowGap: 4 },
+  cardName: { fontSize: 15, fontWeight: '700', color: Colors.textPrimary, flexShrink: 1 },
+  level: { borderRadius: 5, paddingHorizontal: 7, paddingVertical: 3 },
+  levelText: { fontSize: 10, fontWeight: '800', letterSpacing: 0.5 },
   cardMeta: { fontSize: 12, color: Colors.textMuted, marginTop: 2 },
   pill: {
     flexDirection: 'row', alignItems: 'center', gap: 5,

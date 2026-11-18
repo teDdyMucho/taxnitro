@@ -80,6 +80,13 @@ export interface ClientDashboard {
    * Sno closes August and forecasts from September.
    */
   lastActual?: number;
+  /**
+   * The CFO service they are on, as FTG's client sheet records it under "BK
+   * Level": MONTHLY CFO or QTR CFO (Paul sent the sheet on 18 Nov 2026). It
+   * tags their row in Financial Reports, which Daja asked for. Left out where
+   * the sheet gives no CFO level.
+   */
+  cfoLevel?: 'Monthly' | 'Quarterly';
 }
 
 /**
@@ -361,6 +368,7 @@ const ENTRIES: Entry[] = [
       // which v4 had at $49,790 of revenue, to $106,259 — v4's August was not
       // yet fully booked.
       lastActual: 8,
+      cfoLevel: 'Monthly',
     },
   },
   {
@@ -377,6 +385,7 @@ const ENTRIES: Entry[] = [
       forecast: 'workbook',
       // v6 closes September; the workbook forecasts Oct-Dec 2026.
       lastActual: 8,
+      cfoLevel: 'Monthly',
     },
   },
   {
@@ -390,6 +399,7 @@ const ENTRIES: Entry[] = [
       loadNotes: () => import('../data/twoG3BSheetsNotes').then(m => m.TWO_G_THREE_B_NOTES),
       rows: TWO_G_THREE_B_ROWS,
       forecast: 'workbook',
+      cfoLevel: 'Monthly',
     },
   },
   {
@@ -408,6 +418,7 @@ const ENTRIES: Entry[] = [
       // as v3.1, but Feb, Apr, May, Jul and Aug are restated after their books
       // were reclassified: February's revenue is $49,355 where v3.1 had $168,355.
       lastActual: 8,
+      cfoLevel: 'Quarterly',
     },
   },
   {
@@ -427,6 +438,7 @@ const ENTRIES: Entry[] = [
       // Paul removed the Access Granted one that had been sitting in its place.
       // v10's FS-A fills Oct-Dec with 0, which the FS-A tab leaves blank.
       lastActual: 8,
+      cfoLevel: 'Quarterly',
     },
   },
   {
@@ -443,6 +455,7 @@ const ENTRIES: Entry[] = [
       forecast: 'workbook',
       // Their actuals run to August; the workbook forecasts Sep–Dec 2026.
       lastActual: 7,
+      cfoLevel: 'Monthly',
     },
   },
   {
@@ -463,6 +476,7 @@ const ENTRIES: Entry[] = [
       forecast: 'workbook',
       // v3_Sep closes September; the workbook forecasts Oct–Dec 2026.
       lastActual: 8,
+      cfoLevel: 'Monthly',
     },
   },
   {
@@ -481,6 +495,7 @@ const ENTRIES: Entry[] = [
       // v3_Sep closes September; the workbook forecasts Oct–Dec 2026. It
       // corrects Net Operating Income, which v2 read above revenue less expenses.
       lastActual: 8,
+      cfoLevel: 'Quarterly',
     },
   },
   {
@@ -496,6 +511,7 @@ const ENTRIES: Entry[] = [
       forecast: 'workbook',
       // Their actuals run to August; the workbook forecasts Sep–Dec 2026.
       lastActual: 7,
+      cfoLevel: 'Monthly',
     },
   },
   {
@@ -513,6 +529,7 @@ const ENTRIES: Entry[] = [
       // v4 closes September; the workbook forecasts Oct-Dec 2026. Same rows as
       // v3; August's expenses are restated $4,500 lower, at $106,097.
       lastActual: 8,
+      cfoLevel: 'Quarterly',
     },
   },
 ];
