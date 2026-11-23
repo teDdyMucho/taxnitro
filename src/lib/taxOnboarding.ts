@@ -35,20 +35,24 @@ export const taxYearOf = (season: string) => String(Number(season) - 1);
 /**
  * Whether tax clients see it yet. Off until Camaree has been through the draft
  * questions, so the code can go live without one client meeting a draft. The
- * sign-ins in TAX_ONBOARDING_PREVIEW see it anyway, to try it on.
+ * accounts in TAX_ONBOARDING_PREVIEW see it anyway, to try it on. They are
+ * listed by profile id rather than email: this file is public, and an id says
+ * nothing about whose account it is.
  */
 export const TAX_ONBOARDING_OPEN = false;
-export const TAX_ONBOARDING_PREVIEW: string[] = [];
+export const TAX_ONBOARDING_PREVIEW: string[] = [
+  '1ceca815-0a14-4f04-bdaa-4674f7960dd5',   // a test account
+];
 
-/** Is the onboarding offered to this sign-in: to everyone, or as a preview? */
-export function taxOnboardingOpenFor(email: string | null | undefined): boolean {
-  return TAX_ONBOARDING_OPEN || TAX_ONBOARDING_PREVIEW.includes((email ?? '').trim().toLowerCase());
+/** Is the onboarding offered to this account: to everyone, or as a preview? */
+export function taxOnboardingOpenFor(profileId: string | null | undefined): boolean {
+  return TAX_ONBOARDING_OPEN || TAX_ONBOARDING_PREVIEW.includes((profileId ?? '').trim().toLowerCase());
 }
 
 export function seesTaxOnboarding(
-  user: { email?: string | null; services?: readonly string[] | null } | null | undefined,
+  user: { id?: string | null; services?: readonly string[] | null } | null | undefined,
 ): boolean {
-  return !!user?.services?.includes('TAX') && taxOnboardingOpenFor(user.email);
+  return !!user?.services?.includes('TAX') && taxOnboardingOpenFor(user.id);
 }
 
 // ── The documents ────────────────────────────────────────────────────────────

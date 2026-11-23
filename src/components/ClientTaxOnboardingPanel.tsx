@@ -32,7 +32,9 @@ const fmtDate = (iso: string | null | undefined) =>
 
 interface Loaded { row: TaxOnboarding | null; slots: TaxSlot[]; files: Map<string, SlotFile> }
 
-export function ClientTaxOnboardingPanel({ clientEmail, services }: {
+export function ClientTaxOnboardingPanel({ clientId, clientEmail, services }: {
+  /** Their profile id, which is what the preview list holds. */
+  clientId: string;
   clientEmail: string;
   /** The client's services: only a tax client has an onboarding. */
   services?: readonly string[] | null;
@@ -55,7 +57,7 @@ export function ClientTaxOnboardingPanel({ clientEmail, services }: {
   }, [clientEmail, season, isTax, reads]);
 
   if (!isTax || !data) return null;
-  if (!data.row && !taxOnboardingOpenFor(clientEmail)) return null;
+  if (!data.row && !taxOnboardingOpenFor(clientId)) return null;
   return <TaxOnboardingPanelView season={season} {...data} onOpen={() => setReads(n => n + 1)} />;
 }
 

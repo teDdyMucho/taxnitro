@@ -1074,7 +1074,7 @@ export function ClientListScreen({ onSelectClient }: Props) {
               // offered to them, or once they have started it.
               if (!services.includes('TAX')) return null;
               const row = taxRows.get((item.email ?? '').trim().toLowerCase()) ?? null;
-              if (!row && !taxOnboardingOpenFor(item.email)) return null;
+              if (!row && !taxOnboardingOpenFor(item.id)) return null;
               const done = taxStepsDone(row);
               const n = TAX_STEPS.filter(step => done[step.key]).length;
               const all = n === TAX_STEPS.length;

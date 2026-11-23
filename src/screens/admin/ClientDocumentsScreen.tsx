@@ -1367,7 +1367,7 @@ export function ClientDocumentsScreen({
               clientEmail={client.email}
               accounts={normalizeBankAccounts(client.bank_accounts)}
             />
-            <ClientTaxOnboardingPanel clientEmail={client.email} services={client.services} />
+            <ClientTaxOnboardingPanel clientId={client.id} clientEmail={client.email} services={client.services} />
             <View style={isPhone ? s.entryRowPhone : s.entryRow}>
               <TouchableOpacity
                 style={isPhone ? s.entryCardPhone : s.entryCard}
@@ -1428,7 +1428,7 @@ export function ClientDocumentsScreen({
                       accounts={normalizeBankAccounts(client.bank_accounts)}
                     />
                     {/* Their tax onboarding for the season, for a tax client. */}
-                    <ClientTaxOnboardingPanel clientEmail={client.email} services={client.services} />
+                    <ClientTaxOnboardingPanel clientId={client.id} clientEmail={client.email} services={client.services} />
                   </>
                 )}
                 {isTeamOne && <TeamOneChatPanel clientEmail={client.email} clientName={client.full_name} />}
