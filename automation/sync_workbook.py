@@ -199,7 +199,7 @@ def main():
 
         # Checked before anything is written. A figure that does not match the
         # workbook is not something to publish and mention afterwards.
-        checks = verify_against_workbook(path, sheets_ts, notes_ts, bs, pl)
+        checks = verify_against_workbook(path, sheets_ts, notes_ts, bs, pl, rows=row_map)
         if checks['mismatches']:
             die(f'{checks["mismatches"]} figure(s) do not match the workbook',
                 1, problems=checks['problems'])
@@ -224,7 +224,7 @@ def main():
             export = found.group(1)
             sheets_ts, notes_ts, tabs_found = build_modules(
                 path, export=export, name=name, bs=bs, pl=pl)
-            checks = verify_against_workbook(path, sheets_ts, notes_ts, bs, pl)
+            checks = verify_against_workbook(path, sheets_ts, notes_ts, bs, pl, rows=row_map)
             if checks['mismatches']:
                 die(f'{checks["mismatches"]} figure(s) do not match the workbook',
                     1, problems=checks['problems'])
@@ -238,6 +238,9 @@ def main():
         # Taken out of the tab report before it is published, so it reads as what
         # it is: something a person has to look at.
         off_roadmap = [w for w in [tabs_found.pop('roadmapWarning', None)] if w]
+        # The overview's: a section the app left out, or a figure that does not
+        # tie to FS-R. Neither stops the update; both want a person's eye.
+        off_overview = tabs_found.pop('overviewWarnings', []) + checks.get('warnings', [])
 
         out = {
             'status': 'updated' if known else 'new',
@@ -248,7 +251,8 @@ def main():
             'tabs': {'bs': bs, 'pl': pl, **tabs_found},
             'figuresChecked': checks['figures'],
             'rowMap': row_map,
-            'warnings': [f'{k} not found on the balance sheet' for k in missing] + off_roadmap,
+            'warnings': ([f'{k} not found on the balance sheet' for k in missing]
+                         + off_roadmap + off_overview),
             'dryRun': a.dry_run,
         }
         if a.emit:

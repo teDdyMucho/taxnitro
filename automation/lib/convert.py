@@ -19,6 +19,8 @@ import re
 from decimal import ROUND_HALF_UP, Decimal
 
 import openpyxl
+from openpyxl.utils import get_column_letter
+from openpyxl.utils.cell import range_boundaries
 
 # 2025 Jan-Dec = F..Q, FY total R; 2026 Jan-Dec = T..AE, FY total AF.
 C25, T25, C26, T26 = 6, 18, 20, 32
@@ -285,6 +287,340 @@ def budget(wb, tab):
     return {'title': tab, 'bold': bold, 'grid': grid}
 
 
+# ── The month's overview, read the way the sheet reads ───────────────────────
+#
+# Paul put "Oct 2026 Overview" at the front of every CFO workbook in November
+# 2026: what happened in the month, where the money went against the month
+# before, a profit walk drawn as a waterfall, and what FTG recommends for the
+# month ahead — on some, a month-by-month chart or a cash walk as well. One
+# template, but the wording, the number of lines and the month are his to
+# change, so it is read by its shape rather than by fixed cells: a heading in
+# capitals, and under it numbered points, a table, or a chart.
+#
+# Clients see it. It is written to them ("what we recommend for November") and
+# Paul put it first in the workbook, ahead of the Dashboard. Turned off, the
+# overview goes to the notes module, which only staff load.
+OVERVIEW_FOR_CLIENTS = True
+
+_OVERVIEW_TAB = re.compile(r'^([A-Za-z]{3,9})\.?\s+(\d{4})\s+Overview$', re.I)
+_MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec']
+
+# The green and red a number format can paint a figure: [Green] or [Color10]
+# (Excel's palette green, which Paul's "effect on profit" uses), [Red].
+_GOOD = re.compile(r'\[(?:green|colou?r\s*(?:4|10))\]', re.I)
+_BAD = re.compile(r'\[(?:red|colou?r\s*(?:3|9))\]', re.I)
+
+
+def overview_month(title):
+    """(year, month 0–11) an overview tab is for, read off its name; or None."""
+    m = _OVERVIEW_TAB.match(title.strip())
+    if not m or m.group(1)[:3].lower() not in _MONTHS:
+        return None
+    return int(m.group(2)), _MONTHS.index(m.group(1)[:3].lower())
+
+
+def overview_tab(wb):
+    """The latest month's overview tab on show, or None."""
+    found = [(overview_month(ws.title), ws.title) for ws in wb.worksheets
+             if ws.sheet_state == 'visible' and overview_month(ws.title)]
+    return max(found)[1] if found else None
+
+
+def _merges(ws):
+    """Each merged range's first cell, mapped to its last column; and every cell
+    a merge covers besides that first one, which holds nothing of its own."""
+    first, covered = {}, set()
+    for rng in ws.merged_cells.ranges:
+        first[(rng.min_row, rng.min_col)] = rng.max_col
+        for r in range(rng.min_row, rng.max_row + 1):
+            for c in range(rng.min_col, rng.max_col + 1):
+                if (r, c) != (rng.min_row, rng.min_col):
+                    covered.add((r, c))
+    return first, covered
+
+
+def _is_heading(cell):
+    """A section heading: words in capitals, in bold."""
+    v = cell.value
+    return (isinstance(v, str) and bool(cell.font and cell.font.b)
+            and sum(ch.isalpha() for ch in v) >= 3 and v == v.upper())
+
+
+def _is_figure(v):
+    return isinstance(v, (int, float)) and not isinstance(v, bool)
+
+
+def _tone(cell):
+    """'up' or 'down' where the cell's own format paints its figure green or red."""
+    v = cell.value
+    if not _is_figure(v) or not cell.number_format:
+        return None
+    secs = _sections(cell.number_format)
+    sec = secs[1] if v < 0 and len(secs) > 1 else secs[2] if v == 0 and len(secs) > 2 else secs[0]
+    return 'up' if _GOOD.search(sec) else 'down' if _BAD.search(sec) else None
+
+
+def _ref(f):
+    """A chart's reference, 'Oct 2026 Overview'!$B$74:$B$82, as its bounds."""
+    return range_boundaries(f.split('!')[-1].replace('$', ''))
+
+
+def _ref_cells(ws, f):
+    c1, r1, c2, r2 = _ref(f)
+    return [ws.cell(r, c) for r in range(r1, r2 + 1) for c in range(c1, c2 + 1)]
+
+
+def _series_f(x):
+    """The formula a chart series takes its categories or values from."""
+    for kind in ('numRef', 'strRef'):
+        ref = getattr(x, kind, None) if x is not None else None
+        if ref is not None and ref.f:
+            return ref.f
+    return None
+
+
+def _series_name(ws, s):
+    if s.tx is None:
+        return None
+    if s.tx.strRef is not None and s.tx.strRef.f:
+        return display(_ref_cells(ws, s.tx.strRef.f)[0])
+    return s.tx.v
+
+
+def _overview_walk(ws, bars):
+    """A profit walk, from the table its columns are drawn from.
+
+    The chart is a stack of invisible bases under visible rises and falls. The
+    table behind it says the same thing plainly — each step's change, the totals
+    at either end, the label written over each bar — and that is what is kept:
+    a total stands on zero, a step starts where the last one ended.
+    """
+    cat = _series_f(bars.series[0].cat) if bars.series else None
+    if not cat:
+        return None, 'the profit walk has no categories'
+    c, r1, _, r2 = _ref(cat)
+    cols = {}
+    for cell in ws[r1 - 1]:
+        if isinstance(cell.value, str):
+            cols.setdefault(cell.value.strip().lower(), cell.column)
+    if any(k not in cols for k in ('change', 'net income', 'label')):
+        return None, 'the profit walk has no Change, Net income and Label columns'
+    steps, at = [], None
+    for r in range(r1, r2 + 1):
+        change = ws.cell(r, cols['change']).value
+        step = {'label': display(ws.cell(r, c)), 'kind': 'total', 'from': 0, 'to': 0,
+                'text': display(ws.cell(r, cols['label']))}
+        if _is_figure(change) and at is not None:
+            step.update(kind='up' if change >= 0 else 'down',
+                        **{'from': round(at, 2), 'to': round(at + change, 2)})
+            at += change
+        else:
+            total = ws.cell(r, cols['net income']).value
+            at = float(total) if _is_figure(total) else 0.0
+            step['to'] = round(at, 2)
+        steps.append(step)
+    return steps, None
+
+
+def _overview_trend(ws, bars, line):
+    """Columns for one measure and a line for another, month by month."""
+    b, l = bars.series[0], line.series[0]
+    f = _series_f(b.cat)
+    if not (f and _series_f(b.val) and _series_f(l.val)):
+        return None
+
+    def values(s):
+        return [round(float(x.value), 2) if _is_figure(x.value) else 0
+                for x in _ref_cells(ws, _series_f(s.val))]
+    return {'months': [display(x) for x in _ref_cells(ws, f)],
+            'bars': {'label': _series_name(ws, b) or 'Income', 'values': values(b)},
+            'line': {'label': _series_name(ws, l) or 'Net income', 'values': values(l)}}
+
+
+def _overview_points(cells, h, last):
+    """Numbered lines under a heading: "1  Revenue was strong. …", or a
+    recommendation with its own title in bold and the detail beside it."""
+    items = []
+    for r in range(h['r'] + 1, last + 1):
+        row = [(c, cells[(r, c)]) for c in range(h['c1'], h['c2'] + 1) if (r, c) in cells]
+        if not row:
+            continue
+        lead = row[0][1].value
+        if (row[0][0] == h['c1'] and _is_figure(lead) and float(lead).is_integer()
+                and len(row) >= 2):
+            texts = [x for _, x in row[1:]]
+            titled = len(texts) >= 2 and bool(texts[0].font and texts[0].font.b)
+            items.append({'n': str(int(lead)),
+                          'title': display(texts[0]) if titled else None,
+                          'text': ' '.join(display(x) for x in texts[1 if titled else 0:])})
+        elif items:
+            break
+        else:
+            return None
+    return items or None
+
+
+def _overview_table(cells, first, h, last, tab):
+    """A table under a heading: a bold header line, then rows down to the first
+    gap, and a note when the line after them is words alone across the table."""
+    body, note = [], None
+    for r in range(h['r'] + 1, last + 1):
+        row = {c: cells[(r, c)] for c in range(h['c1'], h['c2'] + 1) if (r, c) in cells}
+        if not row:
+            if body:
+                break
+            continue
+        lead = row.get(h['c1'])
+        if not body:
+            if len(row) < 2 or not all(x.font and x.font.b for x in row.values()):
+                return None
+        elif (len(row) == 1 and lead is not None and isinstance(lead.value, str)
+              and not (lead.font and lead.font.b) and first.get((r, h['c1']), h['c1']) >= h['c2']):
+            note = display(lead)
+            break
+        body.append((r, row))
+    if len(body) < 2:
+        return None
+    cols = sorted({c for _, row in body for c in row})
+    figures, rows = [], []
+    for r, row in body[1:]:
+        for c in cols:
+            if c in row and _is_figure(row[c].value):
+                figures.append((f'{tab}!{get_column_letter(c)}{r}', display(row[c]), row[c].value))
+        label = row.get(cols[0]) or next(iter(row.values()))
+        rows.append({'cells': [display(row[c]) if c in row else None for c in cols],
+                     'tones': [_tone(row[c]) if c in row else None for c in cols],
+                     'bold': bool(label.font and label.font.b)})
+    head = body[0][1]
+    return {'header': [display(head[c]) if c in head else None for c in cols],
+            'rows': rows, 'note': note}, figures
+
+
+def overview(wb, tab):
+    """The overview tab, section by section in the order the sheet reads.
+
+    Returns (overview, figures, warnings). figures pairs each figure's text with
+    the value behind it, so the check can read one back against the other.
+    """
+    ws = wb[tab]
+    first, covered = _merges(ws)
+    cells = {(c.row, c.column): c for row in ws.iter_rows() for c in row
+             if (c.row, c.column) not in covered and display(c) is not None}
+    if not cells:
+        return None, [], [f'{tab} is empty']
+
+    # The title is the first thing on the sheet, and its width is the page's.
+    tr, tc = min(cells)
+    page = (tc, first.get((tr, tc), max(c for _, c in cells)))
+    mid = (page[0] + page[1]) / 2
+
+    def side(c1, c2):
+        if c1 <= page[0] and c2 >= page[1]:
+            return 'full'
+        return 'right' if c1 > mid else 'left'
+
+    heads = [{'r': r, 'c1': c, 'c2': first.get((r, c), c), 'text': display(cell), 'chart': None}
+             for (r, c), cell in sorted(cells.items()) if (r, c) != (tr, tc) and _is_heading(cell)]
+
+    # A chart belongs to the nearest heading above it that it sits under. Read
+    # through openpyxl's private _charts: it has no public way to read them back.
+    for ch in getattr(ws, '_charts', []):
+        anchor = ch.anchor
+        top = anchor._from.row + 1                      # 0-based, so this is its first row
+        c1 = anchor._from.col + 1
+        c2 = anchor.to.col if getattr(anchor, 'to', None) is not None else c1
+        over = [h for h in heads if h['r'] < top and h['c1'] <= c2 and h['c2'] >= c1]
+        if over:
+            max(over, key=lambda h: h['r'])['chart'] = ch
+
+    sections, figures, warnings = [], [], []
+    for i, h in enumerate(heads):
+        below = [x['r'] for x in heads[i + 1:]
+                 if x['r'] > h['r'] and x['c1'] <= h['c2'] and x['c2'] >= h['c1']]
+        last = min(below) - 1 if below else ws.max_row
+        sec = {'r': h['r'], 'side': side(h['c1'], h['c2']), 'heading': h['text']}
+        if h['chart'] is not None:
+            parts = getattr(h['chart'], '_charts', None) or [h['chart']]
+            bar = next((p for p in parts if type(p).__name__ == 'BarChart'), None)
+            line = next((p for p in parts if type(p).__name__ == 'LineChart'), None)
+            if bar is not None and bar.grouping in ('stacked', 'percentStacked'):
+                steps, problem = _overview_walk(ws, bar)
+                if steps:
+                    sections.append({'kind': 'walk', **sec, 'steps': steps})
+                    figures += [(f'{h["text"]}: {x["label"]}', x['text'], x['to'] - x['from'])
+                                for x in steps if x['text']]
+                else:
+                    warnings.append(f'{h["text"]}: {problem}')
+            elif bar is not None and line is not None and _overview_trend(ws, bar, line):
+                sections.append({'kind': 'trend', **sec, **_overview_trend(ws, bar, line)})
+            else:
+                warnings.append(f'{h["text"]}: left out, a chart the app does not draw')
+            continue
+        items = _overview_points(cells, h, last)
+        if items:
+            sections.append({'kind': 'points', **sec, 'items': items})
+            continue
+        table = _overview_table(cells, first, h, last, tab)
+        if table:
+            sections.append({'kind': 'table', **sec, **table[0]})
+            figures += table[1]
+            continue
+        warnings.append(f'{h["text"]}: left out, nothing under it the app reads')
+
+    return ({'tab': tab, 'title': display(cells[(tr, tc)]), 'sections': sections},
+            figures, warnings)
+
+
+def _overview_ties(ov, wb, rows):
+    """Where the overview disagrees with the client's own FS-R.
+
+    Reported rather than refused: the statements are still right, and a walk
+    that does not tie is for Paul to look at, not a reason to hold back his
+    figures. In October 2026 all six tied to the cent.
+    """
+    ym = overview_month(ov['tab'])
+    if not rows or not rows.get('netIncome') or not ym or ym[0] not in (2025, 2026):
+        return []
+    fs = wb['FS-R']
+
+    def fsr(row, year, m):
+        v = fs.cell(row, (C25 if year == 2025 else C26) + m).value
+        return float(v) if _is_figure(v) else 0.0
+
+    year, m = ym
+    month_before = (year, m - 1) if m else (year - 1, 11)
+    out = []
+    for sec in ov['sections']:
+        if sec['kind'] == 'walk':
+            steps = sec['steps']
+            ends = ((steps[0], month_before), (steps[-1], (year, m)))
+            for step, (y, mm) in ends:
+                if step['kind'] == 'total' and y in (2025, 2026):
+                    want = fsr(rows['netIncome'], y, mm)
+                    if abs(step['to'] - want) > 0.01:
+                        out.append(f"Overview: {step['label']} is {step['to']:,.2f} on the "
+                                   f"profit walk and {want:,.2f} on FS-R")
+            at = None
+            for step in steps:
+                if step['kind'] == 'total' and at is not None and abs(step['to'] - at) > 0.02:
+                    out.append(f"Overview: the profit walk adds up to {at:,.2f} but ends "
+                               f"on {step['to']:,.2f}")
+                at = step['to']
+        elif sec['kind'] == 'trend':
+            for series in (sec['bars'], sec['line']):
+                name = series['label'].strip().lower()
+                row = rows.get('netIncome') if name == 'net income' else (
+                    rows.get('totalIncome') if name in ('income', 'total income') else None)
+                if not row:
+                    continue
+                for mon, v in zip(sec['months'], series['values']):
+                    k = (mon or '')[:3].lower()
+                    if k in _MONTHS and abs(v - fsr(row, year, _MONTHS.index(k))) > 0.01:
+                        out.append(f"Overview: {series['label']} for {mon} is {v:,.2f} on the "
+                                   f"chart and {fsr(row, year, _MONTHS.index(k)):,.2f} on FS-R")
+    return out
+
+
 def _reads_back(text, value):
     """Whether a figure's text, read the way a person reads it, is the figure.
 
@@ -317,6 +653,36 @@ def _fmt_budget(b):
             f'  grid: {grid},\n}}')
 
 
+def _fmt_overview(ov):
+    out = ['{', f'  tab: {_j(ov["tab"])},', f'  title: {_j(ov["title"])},', '  sections: [']
+    for sec in ov['sections']:
+        out.append('    { ' + ', '.join(f'{k}: {_j(sec[k])}' for k in ('kind', 'r', 'side', 'heading')) + ',')
+        if sec['kind'] == 'points':
+            out.append('      items: [')
+            out += [f'        {{ n: {_j(p["n"])}, title: {_j(p["title"])}, text: {_j(p["text"])} }},'
+                    for p in sec['items']]
+            out.append('      ] },')
+        elif sec['kind'] == 'table':
+            out.append(f'      header: {_j(sec["header"])},')
+            out.append('      rows: [')
+            out += [f'        {{ cells: {_j(x["cells"])}, tones: {_j(x["tones"])}, bold: {_j(x["bold"])} }},'
+                    for x in sec['rows']]
+            out.append('      ],')
+            out.append(f'      note: {_j(sec["note"])} }},')
+        elif sec['kind'] == 'walk':
+            out.append('      steps: [')
+            out += [f'        {{ label: {_j(x["label"])}, kind: {_j(x["kind"])}, from: {_j(x["from"])}, '
+                    f'to: {_j(x["to"])}, text: {_j(x["text"])} }},' for x in sec['steps']]
+            out.append('      ] },')
+        else:
+            out.append(f'      months: {_j(sec["months"])},')
+            for k in ('bars', 'line'):
+                out.append(f'      {k}: {{ label: {_j(sec[k]["label"])}, values: {_j(sec[k]["values"])} }},')
+            out[-1] = out[-1][:-1] + ' },'
+    out += ['  ],', '}']
+    return '\n'.join(out)
+
+
 def _fmt_stmt(rows):
     return '[\n' + '\n'.join(
         f"  {{ r: {x['r']}, label: {_j(x['label'])},\n"
@@ -346,7 +712,8 @@ def build_modules(path, export, name, bs, pl):
         ("'FS-R'", _fmt_stmt(statement(wb, 'FS-R'))),
         ("'FS-A'", _fmt_stmt(statement(wb, 'FS-A'))),
     ]
-    report = {'roadmap': False, 'findings': False, 'tldr': False, 'budget': False}
+    report = {'roadmap': False, 'findings': False, 'tldr': False, 'budget': False,
+              'overview': False}
 
     # Only where the workbook has one, and only while it is on show.
     roadmap, roadmap_warning = roadmap_tab(wb)
@@ -365,6 +732,20 @@ def build_modules(path, export, name, bs, pl):
         report['budget'] = budget_name + ('' if BUDGET_FOR_CLIENTS else ' (staff only)')
         if BUDGET_FOR_CLIENTS:
             sheet_parts.append(budget_part)
+
+    # First, as it is first in the workbook; or with the notes, for staff only
+    # (OVERVIEW_FOR_CLIENTS above).
+    overview_part = None
+    overview_name = overview_tab(wb)
+    if overview_name:
+        ov, _, ov_warnings = overview(wb, overview_name)
+        if ov and ov['sections']:
+            overview_part = ('Overview', _fmt_overview(ov))
+            report['overview'] = overview_name + ('' if OVERVIEW_FOR_CLIENTS else ' (staff only)')
+            if OVERVIEW_FOR_CLIENTS:
+                sheet_parts.insert(0, overview_part)
+        if ov_warnings:
+            report['overviewWarnings'] = ov_warnings
 
     head = (
         "import type { ClientSheets } from './clientSheets';\n\n"
@@ -385,6 +766,8 @@ def build_modules(path, export, name, bs, pl):
             report[key] = True
     if budget_part and not BUDGET_FOR_CLIENTS:
         notes_parts.append(budget_part)
+    if overview_part and not OVERVIEW_FOR_CLIENTS:
+        notes_parts.append(overview_part)
 
     notes_head = (
         "import type { ClientNotes } from './clientSheets';\n\n"
@@ -454,17 +837,40 @@ def _values(ts):
     return json.loads(''.join(out))
 
 
-def verify_against_workbook(path, sheets_ts, notes_ts, bs, pl):
+def _compare(a, b, path, out):
+    """How many values two trees hold; where they part goes into out."""
+    if isinstance(a, dict) and isinstance(b, dict):
+        n = 0
+        for k in sorted(set(a) | set(b)):
+            if k in a and k in b:
+                n += _compare(a[k], b[k], f'{path}.{k}', out)
+            else:
+                out.append(f'{path}.{k}: on one side only')
+        return n
+    if isinstance(a, list) and isinstance(b, list):
+        if len(a) != len(b):
+            out.append(f'{path}: {len(a)} entries vs {len(b)}')
+            return 1
+        return sum(_compare(x, y, f'{path}[{i}]', out) for i, (x, y) in enumerate(zip(a, b)))
+    if not _same(a, b):
+        out.append(f'{path}: {a!r} vs {b!r}')
+    return 1
+
+
+def verify_against_workbook(path, sheets_ts, notes_ts, bs, pl, rows=None):
     """Every figure in the generated modules, checked back against the workbook.
 
     Run before anything is published. A client's figures reaching the app
     unchecked is the failure worth ruling out, and it is cheap to rule out.
+
+    rows, the client's row map, lets the overview be tied to their FS-R; what
+    does not tie comes back under 'warnings', for a person to look at.
     """
     wb = openpyxl.load_workbook(path, data_only=True)
     data = _values(sheets_ts) | _values(notes_ts)
 
     checked = mismatches = 0
-    problems = []
+    problems, warnings = [], []
 
     for tab in ('FS-R', 'FS-A'):
         ws = wb[tab]
@@ -513,4 +919,26 @@ def verify_against_workbook(path, sheets_ts, notes_ts, bs, pl):
                     mismatches += 1
                     problems.append(f'Budget [{ri},{ci}]: {cell.value!r} shown as {got!r}')
 
-    return {'figures': checked, 'mismatches': mismatches, 'problems': problems[:20]}
+    # The overview is read again from the workbook and must come out the same as
+    # what was written; then each figure's text is read back against its value,
+    # and the walk and the month-by-month chart are tied to the client's FS-R.
+    if 'Overview' in data:
+        stored = data['Overview']
+        if stored.get('tab') not in wb.sheetnames:
+            mismatches += 1
+            problems.append(f'Overview: the workbook has no tab {stored.get("tab")!r}')
+        else:
+            fresh, figures, _ = overview(wb, stored['tab'])
+            diffs = []
+            checked += _compare(fresh, stored, 'Overview', diffs)
+            mismatches += len(diffs)
+            problems += diffs
+            for where, text, value in figures:
+                checked += 1
+                if not _reads_back(text, value):
+                    mismatches += 1
+                    problems.append(f'Overview {where}: {value!r} shown as {text!r}')
+            warnings += _overview_ties(stored, wb, rows)
+
+    return {'figures': checked, 'mismatches': mismatches, 'problems': problems[:20],
+            'warnings': warnings}

@@ -364,10 +364,11 @@ const ENTRIES: Entry[] = [
       // revenue and 34% above their own net income. Staff would have been
       // reading figures the workbook Paul sends them does not contain.
       forecast: 'workbook',
-      // v6 closes September; the forecast runs Oct–Dec. v5 restated August,
-      // which v4 had at $49,790 of revenue, to $106,259 — v4's August was not
-      // yet fully booked.
-      lastActual: 8,
+      // v7_Oct closes October; the forecast runs Nov–Dec. It restates
+      // September's net income to a $14,497 loss, from v6's $13,732. (v5
+      // restated August, which v4 had at $49,790 of revenue, to $106,259 — v4's
+      // August was not yet fully booked.)
+      lastActual: 9,
       cfoLevel: 'Monthly',
     },
   },
@@ -383,8 +384,9 @@ const ENTRIES: Entry[] = [
       loadNotes: () => import('../data/firstStepSheetsNotes').then(m => m.FIRST_STEP_NOTES),
       rows: FIRST_STEP_ROWS,
       forecast: 'workbook',
-      // v6 closes September; the workbook forecasts Oct-Dec 2026.
-      lastActual: 8,
+      // v7_Oct closes October; the workbook forecasts Nov–Dec 2026. Jan, Feb,
+      // Apr and Sep are restated; September's net income is $14,135.
+      lastActual: 9,
       cfoLevel: 'Monthly',
     },
   },
@@ -414,10 +416,11 @@ const ENTRIES: Entry[] = [
       loadNotes: () => import('../data/accessGrantedSheetsNotes').then(m => m.ACCESS_GRANTED_NOTES),
       rows: ACCESS_GRANTED_ROWS,
       forecast: 'workbook',
-      // v4 closes September; the workbook forecasts Oct–Dec 2026. Same rows
-      // as v3.1, but Feb, Apr, May, Jul and Aug are restated after their books
-      // were reclassified: February's revenue is $49,355 where v3.1 had $168,355.
-      lastActual: 8,
+      // v5_Oct closes October; the workbook forecasts Nov–Dec 2026. Same rows
+      // as v4, with September's net income restated to $17,166. (v4 restated
+      // Feb, Apr, May, Jul and Aug after their books were reclassified:
+      // February's revenue is $49,355 where v3.1 had $168,355.)
+      lastActual: 9,
       cfoLevel: 'Quarterly',
     },
   },
@@ -433,11 +436,12 @@ const ENTRIES: Entry[] = [
       loadNotes: () => import('../data/battleProtectionSheetsNotes').then(m => m.BATTLE_PROTECTION_NOTES),
       rows: BATTLE_PROTECTION_ROWS,
       forecast: 'workbook',
-      // v10 closes September; the workbook forecasts Oct-Dec 2026. Same rows as
-      // v8; Feb, Apr and Aug expenses are restated. Their own roadmap is back:
-      // Paul removed the Access Granted one that had been sitting in its place.
-      // v10's FS-A fills Oct-Dec with 0, which the FS-A tab leaves blank.
-      lastActual: 8,
+      // v11_Oct closes October; the workbook forecasts Nov–Dec 2026. Same rows
+      // as v8; April and September are restated, September's net income to
+      // $39,913. Their own roadmap is back: Paul removed the Access Granted one
+      // that had been sitting in its place. v11's FS-A fills Nov–Dec with 0,
+      // which the FS-A tab leaves blank.
+      lastActual: 9,
       cfoLevel: 'Quarterly',
     },
   },
@@ -474,8 +478,10 @@ const ENTRIES: Entry[] = [
       loadNotes: () => import('../data/tribalIndemnitySheetsNotes').then(m => m.TRIBAL_INDEMNITY_NOTES),
       rows: TRIBAL_INDEMNITY_ROWS,
       forecast: 'workbook',
-      // v3_Sep closes September; the workbook forecasts Oct–Dec 2026.
-      lastActual: 8,
+      // v4_Oct closes October; the workbook forecasts Nov–Dec 2026. Jan–May
+      // and Aug are restated after their QuickBooks recoding: August's net
+      // income is $200, where v3_Sep had a $2,128 loss.
+      lastActual: 9,
       cfoLevel: 'Monthly',
     },
   },
@@ -526,9 +532,11 @@ const ENTRIES: Entry[] = [
       loadNotes: () => import('../data/steerSheetsNotes').then(m => m.STEER_NOTES),
       rows: STEER_ROWS,
       forecast: 'workbook',
-      // v4 closes September; the workbook forecasts Oct-Dec 2026. Same rows as
-      // v3; August's expenses are restated $4,500 lower, at $106,097.
-      lastActual: 8,
+      // v5_Oct closes October; the workbook forecasts Nov–Dec 2026. Same rows
+      // as v4; every month's net income is $557 higher, the monthly
+      // uncategorised journal removed with the October QuickBooks export, and
+      // February's $1,272 higher.
+      lastActual: 9,
       cfoLevel: 'Quarterly',
     },
   },

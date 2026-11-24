@@ -44,6 +44,76 @@ export interface BudgetTab {
   grid: (string | null)[][];
 }
 
+/**
+ * The month's overview — "Oct 2026 Overview", which Paul put at the front of
+ * every CFO workbook in November 2026: what happened in the month, where the
+ * money went against the month before, a profit walk drawn as a waterfall, and
+ * what FTG recommends for the month ahead.
+ *
+ * Read section by section in the order the sheet reads (overview() in
+ * automation/lib/convert.py), then checked back against the workbook and tied
+ * to the client's own FS-R before it is written. Table figures arrive as the
+ * workbook displays them; chart figures as numbers, for drawing.
+ */
+export interface MonthOverview {
+  /** The tab's name, "Oct 2026 Overview". The month moves on; the key does not. */
+  tab: string;
+  /** Its title line: "October 2026  |  Monthly Overview". */
+  title: string;
+  sections: OverviewSection[];
+}
+
+/** Where a section sits on the sheet: its heading's row, and which half it takes. */
+export interface OverviewPlace {
+  r: number;
+  side: 'left' | 'right' | 'full';
+  heading: string;
+}
+
+export interface OverviewPoints extends OverviewPlace {
+  kind: 'points';
+  /** "1  Revenue was strong. …"; a recommendation has its own title as well. */
+  items: { n: string; title: string | null; text: string }[];
+}
+
+export interface OverviewTable extends OverviewPlace {
+  kind: 'table';
+  header: (string | null)[];
+  rows: {
+    cells: (string | null)[];
+    /** Where the workbook paints a figure green ('up') or red ('down'). */
+    tones: ('up' | 'down' | null)[];
+    bold: boolean;
+  }[];
+  /** A line under the table, when there is one. */
+  note: string | null;
+}
+
+/** A bar of the profit walk: a total standing on zero, or a step up or down from the last. */
+export interface OverviewStep {
+  label: string;
+  kind: 'total' | 'up' | 'down';
+  from: number;
+  to: number;
+  /** What the workbook writes over the bar: "$41,693", "+$39,387", "($23,273)". */
+  text: string;
+}
+
+export interface OverviewWalk extends OverviewPlace {
+  kind: 'walk';
+  steps: OverviewStep[];
+}
+
+/** Columns for one measure and a line for another, month by month. */
+export interface OverviewTrend extends OverviewPlace {
+  kind: 'trend';
+  months: string[];
+  bars: { label: string; values: number[] };
+  line: { label: string; values: number[] };
+}
+
+export type OverviewSection = OverviewPoints | OverviewTable | OverviewWalk | OverviewTrend;
+
 /** A line of a financial statement, keyed by its row number in the workbook. */
 export interface StatementRow {
   /** Row number in the source workbook — formulas address these. */
@@ -64,6 +134,12 @@ export interface StatementRow {
  * anything they do not already have in their books.
  */
 export interface ClientSheets {
+  /**
+   * The month's overview, which clients see: written to them ("what we
+   * recommend for November") and first in Paul's workbook. Optional, since only
+   * workbooks from October 2026 on have one.
+   */
+  Overview?: MonthOverview;
   ASSUMPTIONS: GridRow[];
   /**
    * What FTG has asked the client to do, and by when — added to Access Granted
@@ -112,4 +188,6 @@ export interface ClientNotes {
    * BUDGET_FOR_CLIENTS in automation/lib/convert.py moves it back.
    */
   Budget?: BudgetTab;
+  /** Where the overview goes if it is ever made staff only (OVERVIEW_FOR_CLIENTS). */
+  Overview?: MonthOverview;
 }

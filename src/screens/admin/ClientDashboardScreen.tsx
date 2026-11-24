@@ -12,6 +12,7 @@ import { UeBarChart } from '../../components/ue/UeBarChart';
 import { UeGridTable, UeStatement } from '../../components/ue/UeTables';
 import { UeRoadmap } from '../../components/ue/UeRoadmap';
 import { UeBudget } from '../../components/ue/UeBudget';
+import { UeOverview } from '../../components/ue/UeOverview';
 import { useWheelScroll } from '../../hooks/useWheelScroll';
 import {
   MONTHS, LAST_ACTUAL, SCENARIOS, DEFAULT_ASSUMPTIONS, LEVERS, SHARED_INPUTS,
@@ -31,7 +32,7 @@ import {
 // Findings for Review and TL;DR are internal working notes: they appear for
 // staff and admin, and never in a client's view.
 
-type TabKey = 'dash' | 'roadmap' | 'budget' | 'findings' | 'tldr' | 'assum' | 'fsr' | 'fsa' | 'bs' | 'pl';
+type TabKey = 'dash' | 'overview' | 'roadmap' | 'budget' | 'findings' | 'tldr' | 'assum' | 'fsr' | 'fsa' | 'bs' | 'pl';
 
 interface TabDef { key: TabKey; label: string; staffOnly?: boolean }
 
@@ -39,8 +40,12 @@ interface TabDef { key: TabKey; label: string; staffOnly?: boolean }
 // Roadmap, Assumptions, TLDR, FS-A, FS-R. Findings for Review was not in her
 // list; it stays beside TL;DR, the other internal note. The budget came after
 // her list (November 2026) and sits with the roadmap, the other look ahead.
+// The month's overview came after that (Paul, "Oct 2026 Overview") and sits
+// next to the Dashboard, the other summary of the month.
 const NAV: TabDef[] = [
   { key: 'dash', label: 'Dashboard' },
+  // Not marked staffOnly either: like the budget, it follows its module.
+  { key: 'overview', label: 'Overview' },
   { key: 'pl', label: 'Profit & Loss' },
   { key: 'bs', label: 'Balance Sheet' },
   { key: 'roadmap', label: 'Financial Roadmap' },
@@ -116,8 +121,11 @@ export function ClientDashboardScreen({
   // and the same tab appears for them with no change here.
   const budget = sheets?.Budget ?? notes?.Budget ?? null;
   const budgetStaffOnly = !sheets?.Budget;
+  const overview = sheets?.Overview ?? notes?.Overview ?? null;
+  const overviewStaffOnly = !sheets?.Overview;
   const tabs = useMemo(() => {
     const has: Partial<Record<TabKey, boolean>> = {
+      overview: (overview?.sections.length ?? 0) > 0,
       roadmap: (sheets?.['Financial Roadmap']?.length ?? 0) > 0,
       budget: (budget?.grid.length ?? 0) > 0,
       findings: (notes?.['Findings for Review']?.length ?? 0) > 0,
@@ -126,9 +134,10 @@ export function ClientDashboardScreen({
     return NAV
       .filter(t => staffView || !t.staffOnly)
       .filter(t => has[t.key] !== false)
-      // Named as the workbook names it: "FY2027 Budget".
-      .map(t => (t.key === 'budget' && budget ? { ...t, label: budget.title } : t));
-  }, [staffView, sheets, notes, budget]);
+      // Named as the workbook names them: "FY2027 Budget", "Oct 2026 Overview".
+      .map(t => (t.key === 'budget' && budget ? { ...t, label: budget.title } : t))
+      .map(t => (t.key === 'overview' && overview ? { ...t, label: overview.tab } : t));
+  }, [staffView, sheets, notes, budget, overview]);
 
   // A client landing on a staff tab (say, from a stale link) is put back on the
   // dashboard rather than shown an empty page.
@@ -596,6 +605,15 @@ export function ClientDashboardScreen({
   const page = () => {
     switch (tab) {
       case 'dash': return dashboardPage;
+      case 'overview':
+        return overview && (
+          <>
+            {subhead(overview.tab,
+              'The month in brief: what happened, where the money went against the month before, and what we recommend next — from the client’s own workbook.'
+              + (overviewStaffOnly ? ' Staff only: the client does not see this tab yet.' : ''))}
+            <View style={s.pad}><UeOverview overview={overview} /></View>
+          </>
+        );
       case 'assum': return assumptionsPage;
       case 'roadmap':
         return (
